@@ -654,7 +654,7 @@ export default function RedTeamSetupPage() {
               <div>
                 <p className="text-sm font-medium">Import YAML File</p>
                 <p className="mb-2 text-sm text-muted-foreground">
-                  Import an existing promptfoo redteam YAML configuration. Your application details
+                  Import an existing AI Security redteam YAML configuration. Your application details
                   will be automatically parsed and pre-filled in the form.
                 </p>
                 <input

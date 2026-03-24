@@ -33,7 +33,6 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-  SkillCallEntry,
 } from '../types/index';
 
 /**
@@ -47,32 +46,6 @@ export interface ToolCallEntry {
   output: unknown;
   is_error: boolean;
   parentToolUseId: string | null;
-}
-
-function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
-  return toolCalls
-    .filter((toolCall) => toolCall.name === 'Skill')
-    .flatMap((toolCall) => {
-      const skillName =
-        toolCall.input &&
-        typeof toolCall.input === 'object' &&
-        typeof (toolCall.input as Record<string, unknown>).skill === 'string'
-          ? ((toolCall.input as Record<string, unknown>).skill as string).trim()
-          : '';
-
-      if (!skillName) {
-        return [];
-      }
-
-      return [
-        {
-          name: skillName,
-          input: toolCall.input,
-          is_error: toolCall.is_error,
-          source: 'tool' as const,
-        },
-      ];
-    });
 }
 
 /**
@@ -955,13 +928,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const sessionId = msg.session_id;
 
           const toolCallsArray = Array.from(toolCallsMap.values());
-          const skillCalls = deriveSkillCalls(toolCallsArray);
 
           if (msg.subtype === 'success') {
             logger.debug(`Claude Agent SDK response: ${raw}`);
             // When structured output is enabled and available, use it as the output
             // Otherwise fall back to the text result
-            const output = msg.structured_output === undefined ? msg.result : msg.structured_output;
+            const output = msg.structured_output !== undefined ? msg.structured_output : msg.result;
             const response: ProviderResponse = {
               output,
               tokenUsage,
@@ -969,16 +941,15 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               raw,
               sessionId,
               metadata: {
-                skillCalls,
                 toolCalls: toolCallsArray,
                 numTurns: msg.num_turns,
                 durationMs: msg.duration_ms,
                 durationApiMs: msg.duration_api_ms,
                 modelUsage: msg.modelUsage,
                 permissionDenials: msg.permission_denials,
-                ...(msg.structured_output === undefined
-                  ? {}
-                  : { structuredOutput: msg.structured_output }),
+                ...(msg.structured_output !== undefined
+                  ? { structuredOutput: msg.structured_output }
+                  : {}),
               },
             };
 
@@ -993,7 +964,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               raw,
               sessionId,
               metadata: {
-                skillCalls,
                 toolCalls: toolCallsArray,
                 numTurns: msg.num_turns,
                 durationMs: msg.duration_ms,
@@ -1038,15 +1008,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
    * For normal Claude Agent SDK support, just use the Anthropic API key
    * Users can also use Bedrock (with CLAUDE_CODE_USE_BEDROCK env var) or Vertex (with CLAUDE_CODE_USE_VERTEX env var)
    */
-  requiresApiKey(): boolean {
-    return !(
-      this.env?.CLAUDE_CODE_USE_BEDROCK ||
-      this.env?.CLAUDE_CODE_USE_VERTEX ||
-      getEnvString('CLAUDE_CODE_USE_BEDROCK') ||
-      getEnvString('CLAUDE_CODE_USE_VERTEX')
-    );
-  }
-
   getApiKey(): string | undefined {
     return this.config?.apiKey || this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
   }

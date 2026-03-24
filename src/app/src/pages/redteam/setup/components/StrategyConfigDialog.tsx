@@ -269,7 +269,7 @@ export default function StrategyConfigDialog({
 
     setLocalConfig({ ...nextConfig });
     setEnabled(nextConfig.enabled === undefined ? true : nextConfig.enabled);
-    setNumTests(nextConfig.numTests === undefined ? '10' : String(nextConfig.numTests));
+    setNumTests(nextConfig.numTests !== undefined ? String(nextConfig.numTests) : '10');
     setError('');
 
     if (strategy === 'layer') {
@@ -510,7 +510,7 @@ export default function StrategyConfigDialog({
               id="num-iterations"
               type="number"
               value={
-                localConfig.numIterations === undefined ? 10 : Number(localConfig.numIterations)
+                localConfig.numIterations !== undefined ? Number(localConfig.numIterations) : 10
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
@@ -568,7 +568,7 @@ export default function StrategyConfigDialog({
               id="max-concurrency"
               type="number"
               value={
-                localConfig.maxConcurrency === undefined ? 3 : Number(localConfig.maxConcurrency)
+                localConfig.maxConcurrency !== undefined ? Number(localConfig.maxConcurrency) : 3
               }
               onChange={(e) =>
                 setLocalConfig({
@@ -589,7 +589,7 @@ export default function StrategyConfigDialog({
             <Input
               id="n-steps"
               type="number"
-              value={localConfig.nSteps === undefined ? '' : Number(localConfig.nSteps)}
+              value={localConfig.nSteps !== undefined ? Number(localConfig.nSteps) : ''}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
                 setLocalConfig({ ...localConfig, nSteps: value });
@@ -608,9 +608,9 @@ export default function StrategyConfigDialog({
               id="max-candidates"
               type="number"
               value={
-                localConfig.maxCandidatesPerStep === undefined
-                  ? ''
-                  : Number(localConfig.maxCandidatesPerStep)
+                localConfig.maxCandidatesPerStep !== undefined
+                  ? Number(localConfig.maxCandidatesPerStep)
+                  : ''
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
@@ -639,7 +639,7 @@ export default function StrategyConfigDialog({
             <Textarea
               id="strategy-text"
               rows={6}
-              value={localConfig.strategyText === undefined ? '' : String(localConfig.strategyText)}
+              value={localConfig.strategyText !== undefined ? String(localConfig.strategyText) : ''}
               onChange={(e) => {
                 setLocalConfig({ ...localConfig, strategyText: e.target.value });
               }}
@@ -663,7 +663,7 @@ export default function StrategyConfigDialog({
             <Input
               id="max-turns"
               type="number"
-              value={localConfig.maxTurns === undefined ? 10 : Number(localConfig.maxTurns)}
+              value={localConfig.maxTurns !== undefined ? Number(localConfig.maxTurns) : 10}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
                 setLocalConfig({
@@ -689,7 +689,7 @@ export default function StrategyConfigDialog({
               className="mt-0.5"
             />
             <Label htmlFor="custom-stateful" className="text-sm font-normal">
-              When enabled, Promptfoo should only send the current request and assume your system
+              When enabled, AI Security should only send the current request and assume your system
               remembers interaction history
             </Label>
           </div>
@@ -709,7 +709,7 @@ export default function StrategyConfigDialog({
             <Input
               id="hydra-max-turns"
               type="number"
-              value={localConfig.maxTurns === undefined ? 10 : Number(localConfig.maxTurns)}
+              value={localConfig.maxTurns !== undefined ? Number(localConfig.maxTurns) : 10}
               onChange={(e) => {
                 const parsedValue = Number.parseInt(e.target.value, 10);
                 setLocalConfig({
@@ -743,7 +743,7 @@ export default function StrategyConfigDialog({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Hydra requires Promptfoo Cloud remote generation.
+            Hydra requires AI Security Cloud remote generation.
           </p>
         </div>
       );
@@ -759,12 +759,12 @@ export default function StrategyConfigDialog({
             <Input
               id="multi-turn-max-turns"
               type="number"
-              value={localConfig.maxTurns === undefined ? 5 : Number(localConfig.maxTurns)}
+              value={localConfig.maxTurns !== undefined ? Number(localConfig.maxTurns) : 5}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
                 setLocalConfig({
                   ...localConfig,
-                  maxTurns: value === undefined ? value : clampValue(value, 1, maxTurnsLimit),
+                  maxTurns: value !== undefined ? clampValue(value, 1, maxTurnsLimit) : value,
                 });
               }}
               onBlur={(e) => {
@@ -793,7 +793,7 @@ export default function StrategyConfigDialog({
               className="mt-0.5"
             />
             <Label htmlFor="multi-turn-stateful" className="text-sm font-normal">
-              When enabled, Promptfoo should only send the current request and assume your system
+              When enabled, AI Security should only send the current request and assume your system
               remembers interaction history
             </Label>
           </div>
@@ -812,7 +812,7 @@ export default function StrategyConfigDialog({
               id="meta-num-iterations"
               type="number"
               value={
-                localConfig.numIterations === undefined ? 10 : Number(localConfig.numIterations)
+                localConfig.numIterations !== undefined ? Number(localConfig.numIterations) : 10
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
@@ -845,7 +845,7 @@ export default function StrategyConfigDialog({
             <Input
               id="tree-max-depth"
               type="number"
-              value={localConfig.maxDepth === undefined ? 25 : Number(localConfig.maxDepth)}
+              value={localConfig.maxDepth !== undefined ? Number(localConfig.maxDepth) : 25}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 25;
                 setLocalConfig({
@@ -868,7 +868,7 @@ export default function StrategyConfigDialog({
             <Input
               id="tree-max-attempts"
               type="number"
-              value={localConfig.maxAttempts === undefined ? 250 : Number(localConfig.maxAttempts)}
+              value={localConfig.maxAttempts !== undefined ? Number(localConfig.maxAttempts) : 250}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 250;
                 setLocalConfig({
@@ -891,7 +891,7 @@ export default function StrategyConfigDialog({
             <Input
               id="tree-max-width"
               type="number"
-              value={localConfig.maxWidth === undefined ? 10 : Number(localConfig.maxWidth)}
+              value={localConfig.maxWidth !== undefined ? Number(localConfig.maxWidth) : 10}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
                 setLocalConfig({
@@ -914,7 +914,7 @@ export default function StrategyConfigDialog({
               id="tree-branching"
               type="number"
               value={
-                localConfig.branchingFactor === undefined ? 4 : Number(localConfig.branchingFactor)
+                localConfig.branchingFactor !== undefined ? Number(localConfig.branchingFactor) : 4
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 4;
@@ -938,9 +938,9 @@ export default function StrategyConfigDialog({
               id="tree-no-improvement"
               type="number"
               value={
-                localConfig.maxNoImprovement === undefined
-                  ? 25
-                  : Number(localConfig.maxNoImprovement)
+                localConfig.maxNoImprovement !== undefined
+                  ? Number(localConfig.maxNoImprovement)
+                  : 25
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 25;
@@ -971,7 +971,7 @@ export default function StrategyConfigDialog({
             <Input
               id="gcg-n"
               type="number"
-              value={localConfig.n === undefined ? 5 : Number(localConfig.n)}
+              value={localConfig.n !== undefined ? Number(localConfig.n) : 5}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 5;
                 setLocalConfig({ ...localConfig, n: value });

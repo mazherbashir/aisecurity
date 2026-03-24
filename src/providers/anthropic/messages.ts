@@ -29,14 +29,6 @@ import type { EnvOverrides } from '../../types/env';
 import type { CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { AnthropicMessageOptions } from './types';
 
-function parseEnvFloat(value: string | undefined): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  const parsed = Number.parseFloat(value);
-  return Number.isNaN(parsed) ? undefined : parsed;
-}
-
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
   private mcpClient: MCPClient | null = null;
@@ -202,9 +194,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       temperature:
         config.thinking || thinking
           ? config.temperature
-          : (config.temperature ??
-            parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) ??
-            getEnvFloat('ANTHROPIC_TEMPERATURE', 0)),
+          : config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
       ...(allTools.length > 0 ? { tools: allTools as any } : {}),
       ...(config.tool_choice
         ? {

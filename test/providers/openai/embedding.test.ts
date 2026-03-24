@@ -100,10 +100,10 @@ describe('OpenAI Provider', () => {
         expect(result.embedding).toBeUndefined();
       } finally {
         // Always restore original environment state
-        if (originalEnv === undefined) {
-          delete process.env.OPENAI_API_KEY;
-        } else {
+        if (originalEnv !== undefined) {
           process.env.OPENAI_API_KEY = originalEnv;
+        } else {
+          delete process.env.OPENAI_API_KEY;
         }
       }
     });

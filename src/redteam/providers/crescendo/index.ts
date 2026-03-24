@@ -576,7 +576,17 @@ export class CrescendoProvider implements ApiProvider {
               | undefined;
 
             // First try to get exfil data from provider response metadata (Playwright provider)
-            if (lastResponse.metadata?.wasExfiltrated === undefined) {
+            if (lastResponse.metadata?.wasExfiltrated !== undefined) {
+              logger.debug('[Crescendo] Using exfil data from provider response metadata');
+              gradingContext = {
+                ...(tracingOptions.includeInGrading
+                  ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
+                  : {}),
+                wasExfiltrated: Boolean(lastResponse.metadata.wasExfiltrated),
+                exfilCount: Number(lastResponse.metadata.exfilCount) || 0,
+                exfilRecords: [],
+              };
+            } else {
               // Try to fetch exfil tracking from server API via webPageUuid
               const webPageUuid = test.metadata?.webPageUuid as string | undefined;
               if (webPageUuid) {
@@ -598,16 +608,6 @@ export class CrescendoProvider implements ApiProvider {
                   };
                 }
               }
-            } else {
-              logger.debug('[Crescendo] Using exfil data from provider response metadata');
-              gradingContext = {
-                ...(tracingOptions.includeInGrading
-                  ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
-                  : {}),
-                wasExfiltrated: Boolean(lastResponse.metadata.wasExfiltrated),
-                exfilCount: Number(lastResponse.metadata.exfilCount) || 0,
-                exfilRecords: [],
-              };
             }
 
             // Fallback to just tracing context if no exfil data found

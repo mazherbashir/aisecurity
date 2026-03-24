@@ -135,8 +135,7 @@ jobs:
     name: Build on Node ${{ matrix.node }}
     env:
       PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
-    # Keep enough headroom for slow PR merge-ref checkout and npm install on GitHub-hosted runners.
-    timeout-minutes: 10
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.ci-config.outputs.build-matrix) }}

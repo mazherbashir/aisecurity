@@ -123,7 +123,7 @@ describe('LauncherPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Getting Started')).toBeInTheDocument();
-      expect(screen.getByText(/promptfoo view -n/)).toBeInTheDocument();
+      expect(screen.getByText(/aisecurity view -n/)).toBeInTheDocument();
       expect(screen.getByText(/npx promptfoo@latest view -n/)).toBeInTheDocument();
     });
   });

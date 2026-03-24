@@ -362,7 +362,7 @@ export const CustomPoliciesSection = () => {
 
   /**
    * Generates custom policies for an application given its definition and a sample of existing
-   * policies. Generation occurs remotely in Promptfoo Cloud.
+   * policies. Generation occurs remotely in AI Security Cloud.
    */
   const handleGeneratePolicies = useCallback(async () => {
     if (!config.applicationDefinition?.purpose) {
@@ -658,7 +658,7 @@ export const CustomPoliciesSection = () => {
               tooltipTitle={
                 apiHealthStatus === 'connected'
                   ? undefined
-                  : 'Promptfoo Cloud connection is required for test generation'
+                  : 'AI Security Cloud connection is required for test generation'
               }
             />
           </div>

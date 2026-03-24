@@ -120,7 +120,7 @@ export default function InstallationGuide({
             <code className="bg-muted px-1 rounded">pip</code> doesn't work
           </li>
           <li>If using a virtual environment, ensure it's activated</li>
-          <li>After installation, you may need to restart the Promptfoo server</li>
+          <li>After installation, you may need to restart the AI Security server</li>
         </ul>
 
         <div className="mt-6 pt-4 border-t border-border/50 text-sm text-muted-foreground">

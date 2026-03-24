@@ -835,7 +835,7 @@ ${exampleRequest}`;
             <DialogTitle>Generate HTTP Configuration</DialogTitle>
           </DialogHeader>
           <p className="mb-2 text-sm text-muted-foreground">
-            Paste an example HTTP request and optionally a response. Promptfoo will automatically
+            Paste an example HTTP request and optionally a response. AI Security will automatically
             generate the configuration for you.
           </p>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

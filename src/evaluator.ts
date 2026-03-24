@@ -1,11 +1,8 @@
-import readline from 'readline';
-
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import {
-  hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
   renderMetricName,
   runAssertions,
@@ -18,7 +15,7 @@ import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
-import logger, { globalLogCallback, setLogCallback } from './logger';
+import logger from './logger';
 import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
@@ -99,12 +96,9 @@ import type { CallApiContextParams } from './types/providers';
 /**
  * Manages a single progress bar for the evaluation
  */
-export class ProgressBarManager {
+class ProgressBarManager {
   private progressBar: SingleBar | undefined;
   private isWebUI: boolean;
-  private originalLogCallback: ((message: string) => void) | null = null;
-  private installedLogCallback: ((message: string) => void) | null = null;
-  private pendingRender: ReturnType<typeof setImmediate> | null = null;
 
   // Track overall progress
   private totalCount: number = 0;
@@ -113,67 +107,6 @@ export class ProgressBarManager {
 
   constructor(isWebUI: boolean) {
     this.isWebUI = isWebUI;
-  }
-
-  private clearProgressBarLine(): void {
-    readline.cursorTo(process.stderr, 0);
-    readline.clearLine(process.stderr, 0);
-  }
-
-  private scheduleRender(): void {
-    if (!this.progressBar || this.pendingRender) {
-      return;
-    }
-
-    this.pendingRender = setImmediate(() => {
-      this.pendingRender = null;
-      // biome-ignore lint/suspicious/noExplicitAny: cli-progress SingleBar.render() is not in public typings
-      (this.progressBar as any)?.render();
-    });
-  }
-
-  private handleLogMessage(): void {
-    if (!this.progressBar) {
-      return;
-    }
-
-    // Clear the progress bar's stream before Winston writes to the terminal,
-    // then re-render the bar after the log line has been emitted.
-    this.clearProgressBarLine();
-    this.scheduleRender();
-  }
-
-  /**
-   * Coordinate console logging with the progress bar to prevent visual corruption.
-   */
-  installLogInterceptor(): void {
-    if (!this.progressBar || this.isWebUI || this.installedLogCallback) {
-      return;
-    }
-
-    this.originalLogCallback = globalLogCallback;
-    this.installedLogCallback = (message: string) => {
-      this.originalLogCallback?.(message);
-      this.handleLogMessage();
-    };
-    setLogCallback(this.installedLogCallback);
-  }
-
-  /**
-   * Remove the log interceptor and restore original logger callback behavior.
-   */
-  removeLogInterceptor(): void {
-    if (this.pendingRender) {
-      clearImmediate(this.pendingRender);
-      this.pendingRender = null;
-    }
-
-    if (this.installedLogCallback && globalLogCallback === this.installedLogCallback) {
-      setLogCallback(this.originalLogCallback);
-    }
-
-    this.installedLogCallback = null;
-    this.originalLogCallback = null;
   }
 
   /**
@@ -210,7 +143,6 @@ export class ProgressBarManager {
         },
         hideCursor: true,
         gracefulExit: true,
-        stream: process.stderr,
       },
       cliProgress.Presets.shades_classic,
     );
@@ -677,10 +609,6 @@ export async function runEval({
         if (parts.length >= 3) {
           traceId = parts[1];
         }
-      }
-
-      if (traceId && hasTraceAwareAssertions(test.assert)) {
-        await flushOtel();
       }
 
       // Pass providerTransformedOutput for contextTransform to use
@@ -1765,7 +1693,7 @@ class Evaluator {
               // If the provider has a cleanup method, call it
               if (typeof evalStep.provider.cleanup === 'function') {
                 try {
-                  void evalStep.provider.cleanup();
+                  evalStep.provider.cleanup();
                 } catch (cleanupErr) {
                   logger.warn(`Error during provider cleanup: ${cleanupErr}`);
                 }
@@ -1870,7 +1798,7 @@ class Evaluator {
       // Use CI-friendly progress reporter
       ciProgressReporter = new CIProgressReporter(runEvalOptions.length);
       ciProgressReporter.start();
-    } else if (this.options.showProgressBar && process.stderr.isTTY) {
+    } else if (this.options.showProgressBar && process.stdout.isTTY) {
       // Use visual progress bars
       progressBarManager = new ProgressBarManager(isWebUI);
     }
@@ -1923,7 +1851,6 @@ class Evaluator {
     // Now start the progress bar after info messages
     if (this.options.showProgressBar && progressBarManager) {
       await progressBarManager.initialize(runEvalOptions, concurrency, 0);
-      progressBarManager.installLogInterceptor();
     }
 
     try {
@@ -1971,7 +1898,6 @@ class Evaluator {
             clearTimeout(globalTimeout);
           }
           if (progressBarManager) {
-            progressBarManager.removeLogInterceptor();
             progressBarManager.stop();
           }
           if (ciProgressReporter) {
@@ -1984,10 +1910,6 @@ class Evaluator {
           return this.evalRecord;
         }
       } else {
-        if (progressBarManager) {
-          progressBarManager.removeLogInterceptor();
-          progressBarManager.stop();
-        }
         if (ciProgressReporter) {
           ciProgressReporter.error(`Evaluation failed: ${String(err)}`);
         }
@@ -2264,7 +2186,6 @@ class Evaluator {
     // Clean up progress reporters and timers
     try {
       if (progressBarManager) {
-        progressBarManager.removeLogInterceptor();
         progressBarManager.complete();
         progressBarManager.stop();
       } else if (ciProgressReporter) {

@@ -305,7 +305,7 @@ async function checkExistingScan(
     logger.info(`  Previous scan: ${new Date(existing.createdAt).toISOString()}`);
     logger.info(`  Scan ID: ${existing.id}`);
     logger.info(`\n${chalk.gray('Use --force to scan anyway, or view existing results with:')}`);
-    logger.info(chalk.green(`  promptfoo view ${existing.id}`));
+    logger.info(chalk.green(`  aisecurity view ${existing.id}`));
 
     return { shouldSkip: true, existingAudit: null };
   } catch (error) {

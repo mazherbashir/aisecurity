@@ -676,7 +676,17 @@ export default class GoatProvider implements ApiProvider {
             | undefined;
 
           // First try to get exfil data from provider response metadata (Playwright provider)
-          if (finalResponse.metadata?.wasExfiltrated === undefined) {
+          if (finalResponse.metadata?.wasExfiltrated !== undefined) {
+            logger.debug('[GOAT] Using exfil data from provider response metadata');
+            gradingContext = {
+              ...(tracingOptions.includeInGrading
+                ? { traceContext: targetResponse.traceContext, traceSummary: gradingTraceSummary }
+                : {}),
+              wasExfiltrated: Boolean(finalResponse.metadata.wasExfiltrated),
+              exfilCount: Number(finalResponse.metadata.exfilCount) || 0,
+              exfilRecords: [],
+            };
+          } else {
             // Try to fetch exfil tracking from server API via webPageUuid
             const webPageUuid = test.metadata?.webPageUuid as string | undefined;
             if (webPageUuid) {
@@ -701,16 +711,6 @@ export default class GoatProvider implements ApiProvider {
                 };
               }
             }
-          } else {
-            logger.debug('[GOAT] Using exfil data from provider response metadata');
-            gradingContext = {
-              ...(tracingOptions.includeInGrading
-                ? { traceContext: targetResponse.traceContext, traceSummary: gradingTraceSummary }
-                : {}),
-              wasExfiltrated: Boolean(finalResponse.metadata.wasExfiltrated),
-              exfilCount: Number(finalResponse.metadata.exfilCount) || 0,
-              exfilRecords: [],
-            };
           }
 
           // Fallback to just tracing context if no exfil data found

@@ -1,6 +1,5 @@
 import * as React from 'react';
 
-import { Button } from '@app/components/ui/button';
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Spinner } from '@app/components/ui/spinner';
 import { useIsPrinting } from '@app/hooks/useIsPrinting';
@@ -67,28 +66,9 @@ export function DataTable<TData, TValue = unknown>({
   renderSubComponent,
   singleExpand = false,
   getRowCanExpand: getRowCanExpandProp,
-  manualFiltering = false,
-  columnFilters: externalColumnFilters,
-  onColumnFiltersChange: externalOnColumnFiltersChange,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
-  const [internalColumnFilters, setInternalColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const columnFilters =
-    manualFiltering && externalColumnFilters ? externalColumnFilters : internalColumnFilters;
-  // Use a ref to avoid stale closures when resolving updater functions
-  const columnFiltersRef = React.useRef(columnFilters);
-  columnFiltersRef.current = columnFilters;
-  const setColumnFilters = React.useCallback(
-    (updater: ColumnFiltersState | ((prev: ColumnFiltersState) => ColumnFiltersState)) => {
-      const nextValue = typeof updater === 'function' ? updater(columnFiltersRef.current) : updater;
-      if (manualFiltering && externalOnColumnFiltersChange) {
-        externalOnColumnFiltersChange(nextValue);
-      } else {
-        setInternalColumnFilters(nextValue);
-      }
-    },
-    [manualFiltering, externalOnColumnFiltersChange],
-  );
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>(initialColumnVisibility);
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
@@ -260,7 +240,6 @@ export function DataTable<TData, TValue = unknown>({
     enableRowSelection,
     enableColumnResizing: true,
     columnResizeMode: 'onChange',
-    manualFiltering,
     filterFns: {
       operator: operatorFilterFn,
     },
@@ -435,7 +414,7 @@ export function DataTable<TData, TValue = unknown>({
                       <th
                         key={header.id}
                         className={cn(
-                          'group py-3 text-sm font-medium relative bg-white dark:bg-zinc-900',
+                          'group py-3 text-sm font-medium relative',
                           isRightAligned ? 'text-right' : 'text-left',
                           header.column.id === 'select' || header.column.id === 'expand'
                             ? 'px-3'
@@ -452,54 +431,32 @@ export function DataTable<TData, TValue = unknown>({
                         {header.isPlaceholder ? null : (
                           <div
                             className={cn(
-                              'relative min-w-0 overflow-hidden',
-                              isRightAligned && 'flex flex-row-reverse',
+                              'flex items-center gap-1 min-w-0',
+                              isRightAligned && 'flex-row-reverse',
                             )}
                           >
-                            <span className="truncate block">
+                            <span className="truncate">
                               {flexRender(header.column.columnDef.header, header.getContext())}
                             </span>
-                            {(canSort || canFilter) && (
+                            {canSort && (
                               <span
                                 className={cn(
-                                  'absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5',
-                                  'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity',
-                                  'bg-inherit',
-                                  isRightAligned ? 'left-0 pr-1' : 'right-0 pl-1',
-                                  // When sort is active, always show
-                                  sortDirection && 'opacity-100 pointer-events-auto',
-                                  // When filter is active, always show
-                                  header.column.getIsFiltered() &&
-                                    'opacity-100 pointer-events-auto',
+                                  'shrink-0 transition-opacity',
+                                  sortDirection
+                                    ? 'text-blue-700 dark:text-blue-100 opacity-100'
+                                    : 'text-zinc-400 dark:text-zinc-500 opacity-0 group-hover:opacity-100',
                                 )}
                               >
-                                {canSort && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className={cn(
-                                      'h-6 w-6 p-0',
-                                      sortDirection
-                                        ? 'text-blue-700 dark:text-blue-100'
-                                        : 'text-zinc-400 dark:text-zinc-500',
-                                    )}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      header.column.getToggleSortingHandler()?.(e);
-                                    }}
-                                  >
-                                    {sortDirection === 'asc' ? (
-                                      <ArrowUp className="size-4" />
-                                    ) : sortDirection === 'desc' ? (
-                                      <ArrowDown className="size-4" />
-                                    ) : (
-                                      <ArrowUpDown className="size-4" />
-                                    )}
-                                  </Button>
+                                {sortDirection === 'asc' ? (
+                                  <ArrowUp className="size-4" />
+                                ) : sortDirection === 'desc' ? (
+                                  <ArrowDown className="size-4" />
+                                ) : (
+                                  <ArrowUpDown className="size-4" />
                                 )}
-                                {canFilter && <DataTableHeaderFilter column={header.column} />}
                               </span>
                             )}
+                            {canFilter && <DataTableHeaderFilter column={header.column} />}
                           </div>
                         )}
                         {/* Column resize handle */}

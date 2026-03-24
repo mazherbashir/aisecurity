@@ -715,7 +715,7 @@ describe('Azure Provider Tests', () => {
       });
 
       it('should auto-detect gpt-5 models by deployment name', () => {
-        const provider = new AzureChatCompletionProvider('gpt-5.4', {
+        const provider = new AzureChatCompletionProvider('gpt-5-mini', {
           config: {},
         });
         expect((provider as any).isReasoningModel()).toBe(true);
@@ -729,7 +729,7 @@ describe('Azure Provider Tests', () => {
       });
 
       it('should auto-detect reasoning models with mixed case', () => {
-        const provider = new AzureChatCompletionProvider('GPT-5.4', {
+        const provider = new AzureChatCompletionProvider('GPT-5-Mini', {
           config: {},
         });
         expect((provider as any).isReasoningModel()).toBe(true);
@@ -743,7 +743,7 @@ describe('Azure Provider Tests', () => {
       });
 
       it('should auto-detect prefixed gpt-5 deployment names', () => {
-        const provider = new AzureChatCompletionProvider('staging-gpt-5.4', {
+        const provider = new AzureChatCompletionProvider('staging-gpt-5-mini', {
           config: {},
         });
         expect((provider as any).isReasoningModel()).toBe(true);

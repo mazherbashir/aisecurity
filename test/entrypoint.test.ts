@@ -97,15 +97,15 @@ describe('entrypoint version check logic', () => {
 
     afterEach(() => {
       // Restore original values
-      if (originalBun === undefined) {
-        delete (globalThis as Record<string, unknown>).Bun;
-      } else {
+      if (originalBun !== undefined) {
         (globalThis as Record<string, unknown>).Bun = originalBun;
-      }
-      if (originalDeno === undefined) {
-        delete (globalThis as Record<string, unknown>).Deno;
       } else {
+        delete (globalThis as Record<string, unknown>).Bun;
+      }
+      if (originalDeno !== undefined) {
         (globalThis as Record<string, unknown>).Deno = originalDeno;
+      } else {
+        delete (globalThis as Record<string, unknown>).Deno;
       }
     });
 
@@ -206,7 +206,7 @@ describe('entrypoint version check logic', () => {
       // In development/testing, the constant is undefined
       const __PROMPTFOO_MIN_NODE_VERSION__: number | undefined = undefined;
       const minNodeVersion =
-        typeof __PROMPTFOO_MIN_NODE_VERSION__ === 'undefined' ? 20 : __PROMPTFOO_MIN_NODE_VERSION__;
+        typeof __PROMPTFOO_MIN_NODE_VERSION__ !== 'undefined' ? __PROMPTFOO_MIN_NODE_VERSION__ : 20;
 
       expect(minNodeVersion).toBe(20);
     });
@@ -215,7 +215,7 @@ describe('entrypoint version check logic', () => {
       // At build time, the constant is replaced with the actual value
       const __PROMPTFOO_MIN_NODE_VERSION__: number | undefined = 22;
       const minNodeVersion =
-        typeof __PROMPTFOO_MIN_NODE_VERSION__ === 'undefined' ? 20 : __PROMPTFOO_MIN_NODE_VERSION__;
+        typeof __PROMPTFOO_MIN_NODE_VERSION__ !== 'undefined' ? __PROMPTFOO_MIN_NODE_VERSION__ : 20;
 
       expect(minNodeVersion).toBe(22);
     });

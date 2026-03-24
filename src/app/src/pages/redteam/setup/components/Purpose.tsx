@@ -371,7 +371,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                         <AlertTriangle className="size-4" />
                         <AlertContent>
                           <AlertDescription>
-                            Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
+                            Cannot connect to AI Security API. Auto-discovery requires a healthy API
                             connection.
                           </AlertDescription>
                         </AlertContent>

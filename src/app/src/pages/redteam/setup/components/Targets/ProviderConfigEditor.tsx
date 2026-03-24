@@ -93,7 +93,7 @@ function ProviderConfigEditor({
           <>
             Request body must contain <code>{'{{prompt}}'}</code> - this is where promptfoo will
             inject the attack payload. Replace the user input value with <code>{'{{prompt}}'}</code>
-            . Promptfoo uses Nunjucks templating to replace <code>{'{{prompt}}'}</code> with the
+            . AI Security uses Nunjucks templating to replace <code>{'{{prompt}}'}</code> with the
             actual test content.{' '}
             <a
               href="https://www.promptfoo.dev/docs/configuration/guide/#using-nunjucks-templates"
@@ -165,15 +165,15 @@ function ProviderConfigEditor({
 
     if (providerType === 'http') {
       // Check if we're in raw mode (using request field) or structured mode (using url field)
-      if (provider.config.request === undefined) {
-        // Structured mode: validate URL
-        if (!provider.config.url || !validateUrl(provider.config.url)) {
-          errors.push('Valid URL is required');
-        }
-      } else {
+      if (provider.config.request !== undefined) {
         // Raw mode: validate that request is not empty
         if (!provider.config.request || provider.config.request.trim() === '') {
           errors.push('HTTP request content is required');
+        }
+      } else {
+        // Structured mode: validate URL
+        if (!provider.config.url || !validateUrl(provider.config.url)) {
+          errors.push('Valid URL is required');
         }
       }
 

@@ -670,7 +670,7 @@ export default function PluginsTab({
                             ? 'This plugin requires remote generation'
                             : apiHealthStatus === 'connected'
                               ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
-                              : 'Promptfoo Cloud connection is required for test generation'
+                              : 'AI Security Cloud connection is required for test generation'
                         }
                       />
                       {isSelected && (

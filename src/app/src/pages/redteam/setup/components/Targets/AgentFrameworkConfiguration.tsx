@@ -147,7 +147,7 @@ export default function AgentFrameworkConfiguration({
             <p className="mb-3">{frameworkDetails.description}</p>
             {agentType === 'generic-agent' ? (
               <p className="italic">
-                <strong>Tip:</strong> Promptfoo works with ANY Python-based agent framework. Simply
+                <strong>Tip:</strong> AI Security works with ANY Python-based agent framework. Simply
                 implement the call_api function in your Python file to connect your agent.
               </p>
             ) : (
@@ -178,7 +178,7 @@ export default function AgentFrameworkConfiguration({
         <div>
           <h3 className="mb-2 text-lg font-semibold">Quickstart Template</h3>
           <p className="mb-4 max-w-[1000px] text-muted-foreground">
-            Want to see how it works? Promptfoo can generate a starter template for{' '}
+            Want to see how it works? AI Security can generate a starter template for{' '}
             {frameworkDetails.name} that shows you how to connect your agent to the red team
             evaluation system. You can use this as a starting point and customize it to fit your
             needs.

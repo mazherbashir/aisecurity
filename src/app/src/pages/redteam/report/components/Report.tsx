@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
@@ -57,7 +56,7 @@ import ToolsDialog, { Tool } from './ToolsDialog';
 interface ReportProps {
   /** When provided, uses this evalId instead of reading from URL search params. */
   evalId?: string;
-  /** When true, skips rendering the report's own header (persistent scroll header, header card, enterprise banner). Used when embedded inside EvalHeader. */
+  /** When true, skips rendering the report's own header (persistent scroll header, header card). Used when embedded inside EvalHeader. */
   embedded?: boolean;
   /** Called with dropdown menu items for the eval actions dropdown when embedded. */
   onActionsReady?: (actions: React.ReactNode) => void;
@@ -717,8 +716,6 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
 
       <div className="mx-auto max-w-7xl px-4 pb-8 pt-4 print:max-w-none print:px-0 print:pt-0 print:pb-0">
         <div className="flex flex-col gap-6">
-          {!embedded && evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
-
           {!embedded && (
             <>
               {/* Report Header Card */}

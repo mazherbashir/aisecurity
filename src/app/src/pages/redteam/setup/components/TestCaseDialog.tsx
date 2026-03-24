@@ -116,9 +116,9 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
         const content =
           typeof output === 'string'
             ? output
-            : output == null
-              ? (targetResponse.error ?? 'No response from target')
-              : JSON.stringify(output);
+            : output != null
+              ? JSON.stringify(output)
+              : (targetResponse.error ?? 'No response from target');
 
         messages.push({
           role: 'assistant' as const,
@@ -297,7 +297,7 @@ export const TestCaseGenerateButton: React.FC<{
       </TooltipTrigger>
       <TooltipContent>
         {isRemoteDisabled
-          ? 'Requires Promptfoo Cloud connection'
+          ? 'Requires AI Security Cloud connection'
           : tooltipTitle || 'Generate test case'}
       </TooltipContent>
     </Tooltip>

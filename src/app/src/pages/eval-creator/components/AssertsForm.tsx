@@ -61,12 +61,6 @@ const assertTypes: AssertionType[] = [
   'is-valid-function-call',
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
-  'skill-used',
-  'trajectory:goal-success',
-  'trajectory:tool-args-match',
-  'trajectory:tool-used',
-  'trajectory:tool-sequence',
-  'trajectory:step-count',
 
   // Metrics
   'bleu',
@@ -115,7 +109,6 @@ const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'moderation',
   'pi',
   'select-best',
-  'trajectory:goal-success',
 ]);
 
 const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {

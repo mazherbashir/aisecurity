@@ -141,9 +141,9 @@ export default function LauncherPage() {
 
       {/* Header section */}
       <div className="mb-8 flex w-full max-w-[600px] flex-col items-center sm:mb-10">
-        <img src={logoPanda} alt="Promptfoo Logo" className="mb-6 size-16 lg:size-20" />
+        <img src={logoPanda} alt="AI Security Logo" className="mb-6 size-16 lg:size-20" />
         <h1 className="mb-6 text-center text-2xl font-light sm:text-3xl md:text-4xl">
-          Welcome to Promptfoo
+          Welcome to AI Security
         </h1>
 
         <div
@@ -154,13 +154,13 @@ export default function LauncherPage() {
         >
           {isConnecting ? (
             <>
-              Connecting to Promptfoo on localhost:15500
+              Connecting to AI Security on localhost:15500
               <Spinner size="sm" />
             </>
           ) : (
             <>
               <CheckCircle className="size-4" />
-              Connected to Promptfoo successfully!
+              Connected to AI Security successfully!
             </>
           )}
         </div>
@@ -205,7 +205,7 @@ export default function LauncherPage() {
                 <div className="mb-1 text-muted-foreground">
                   # If you have promptfoo installed globally:
                 </div>
-                <div>promptfoo view -n</div>
+                <div>aisecurity view -n</div>
                 <div className="my-2">&nbsp;</div>
                 <div className="mb-1 text-muted-foreground"># Or using npx:</div>
                 <div>npx promptfoo@latest view -n</div>

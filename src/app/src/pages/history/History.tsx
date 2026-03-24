@@ -62,7 +62,7 @@ export default function History({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'promptfoo-eval-history.json';
+    a.download = 'ai-security-eval-history.json';
     a.click();
 
     setTimeout(() => {
@@ -109,7 +109,7 @@ export default function History({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'promptfoo-eval-history.csv';
+    a.download = 'ai-security-eval-history.csv';
     a.click();
 
     setTimeout(() => {

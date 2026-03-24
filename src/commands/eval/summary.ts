@@ -146,17 +146,17 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
   // When activelySharing is true, share URL will be shown after summary via ora spinner
   if (writeToDatabase && !shareableUrl && !wantsToShare && !activelySharing) {
     lines.push('');
-    lines.push(`» View results: ${chalk.green.bold('promptfoo view')}`);
+    lines.push(`» View results: ${chalk.green.bold('aisecurity view')}`);
 
     if (!hasExplicitDisable) {
       if (cloudEnabled) {
-        lines.push(`» Create shareable URL: ${chalk.green.bold('promptfoo share')}`);
+        lines.push(`» Create shareable URL: ${chalk.green.bold('aisecurity share')}`);
       } else {
-        lines.push(`» Share with your team: ${chalk.green.bold('https://promptfoo.app')}`);
+        lines.push(`» Share with your team: ${chalk.green.bold('https://aisecurity.app')}`);
       }
     }
 
-    lines.push(`» Feedback: ${chalk.green.bold('https://promptfoo.dev/feedback')}`);
+    lines.push(`» Feedback: ${chalk.green.bold('https://aisecurity.dev/feedback')}`);
   }
 
   lines.push('');

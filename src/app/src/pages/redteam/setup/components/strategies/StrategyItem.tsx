@@ -143,7 +143,7 @@ export function StrategyItem({
                     ENTERPRISE
                   </Badge>
                 </TooltipTrigger>
-                <TooltipContent>This strategy is available in Promptfoo Enterprise</TooltipContent>
+                <TooltipContent>This strategy is available in AI Security Enterprise</TooltipContent>
               </Tooltip>
             )}
           </div>

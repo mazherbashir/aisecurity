@@ -21,14 +21,6 @@ export interface ChatMessage {
   content: string;
 }
 
-export interface SkillCallEntry {
-  name: string;
-  input?: unknown;
-  path?: string;
-  source?: 'heuristic' | 'tool';
-  is_error?: boolean;
-}
-
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
 // Local interface to avoid circular dependency with src/types/index.ts
@@ -224,7 +216,7 @@ export interface ProviderResponse {
     storageRef?: { key?: string }; // Storage reference for video file (Sora)
     url?: string; // Storage ref URL (e.g., storageRef:video/abc123.mp4) or blob URI
     format?: string; // 'mp4'
-    size?: string; // '1280x720', '720x1280', '1792x1024', or '1024x1792'
+    size?: string; // '1280x720' or '720x1280'
     duration?: number; // Seconds
     thumbnail?: string; // Storage ref URL for thumbnail (Sora)
     spritesheet?: string; // Storage ref URL for spritesheet (Sora)

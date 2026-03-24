@@ -361,11 +361,11 @@ export default function Review({
 
     switch (apiHealthStatus) {
       case 'blocked':
-        return 'Cannot connect to Promptfoo Cloud. Please check your network connection or API settings.';
+        return 'Cannot connect to AI Security Cloud. Please check your network connection or API settings.';
       case 'disabled':
-        return 'Remote generation is disabled. Running red team evaluations requires connection to Promptfoo Cloud.';
+        return 'Remote generation is disabled. Running red team evaluations requires connection to AI Security Cloud.';
       case 'unknown':
-        return 'Checking connection to Promptfoo Cloud...';
+        return 'Checking connection to AI Security Cloud...';
       default:
         return undefined;
     }
@@ -1121,7 +1121,7 @@ export default function Review({
                 <AlertContent>
                   <AlertDescription>
                     {apiHealthStatus === 'blocked'
-                      ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
+                      ? 'Cannot connect to AI Security Cloud. The "Run Now" option requires a connection to AI Security Cloud.'
                       : apiHealthStatus === 'disabled'
                         ? 'Remote generation is disabled. The "Run Now" option is not available.'
                         : 'Checking connection status...'}

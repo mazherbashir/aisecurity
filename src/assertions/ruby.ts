@@ -105,7 +105,7 @@ end
           `Ruby assertion must return a boolean, number, or {pass, score, reason} object. Instead got:\n${result}`,
         );
       }
-      pass = assertion.threshold === undefined ? score > 0 : score >= assertion.threshold;
+      pass = assertion.threshold !== undefined ? score >= assertion.threshold : score > 0;
     }
   } catch (err) {
     return {

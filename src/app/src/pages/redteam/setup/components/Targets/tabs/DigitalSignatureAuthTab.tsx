@@ -34,7 +34,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
     <>
       <p className="mb-6">
         Configure signature-based authentication for secure API calls. Your private key is never
-        sent to Promptfoo and will always be stored locally on your system. See{' '}
+        sent to AI Security and will always be stored locally on your system. See{' '}
         <a
           href="https://www.promptfoo.dev/docs/providers/http/#digital-signature-authentication"
           target="_blank"

@@ -8,11 +8,11 @@ export default function Logo() {
     <Link to="/" className="inline-flex items-center px-2 py-1 no-underline perspective-[2000px]">
       <img
         src={logoPanda}
-        alt="Promptfoo Logo"
+        alt="AI Security Logo"
         className="logo-icon w-[25px] h-auto transition-all duration-1000 ease-[cubic-bezier(0.68,-0.55,0.265,1.55)]"
       />
       <span className="logo-text font-['Inter',sans-serif] font-semibold text-base text-foreground tracking-[0.02em] ml-2 transition-all duration-300">
-        promptfoo
+        AI Security
       </span>
     </Link>
   );

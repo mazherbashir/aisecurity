@@ -185,7 +185,7 @@ export default function VerticalSuiteCard({
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>
-                    This feature is only available in Promptfoo Enterprise
+                    This feature is only available in AI Security Enterprise
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -408,12 +408,12 @@ export default function VerticalSuiteCard({
                               isGenerating={generatingTestCase && generatingPlugin === plugin}
                               tooltipTitle={
                                 isLocked
-                                  ? 'This feature requires Promptfoo Enterprise'
+                                  ? 'This feature requires AI Security Enterprise'
                                   : pluginDisabled
                                     ? 'This plugin requires remote generation'
                                     : apiHealthStatus === 'connected'
                                       ? `Generate a test case for ${displayNameOverrides[plugin] || plugin}`
-                                      : 'Promptfoo Cloud connection is required for test generation'
+                                      : 'AI Security Cloud connection is required for test generation'
                               }
                             />
 

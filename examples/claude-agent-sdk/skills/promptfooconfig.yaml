@@ -13,9 +13,11 @@ prompts:
 
 tests:
   - assert:
-      # Verify the code-review skill was invoked
-      - type: skill-used
-        value: code-review
+      # Verify the code-review skill was invoked via tool calls
+      - type: javascript
+        value: |
+          const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+          return toolCalls.some(t => t.name === 'Skill');
       # Verify security issues were identified (MD5 is insecure for passwords)
       - type: icontains
         value: 'md5'
