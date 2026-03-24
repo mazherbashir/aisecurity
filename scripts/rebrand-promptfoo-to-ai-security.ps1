@@ -295,7 +295,7 @@ $pythonScript | Set-Content $pyScript -Encoding UTF8
 try {
   $py = Get-Command python -ErrorAction SilentlyContinue
   if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
-  if (-not $py) { Write-Warning "Python not found — skipping logo generation. Install Python and re-run."; throw }
+  if (-not $py) { Write-Warning "Python not found - skipping logo generation. Install Python and re-run."; throw }
 
   & $py.Source $pyScript $tmpDir
   if ($LASTEXITCODE -ne 0) { throw "Python script failed (exit $LASTEXITCODE)" }
@@ -357,10 +357,10 @@ foreach ($ext in @('', '.cmd', '.ps1')) {
 }
 
 if ($allCreated) {
-  Write-Host "  'aisecurity' CLI is ready — try: aisecurity --version" -ForegroundColor Green
+  Write-Host "  'aisecurity' CLI is ready - try: aisecurity --version" -ForegroundColor Green
 } else {
   Write-Host "  Partial: run 'npm run build && npm link --force' to finish registering the CLI." -ForegroundColor Yellow
 }
 
-Write-Host "`n✅ Rebranding complete!" -ForegroundColor Green
+Write-Host "`n[Done] Rebranding complete!" -ForegroundColor Green
 Write-Host "   Run 'npm run dev:app' to verify in the browser." -ForegroundColor Gray
