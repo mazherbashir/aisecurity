@@ -281,14 +281,48 @@ Code Review Services recommends upgrading the third-party component with a vulne
 </ol>
 <br/>`;
 
+      // Sort SCA details by highest severity first
+      const getHighestSeverity = (cnts: string) => {
+          const s = (cnts || '').toLowerCase().replace(' ', '');
+          if (s.includes('veryhigh')) return 1;
+          if (s.includes('high')) return 2;
+          if (s.includes('medium')) return 3;
+          if (s.includes('low')) return 4;
+          return 99;
+      };
+
+      const sortedScaDetails = [...scaDetails].sort((a, b) => getHighestSeverity(a.severityCounts) - getHighestSeverity(b.severityCounts));
+
       // SCA Details Table Rows
-      const scaTableRows = scaDetails.map((detail: any) => {
-        const severityParts = (detail.severityCounts || '').split(',').map((s: string) => s.trim());
-        const severityHtml = severityParts.map((part: string) => {
-            if (!part) return '';
-            const [sev, count] = part.split(': ');
-            const sevClass = sev.toLowerCase().replace(' ', '');
-            return `<span class="crs-rounded minwidth ${sevClass}">${sev}</span>: ${count}`;
+      const scaTableRows = sortedScaDetails.map((detail: any) => {
+        let countsStr = detail.severityCounts || '';
+        const severityMatches = Array.from(countsStr.matchAll(/(Very High|VeryHigh|High|Medium|Low):\s*(\d+)/g));
+        let parsedSeverities: {sev: string, count: string}[] = [];
+        
+        if (severityMatches.length > 0) {
+            parsedSeverities = severityMatches.map(m => ({ sev: m[1] === 'VeryHigh' ? 'Very High' : m[1], count: m[2] }));
+        } else {
+            const parts = countsStr.split(',').map((s:string) => s.trim()).filter(Boolean);
+            parsedSeverities = parts.map((p:string) => {
+                const [sev, count] = p.split(':');
+                return { sev: (sev || '').trim(), count: (count || '').trim() };
+            });
+        }
+
+        const severityOrder: Record<string, number> = {
+            'Very High': 1,
+            'VeryHigh': 1,
+            'High': 2,
+            'Medium': 3,
+            'Low': 4
+        };
+
+        parsedSeverities.sort((a, b) => (severityOrder[a.sev] || 99) - (severityOrder[b.sev] || 99));
+
+        const severityHtml = parsedSeverities.map(p => {
+            if (!p.sev) return '';
+            const sevClass = p.sev.toLowerCase().replace(' ', '');
+            return `<span class="crs-rounded minwidth ${sevClass}">${p.sev}</span>: ${p.count}`;
         }).join('<br/>');
 
         const cveLinks = (detail.cveList || '').split(',').map((cve: string) => 
