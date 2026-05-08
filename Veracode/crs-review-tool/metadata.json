@@ -1,0 +1,6 @@
+{
+  "name": "CRS Review Tool",
+  "description": "Enterprise-grade dashboard for bulk reviewing SAST and SCA findings with AI-powered assessment generation for security mitigations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

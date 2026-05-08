@@ -1,0 +1,550 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema version="1.5"
+  targetNamespace="https://www.veracode.com/schema/reports/export/1.0"
+  xmlns:tns="https://www.veracode.com/schema/reports/export/1.0"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  elementFormDefault="qualified">
+
+<xs:element name="detailedreport">
+  <xs:complexType>
+    <xs:sequence>
+      <xs:element name="static-analysis" minOccurs="0" maxOccurs="1" type="tns:AnalysisType"/>
+      <xs:element name="dynamic-analysis" minOccurs="0" maxOccurs="1" type="tns:AnalysisType"/>
+      <xs:element name="manual-analysis" minOccurs="0" maxOccurs="1" type="tns:ManualAnalysisType"/>
+      <xs:element name="severity" minOccurs="6" maxOccurs="6" type="tns:SeverityType" />
+      <xs:element name="flaw-status" minOccurs="1" maxOccurs="1" type="tns:FlawStatusType" />
+      <xs:element name="customfields" minOccurs="0" maxOccurs="1" type="tns:CustomFieldsType"/>
+      <xs:element name="software_composition_analysis" minOccurs="0" maxOccurs="1" type="tns:SoftwareCompositionAnalysis"/>
+    </xs:sequence>
+    <xs:attribute name="report_format_version" type="xs:string" use="required"/>
+    <xs:attribute name="account_id" type="xs:long" use="required"/>
+    <xs:attribute name="app_name" type="xs:string" use="required"/>
+    <xs:attribute name="app_id" type="xs:long" use="required"/>
+    <xs:attribute name="analysis_id" type="xs:long" use="required"/>
+    <xs:attribute name="static_analysis_unit_id" type="xs:long" use="required"/>
+    <xs:attribute name="sandbox_name" type="xs:string" use="optional"/>
+    <xs:attribute name="sandbox_id" type="xs:long" use="required"/>
+    <xs:attribute name="first_build_submitted_date" type="xs:string" use="optional"/>
+    <xs:attribute name="version" type="xs:string" use="required"/>
+    <xs:attribute name="build_id" type="xs:long" use="required"/>
+    <xs:attribute name="vendor" type="xs:string" use="optional"/>
+    <xs:attribute name="submitter" type="xs:string" use="required"/>
+    <xs:attribute name="platform" type="xs:string" use="required"/>
+    <xs:attribute name="assurance_level" type="xs:integer" use="optional"/>
+    <xs:attribute name="business_criticality" type="xs:integer" use="optional"/>
+    <xs:attribute name="generation_date" type="xs:string" use="required"/>
+    <xs:attribute name="veracode_level" type="xs:string" use="required"/>
+    <xs:attribute name="total_flaws" type="xs:integer" use="optional"/>
+    <xs:attribute name="flaws_not_mitigated" type="xs:integer" use="optional"/>
+    <xs:attribute name="teams" type="xs:string" use="required"/>
+    <xs:attribute name="life_cycle_stage" type="xs:string" use="required"/>
+    <xs:attribute name="planned_deployment_date" type="xs:string" use="optional"/>
+    <xs:attribute name="last_update_time" type="xs:string" use="required"/>
+    <xs:attribute name="is_latest_build" type="xs:boolean" use="required"/>
+    <xs:attribute name="policy_name" type="xs:string" use="required"/>
+    <xs:attribute name="policy_version" type="xs:integer" use="required"/>
+    <xs:attribute name="policy_compliance_status" type="xs:string" use="required"/>
+    <xs:attribute name="policy_rules_status" type="xs:string" use="required"/>
+    <xs:attribute name="grace_period_expired" type="xs:boolean" use="required"/>
+    <xs:attribute name="scan_overdue" type="xs:string" use="required"/>
+    <xs:attribute name="any_type_scan_due" type="xs:string" use="optional"/>
+    <xs:attribute name="business_owner" type="xs:string" use="optional"/>
+    <xs:attribute name="business_unit" type="xs:string" use="optional"/>
+    <xs:attribute name="tags" type="xs:string" use="optional"/>
+    <xs:attribute name="legacy_scan_engine" type="xs:boolean" use="optional"/>
+  </xs:complexType>
+</xs:element>
+
+<xs:complexType name="SeverityType">
+  <xs:sequence>
+    <xs:element name="category" minOccurs="0" maxOccurs="unbounded" type="tns:CategoryType"/>
+  </xs:sequence>
+  <xs:attribute name="level" type="tns:SeverityValueType" use="required"/>
+</xs:complexType>
+
+<xs:complexType name="CategoryType">
+  <xs:sequence>
+    <xs:element name="desc" type="tns:ParaListType"/>
+    <xs:element name="recommendations" type="tns:ParaListType"/>
+    <xs:element name="cwe" maxOccurs="unbounded" type="tns:CweType"/>
+  </xs:sequence>
+  <xs:attribute name="categoryid" type="xs:integer" use="required"/>
+  <xs:attribute name="categoryname" type="xs:string" use="required"/>
+  <xs:attribute name="pcirelated" type="xs:boolean" use="optional"/>
+</xs:complexType>
+
+<xs:complexType name="CweType">
+  <xs:sequence>
+    <xs:element name="description">
+      <xs:complexType>
+        <xs:sequence>
+          <xs:element name="text" minOccurs="0" maxOccurs="unbounded">
+            <xs:complexType>
+              <xs:attribute name="text" type="xs:string" use="required"/>
+            </xs:complexType>
+          </xs:element>
+        </xs:sequence>
+      </xs:complexType>
+    </xs:element>
+    <xs:element name="staticflaws" type="tns:FlawListType" minOccurs="0"/>
+    <xs:element name="dynamicflaws" type="tns:FlawListType" minOccurs="0"/>
+    <xs:element name="manualflaws" type="tns:FlawListType" minOccurs="0"/>
+  </xs:sequence>
+  <xs:attribute name="cweid" type="xs:positiveInteger" use="required"/>
+  <xs:attribute name="cwename" type="xs:string" use="required"/>
+  <xs:attribute name="pcirelated" type="xs:boolean" use="optional"/>
+  <xs:attribute name="owasp" type="xs:positiveInteger" use="optional"/>
+  <xs:attribute name="owasp2013" type="xs:positiveInteger" use="optional"/>
+  <xs:attribute name="sans" type="xs:positiveInteger" use="optional"/>
+  <xs:attribute name="certc" type="xs:positiveInteger" use="optional"/>
+  <xs:attribute name="certcpp" type="xs:positiveInteger" use="optional"/>
+  <xs:attribute name="certjava" type="xs:positiveInteger" use="optional"/>
+  <xs:attribute name="owaspmobile" type="xs:positiveInteger" use="optional"/>
+</xs:complexType>
+
+<xs:simpleType name="cvssType">
+  <xs:restriction base="xs:decimal">
+    <xs:minInclusive value="0"/>
+    <xs:maxInclusive value="10"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:complexType name="AnalysisType">
+  <xs:sequence>
+    <xs:element name="modules">
+      <xs:complexType>
+        <xs:sequence>
+          <xs:element name="module" minOccurs="0" maxOccurs="unbounded" type="tns:ModuleType"/>
+        </xs:sequence>
+      </xs:complexType>
+    </xs:element>
+  </xs:sequence>
+  <xs:attribute name="rating" type="xs:string" use="required"/>
+  <xs:attribute name="score" type="xs:integer" use="required"/>
+  <xs:attribute name="mitigated_rating" type="xs:string" use="optional"/>
+  <xs:attribute name="mitigated_score" type="xs:integer" use="optional"/>
+  <xs:attribute name="submitted_date" type="xs:string" use="required"/>
+  <xs:attribute name="published_date" type="xs:string" use="optional"/>
+  <xs:attribute name="next_scan_due" type="xs:string" use="optional"/>
+  <xs:attribute name="analysis_size_bytes" type="xs:long" use="optional"/>
+  <xs:attribute name="engine_version" type="xs:string" use="optional"/>
+  <xs:attribute name="dynamic_scan_type" type="tns:DynamicScanType" use="optional"/>
+  <xs:attribute name="scan_exit_status_id" type="xs:integer" use="optional"/>
+  <xs:attribute name="scan_exit_status_desc" type="xs:string" use="optional"/>
+  <xs:attribute name="version" type="xs:string" use="optional"/>
+</xs:complexType>
+
+<xs:complexType name="ManualAnalysisType">
+  <xs:sequence>
+    <xs:element name="cia_adjustment" type="tns:negativeInteger" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="delivery_consultant" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+    <xs:element name="modules">
+      <xs:complexType>
+        <xs:sequence>
+          <xs:element name="module" minOccurs="0" maxOccurs="unbounded" type="tns:ModuleType"/>
+        </xs:sequence>
+      </xs:complexType>
+    </xs:element>
+  </xs:sequence>
+  <xs:attribute name="rating" type="xs:string" use="required"/>
+  <xs:attribute name="score" type="xs:integer" use="required"/>
+  <xs:attribute name="mitigated_rating" type="xs:string" use="optional"/>
+  <xs:attribute name="mitigated_score" type="xs:integer" use="optional"/>
+  <xs:attribute name="submitted_date" type="xs:string" use="required"/>
+  <xs:attribute name="published_date" type="xs:string" use="optional"/>
+  <xs:attribute name="next_scan_due" type="xs:string" use="optional"/>
+  <xs:attribute name="version" type="xs:string" use="optional"/>
+</xs:complexType>
+
+<xs:complexType name="ModuleType">
+  <xs:attribute name="name" type="xs:string" use="required"/>
+  <xs:attribute name="compiler" type="xs:string" use="required"/>
+  <xs:attribute name="os" type="xs:string" use="required"/>
+  <xs:attribute name="architecture" type="xs:string" use="required"/>
+  <xs:attribute name="loc" type="xs:nonNegativeInteger" use="optional"/>
+  <xs:attribute name="score" type="xs:nonNegativeInteger" use="required"/>
+  <xs:attribute name="numflawssev0" type="xs:nonNegativeInteger" use="required"/>
+  <xs:attribute name="numflawssev1" type="xs:nonNegativeInteger" use="required"/>
+  <xs:attribute name="numflawssev2" type="xs:nonNegativeInteger" use="required"/>
+  <xs:attribute name="numflawssev3" type="xs:nonNegativeInteger" use="required"/>
+  <xs:attribute name="numflawssev4" type="xs:nonNegativeInteger" use="required"/>
+  <xs:attribute name="numflawssev5" type="xs:nonNegativeInteger" use="required"/>
+  <xs:attribute name="target_url" type="xs:string" use="optional"/>
+  <xs:attribute name="domain" type="xs:string" use="optional"/>
+  <xs:attribute name="approxlinecount" type="xs:nonNegativeInteger" use="optional"/>
+</xs:complexType>
+
+<xs:complexType name="BulletItemType">
+  <xs:attribute name="text" type="xs:string" use="required"/>
+</xs:complexType>
+
+<xs:complexType name="ParaType">
+  <xs:sequence>
+    <xs:element name="bulletitem" type="tns:BulletItemType" minOccurs="0" maxOccurs="unbounded"/>
+  </xs:sequence>
+  <xs:attribute name="text" type="xs:string" use="required"/>
+</xs:complexType>
+
+<xs:complexType name="ParaListType">
+  <xs:sequence>
+    <xs:element name="para" minOccurs="0" maxOccurs="unbounded" type="tns:ParaType"/>
+  </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="FlawListType">
+  <xs:sequence>
+    <xs:element name="flaw" minOccurs="0" maxOccurs="unbounded" type="tns:FlawType" />
+  </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="FlawType">
+  <xs:sequence>
+    <xs:element name="mitigations" minOccurs="0" maxOccurs="1" type="tns:MitigationListType" />
+    <xs:element name="exploitability_adjustments" minOccurs="0" maxOccurs="1" type="tns:ExploitAdjustmentListType" />
+    <xs:element name="annotations" minOccurs="0" maxOccurs="1" type="tns:AnnotationListType" />
+    <xs:element name="exploit_desc" type="tns:LongTextType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="severity_desc" type="tns:LongTextType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="remediation_desc" type="tns:LongTextType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="appendix" type="tns:AppendixType" minOccurs="0" maxOccurs="1"/>
+  </xs:sequence>
+
+  <xs:attribute name="severity" type="tns:SeverityValueType" use="required"/>
+  <xs:attribute name="categoryname" type="xs:string" use="required"/>
+  <xs:attribute name="count" type="tns:positiveInteger" use="optional"/>
+  <xs:attribute name="issueid" type="xs:positiveInteger" use="required"/>
+  <xs:attribute name="module" type="xs:string" use="required"/>
+  <xs:attribute name="type" type="xs:string" use="required"/>
+  <xs:attribute name="description" type="xs:string" use="required"/>
+  <xs:attribute name="note" type="xs:string" use="required"/>
+  <xs:attribute name="cweid" type="xs:integer" use="required"/>
+  <xs:attribute name="remediationeffort" type="tns:RemediationEffortValueType" use="required"/>
+  <xs:attribute name="exploitLevel" type="tns:ExploitabilityValueType" use="optional"/>
+  <xs:attribute name="categoryid" type="xs:integer" use="required"/>
+  <xs:attribute name="pcirelated" type="xs:boolean" use="optional"/>
+  <xs:attribute name="date_first_occurrence" type="xs:string" use="required"/>
+  <xs:attribute name="remediation_status" type="xs:string" use="required"/>
+  <xs:attribute name="sourcefile" type="xs:string" use="optional"/>
+  <xs:attribute name="line" type="xs:integer" use="optional"/>
+  <xs:attribute name="sourcefilepath" type="xs:string" use="optional"/>
+  <xs:attribute name="scope" type="xs:string" use="optional"/>
+  <xs:attribute name="functionprototype" type="xs:string" use="optional"/>
+  <xs:attribute name="functionrelativelocation" type="xs:integer" use="optional"/>
+  <xs:attribute name="url" type="xs:string" use="optional"/>
+  <xs:attribute name="vuln_parameter" type="xs:string" use="optional"/>
+  <xs:attribute name="procedure_name" type="xs:string" use="optional"/>
+  <xs:attribute name="procedure_hash" type="xs:string" use="optional"/>
+  <xs:attribute name="prototype_hash" type="xs:string" use="optional"/>
+  <xs:attribute name="statement_hash" type="xs:string" use="optional"/>
+  <xs:attribute name="statement_hash_count" type="xs:integer" use="optional"/>
+  <xs:attribute name="statement_hash_ordinal" type="xs:integer" use="optional"/>
+  <xs:attribute name="location" type="xs:string" use="optional"/>
+  <xs:attribute name="cvss" type="tns:cvssType"  use="optional" />
+  <xs:attribute name="capecid" type="tns:positiveInteger" use="optional"/>
+  <xs:attribute name="exploitdifficulty" type="tns:ExploitDifficultyValueType" use="optional"/>
+  <xs:attribute name="inputvector" type="xs:string" use="optional"/>
+  <xs:attribute name="cia_impact" type="xs:string" use="required"/>
+  <xs:attribute name="grace_period_expires" type="xs:string" use="required"/>
+  <xs:attribute name="affects_policy_compliance" type="xs:boolean" use="required"/>
+  <xs:attribute name="mitigation_status" type="xs:string" use="optional"/>
+  <xs:attribute name="mitigation_status_desc" type="xs:string" use="optional"/>
+  <xs:attribute name="tag" type="xs:string" use="optional"/>
+</xs:complexType>
+
+<xs:simpleType name="SeverityValueType">
+  <xs:restriction base="xs:integer">
+    <xs:minInclusive value="0"/>
+    <xs:maxInclusive value="5"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="ExploitabilityValueType">
+  <xs:restriction base="xs:integer">
+    <xs:minInclusive value="-2"/>
+    <xs:maxInclusive value="2"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="RemediationEffortValueType">
+  <xs:restriction base="xs:integer">
+    <xs:minInclusive value="1"/>
+    <xs:maxInclusive value="5"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:complexType name="MitigationListType">
+  <xs:sequence>
+    <xs:element name="mitigation" minOccurs="0" maxOccurs="unbounded" type="tns:MitigationType"/>
+  </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="MitigationType">
+  <xs:attribute name="action" type="xs:string" use="required"/>
+  <xs:attribute name="description" type="xs:string" use="required"/>
+  <xs:attribute name="user" type="xs:string" use="required"/>
+  <xs:attribute name="date" type="xs:string" use="required"/>
+</xs:complexType>
+
+<xs:complexType name="AnnotationListType">
+  <xs:sequence>
+    <xs:element name="annotation" minOccurs="0" maxOccurs="unbounded" type="tns:AnnotationType"/>
+  </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="AnnotationType">
+  <xs:attribute name="action" type="xs:string" use="required"/>
+  <xs:attribute name="description" type="xs:string" use="required"/>
+  <xs:attribute name="user" type="xs:string" use="required"/>
+  <xs:attribute name="date" type="xs:string" use="required"/>
+</xs:complexType>
+
+
+<xs:complexType name="ExploitAdjustmentListType">
+  <xs:sequence>
+    <xs:element name="exploitability_adjustment" minOccurs="0" maxOccurs="unbounded" type="tns:ExploitAdjustmentType"/>
+  </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="ExploitAdjustmentType">
+  <xs:sequence>
+     <xs:element name="note" minOccurs="1" maxOccurs="1" type="xs:string"/>
+  </xs:sequence>
+  <xs:attribute name="score_adjustment" type="tns:ExploitAdjustmentValueType" use="required"/>
+</xs:complexType>
+
+
+<xs:simpleType name="positiveInteger">
+  <xs:restriction base="xs:positiveInteger">
+    <xs:maxInclusive value="2147483647"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="negativeInteger">
+  <xs:restriction base="xs:nonPositiveInteger">
+    <xs:minInclusive value="-2147483648"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="ExploitDifficultyValueType">
+  <xs:restriction base="xs:int">
+    <xs:enumeration value="1"/>
+    <xs:enumeration value="2"/>
+    <xs:enumeration value="3"/>
+  </xs:restriction>
+</xs:simpleType>
+
+
+<xs:simpleType name="ExploitAdjustmentValueType">
+  <xs:restriction base="xs:int">
+    <xs:enumeration value="-2"/>
+    <xs:enumeration value="-1"/>
+    <xs:enumeration value="0"/>
+    <xs:enumeration value="1"/>
+    <xs:enumeration value="2"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="LongTextType">
+  <xs:restriction base="xs:string">
+    <xs:maxLength value="2048"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:complexType name="AppendixType">
+  <xs:sequence>
+    <xs:element name="description" type="tns:LongTextType"/>
+    <xs:element name="screenshot" type="tns:ScreenshotType" minOccurs="0" maxOccurs="unbounded"/>
+    <xs:element name="code" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+  </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="ScreenshotType">
+  <xs:sequence>
+    <xs:element name="data" type="xs:base64Binary" />
+  </xs:sequence>
+  <xs:attribute name="format" type="tns:ScreenshotFormatType" use="required"/>
+</xs:complexType>
+
+<xs:complexType name="FlawStatusType">
+  <xs:attribute name="new" type="xs:integer" use="required"/>
+  <xs:attribute name="reopen" type="xs:integer" use="required"/>
+  <xs:attribute name="open" type="xs:integer" use="required"/>
+  <xs:attribute name="cannot-reproduce" type="xs:integer" use="optional"/>
+  <xs:attribute name="fixed" type="xs:integer" use="required"/>
+  <xs:attribute name="total" type="xs:integer" use="required"/>
+  <xs:attribute name="not_mitigated" type="xs:integer" use="required"/>
+  <xs:attribute name="sev-1-change" type="xs:integer" use="required"/>
+  <xs:attribute name="sev-2-change" type="xs:integer" use="required"/>
+  <xs:attribute name="sev-3-change" type="xs:integer" use="required"/>
+  <xs:attribute name="sev-4-change" type="xs:integer" use="required"/>
+  <xs:attribute name="sev-5-change" type="xs:integer" use="required"/>
+  <xs:attribute name="conforms-to-guidelines" type="xs:integer" use="optional"/>
+  <xs:attribute name="deviates-from-guidelines" type="xs:integer" use="optional"/>
+  <xs:attribute name="defer-to-security-team" type="xs:integer" use="optional"/>
+  <xs:attribute name="total-reviewed-mitigations" type="xs:integer" use="optional"/>
+</xs:complexType>
+
+
+<xs:complexType name="CustomFieldsType">
+<xs:sequence>
+    <xs:element name="customfield" minOccurs="0" maxOccurs="unbounded" type="tns:CustomFieldType"/>
+</xs:sequence>
+</xs:complexType>
+
+
+<xs:complexType name="CustomFieldType">
+     <xs:attribute name="name" type="tns:LongRequiredTextType"/>
+     <xs:attribute name="value" type="tns:LongTextType"/>
+</xs:complexType>
+
+<xs:simpleType name="LongRequiredTextType">
+     <xs:restriction base="xs:string">
+         <xs:minLength value="1"/>
+         <xs:maxLength value="1024"/>
+     </xs:restriction>
+</xs:simpleType>
+
+
+<xs:simpleType name="ScreenshotFormatType">
+  <xs:restriction base="xs:string">
+    <xs:enumeration value="GIF"/>
+    <xs:enumeration value="JPG"/>
+    <xs:enumeration value="PNG"/>
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:simpleType name="DynamicScanType">
+    <xs:restriction base="xs:string">
+    <xs:enumeration value="mp"></xs:enumeration>
+    <xs:enumeration value="ds"></xs:enumeration>
+    <xs:enumeration value="da"></xs:enumeration>
+    </xs:restriction>
+</xs:simpleType>
+
+<xs:complexType name="SoftwareCompositionAnalysis">
+<xs:sequence>
+<xs:element name="vulnerable_components" minOccurs="0" type="tns:VulnerableComponentList" />
+</xs:sequence>
+<xs:attribute name="third_party_components" type="xs:integer" use="required"/>
+<xs:attribute name="violate_policy" type="xs:boolean" use="required"/>
+<xs:attribute name="components_violated_policy" type="xs:integer" use="required"/>
+<xs:attribute name="blocklisted_components" type="xs:integer"/>
+<xs:attribute name="sca_service_available" type="xs:boolean"/>
+</xs:complexType>
+
+<xs:complexType name="VulnerableComponentList">
+<xs:sequence>
+<xs:element name="component" minOccurs="0" maxOccurs="unbounded" type="tns:Component" />
+</xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="Component">
+<xs:sequence>
+<xs:element name="file_paths" minOccurs="0" maxOccurs="1" type="tns:FilePathList"/>
+<xs:element name="licenses" minOccurs="0" maxOccurs="1" type="tns:LicenseList"/>
+<xs:element name="vulnerabilities" minOccurs="0" maxOccurs="1" type="tns:VulnerabilityList" />
+<xs:element name="violated_policy_rules" minOccurs="0" maxOccurs="1" type="tns:ViolatedRuleList" />
+</xs:sequence>
+<xs:attribute name="component_id" type="xs:string" use="required"/>
+<xs:attribute name="file_name" type="xs:string" use="required"/>
+<xs:attribute name="sha1" type="xs:string" use="required"/>
+<xs:attribute name="vulnerabilities" type="xs:integer" use="required"/>
+<xs:attribute name="max_cvss_score" type="xs:string" use="required"/>
+<xs:attribute name="library" type="xs:string" use="required"/>
+<xs:attribute name="library_id" type="xs:string" use="required"/>
+<xs:attribute name="version" type="xs:string" use="required"/>
+<xs:attribute name="vendor" type="xs:string" use="required"/>
+<xs:attribute name="description" type="xs:string" use="required"/>
+<xs:attribute name="blocklisted" type="xs:string"/>
+<xs:attribute name="new" type="xs:string"/>
+<xs:attribute name="added_date" type="xs:string"/>
+<xs:attribute name="component_affects_policy_compliance" type="xs:string"/>
+</xs:complexType>
+
+<xs:complexType name="FilePathList">
+<xs:sequence>
+<xs:element name="file_path" minOccurs="0" maxOccurs="unbounded" type="tns:FilePath" />
+</xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="FilePath">
+<xs:attribute name="value" type="xs:string" use="required" />
+</xs:complexType>
+
+<xs:complexType name="LicenseList">
+<xs:sequence>
+<xs:element name="license" minOccurs="0" maxOccurs="unbounded" type="tns:License" />
+</xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="License">
+    <xs:sequence>
+      <xs:element name="mitigations" minOccurs="0" maxOccurs="1" type="tns:MitigationHistoryList" />
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="spdx_id" type="xs:string" use="required"/>
+    <xs:attribute name="license_url" type="xs:string" use="required"/>
+    <xs:attribute name="risk_rating" type="xs:string" use="required"/>
+    <xs:attribute name="mitigation" type="xs:boolean" />
+    <xs:attribute name="mitigation_type" type="xs:string" />
+    <xs:attribute name="mitigated_date" type="xs:string" />
+    <xs:attribute name="license_affects_policy_compliance" type="xs:boolean" />
+</xs:complexType>
+
+<xs:complexType name="VulnerabilityList">
+<xs:sequence>
+<xs:element name="vulnerability" minOccurs="0" maxOccurs="unbounded" type="tns:Vulnerability" />
+</xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="Vulnerability">
+    <xs:sequence>
+      <xs:element name="mitigations" minOccurs="0" maxOccurs="1" type="tns:MitigationHistoryList" />
+    </xs:sequence>
+<xs:attribute name="cve_id" type="xs:string" use="required" />
+<xs:attribute name="cvss_score" type="xs:double" use="required" />
+<xs:attribute name="severity" type="xs:integer" use="required" />
+<xs:attribute name="cwe_id" type="xs:string" />
+<xs:attribute name="first_found_date" type="xs:string" />
+<xs:attribute name="cve_summary" type="xs:string"/>
+<xs:attribute name="severity_desc" type="xs:string"/>
+<xs:attribute name="mitigation" type="xs:string"/>
+<xs:attribute name="mitigation_type" type="xs:string"/>
+<xs:attribute name="mitigated_date" type="xs:string"/>
+<xs:attribute name="vulnerability_affects_policy_compliance" type="xs:string"/>
+</xs:complexType>
+
+<xs:complexType name="MitigationHistoryList">
+    <xs:sequence>
+      <xs:element name="mitigation" minOccurs="0" maxOccurs="unbounded" type="tns:MitigationHistory" />
+    </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="MitigationHistory">
+    <xs:attribute name="description" type="xs:string" use="required" />
+    <xs:attribute name="date" type="xs:string" use="required" />
+    <xs:attribute name="user" type="xs:string" use="required" />
+    <xs:attribute name="action" type="xs:string" use="required" />
+</xs:complexType>
+
+<xs:complexType name="ViolatedRuleList">
+<xs:sequence>
+<xs:element name="policy_rule" minOccurs="0" maxOccurs="unbounded" type="tns:PolicyRule" />
+</xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="PolicyRule">
+<xs:attribute name="type" type="tns:PolicyRuleType" use="required" />
+<xs:attribute name="value" type="xs:string" use="required" />
+<xs:attribute name="desc" type="xs:string" use="required" />
+</xs:complexType>
+
+<xs:simpleType name="PolicyRuleType">
+  <xs:restriction base="xs:string">
+    <xs:enumeration value="Disallow Vulnerabilities by Severity"/>
+    <xs:enumeration value="Disallow CVSS Score"/>
+    <xs:enumeration value="Disallow Component Blocklist"/>
+    <xs:enumeration value="Disallow Component by License Risk"/>
+  </xs:restriction>
+</xs:simpleType>
+
+</xs:schema>
