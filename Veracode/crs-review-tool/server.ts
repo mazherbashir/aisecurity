@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs/promises";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
+import { dryRunJson } from "./src/mockData.js";
 
 dotenv.config();
 
@@ -12,12 +13,59 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+  app.disable('etag');
+
+  const useMocks = process.env.NODE_ENV !== 'production' && process.env.VITE_ENVIRONMENT !== 'production';
 
   // Prompts Config Routes
   let devMemPrompts = { sast: "", sca: "" };
 
+  // Config info Route
+  app.get("/api/config/info", async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    if (useMocks) {
+      return res.json({
+        engines: ["Gemini"],
+        scanValidityDays: 90,
+        noSca: [],
+        history: ["MockProfile1", "MockShopApp", "MockAdminPortal"]
+      });
+    }
+
+    try {
+      const response = await fetch('http://127.0.0.1:8081/api/config/info');
+      if (!response.ok) {
+        throw new Error(`Service at 127.0.0.1:8081 returned ${response.status}: ${response.statusText}`);
+      }
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error('Error fetching config info:', error);
+      res.status(500).json({ error: 'Failed to fetch config info from reporting service.' });
+    }
+  });
+
+  app.get("/api/config/history", async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    if (useMocks) {
+      return res.json(["MockProfile1", "MockShopApp", "MockAdminPortal"]);
+    }
+
+    try {
+      const response = await fetch('http://127.0.0.1:8081/api/config/history');
+      if (!response.ok) {
+        throw new Error(`Service at 127.0.0.1:8081 returned ${response.status}: ${response.statusText}`);
+      }
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error('Error fetching history info:', error);
+      res.status(500).json({ error: 'Failed to fetch history info from reporting service.' });
+    }
+  });
+
   app.get("/api/config/prompts", async (req, res) => {
-    if (process.env.NODE_ENV !== 'production') {
+    if (useMocks) {
        try {
          res.json({ sastPrompt: devMemPrompts.sast, scaPrompt: devMemPrompts.sca });
        } catch (error) {
@@ -28,9 +76,9 @@ async function startServer() {
     }
 
     try {
-      const response = await fetch('http://localhost:8081/api/config/prompts');
+      const response = await fetch('http://127.0.0.1:8081/api/config/prompts');
       if (!response.ok) {
-        throw new Error(`Service at localhost:8081 returned ${response.status}: ${response.statusText}`);
+        throw new Error(`Service at 127.0.0.1:8081 returned ${response.status}: ${response.statusText}`);
       }
       const data = await response.json();
       res.json(data);
@@ -41,7 +89,7 @@ async function startServer() {
   });
 
   app.post("/api/config/prompts", async (req, res) => {
-    if (process.env.NODE_ENV !== 'production') {
+    if (useMocks) {
       try {
         const { sastPrompt, scaPrompt } = req.body;
         devMemPrompts = { sast: sastPrompt, sca: scaPrompt };
@@ -55,13 +103,13 @@ async function startServer() {
 
     try {
       const { sastPrompt, scaPrompt } = req.body;
-      const response = await fetch('http://localhost:8081/api/config/prompts', {
+      const response = await fetch('http://127.0.0.1:8081/api/config/prompts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sastPrompt, scaPrompt })
       });
       if (!response.ok) {
-        throw new Error(`Service at localhost:8081 returned ${response.status}: ${response.statusText}`);
+        throw new Error(`Service at 127.0.0.1:8081 returned ${response.status}: ${response.statusText}`);
       }
       const data = await response.json();
       res.json(data);
@@ -151,13 +199,17 @@ async function startServer() {
   });
 
   app.get("/api/getfinalreport", async (req, res) => {
+    if (useMocks) {
+      return res.json(dryRunJson);
+    }
+    
     const appProfile = req.query['application-name'] as string;
     if (!appProfile) {
       return res.status(400).json({ error: "application-name is required" });
     }
 
     try {
-      const response = await fetch(`http://localhost:8081/getfinalreport?application-name=${encodeURIComponent(appProfile)}`);
+      const response = await fetch(`http://127.0.0.1:8081/getfinalreport?application-name=${encodeURIComponent(appProfile)}`);
       
       if (!response.ok) {
         let errorData;
@@ -167,7 +219,7 @@ async function startServer() {
           errorData = { 
             status: "error",
             type: "SYSTEM_ERROR",
-            error: `Endpoint at localhost:8081 returned ${response.status}: ${response.statusText}` 
+            error: `Endpoint at 127.0.0.1:8081 returned ${response.status}: ${response.statusText}` 
           };
         }
         return res.status(response.status).json(errorData);
@@ -181,6 +233,51 @@ async function startServer() {
         status: "error",
         type: "SYSTEM_ERROR",
         message: 'Failed to fetch final report from reporting service.' 
+      });
+    }
+  });
+
+  app.post("/api/veracode/mitigation", async (req, res) => {
+    if (useMocks) {
+      return res.json({ message: "Mock mitigation successful." });
+    }
+
+    try {
+      const response = await fetch(`http://127.0.0.1:8081/api/veracode/mitigation`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(req.body)
+      });
+      
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          errorData = { 
+            status: "error",
+            type: "SYSTEM_ERROR",
+            error: `Endpoint at 127.0.0.1:8081 returned ${response.status}: ${response.statusText}` 
+          };
+        }
+        return res.status(response.status).json(errorData);
+      }
+      
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        data = { success: true };
+      }
+      res.json(data);
+    } catch (error) {
+      console.error('Error in /api/veracode/mitigation:', error);
+      res.status(500).json({ 
+        status: "error",
+        type: "SYSTEM_ERROR",
+        message: 'Failed to apply mitigation via reporting service.' 
       });
     }
   });

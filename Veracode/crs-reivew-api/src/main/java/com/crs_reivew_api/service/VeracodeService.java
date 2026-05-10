@@ -278,12 +278,31 @@ public class VeracodeService {
     public VeracodeReportDTO getFinalReport(String applicationName, String appId, String buildId, boolean includeBuildInfo) {
         if (applicationName != null) applicationName = applicationName.trim();
         
+        // Load from history if filename is provided
+        if (applicationName != null && applicationName.toLowerCase().endsWith(".json")) {
+            debugLog("DEBUG: Loading report from history file: " + applicationName);
+            return loadHistoryFile(applicationName);
+        }
+        
         String effectiveAppId = (appId != null && !appId.isEmpty()) ? appId : getAppId(applicationName);
         String effectiveBuildId = (buildId != null && !buildId.isEmpty()) ? buildId : getLatestBuildId(effectiveAppId);
         
         VeracodeReport report = getDetailedReportObject(effectiveBuildId);
         
         VeracodeReportDTO dto = new VeracodeReportDTO();
+        
+        // Initialize Mitigation Breakdowns
+        dto.mitigationBreakdownSAST.put("Total", 0);
+        dto.mitigationBreakdownSAST.put("High", 0);
+        dto.mitigationBreakdownSAST.put("Medium", 0);
+        dto.mitigationBreakdownSAST.put("Low", 0);
+        dto.mitigationBreakdownSAST.put("Information", 0);
+
+        dto.mitigationBreakdownSCA.put("Total", 0);
+        dto.mitigationBreakdownSCA.put("Very High", 0);
+        dto.mitigationBreakdownSCA.put("High", 0);
+        dto.mitigationBreakdownSCA.put("Medium", 0);
+        dto.mitigationBreakdownSCA.put("Low", 0);
         
         // Map Overview
         dto.overview.applicationName = report.getAppName();
@@ -482,6 +501,23 @@ public class VeracodeService {
         }
     }
 
+    private VeracodeReportDTO loadHistoryFile(String fileName) {
+        try {
+            java.nio.file.Path historyDir = java.nio.file.Paths.get("veracode", "history");
+            java.nio.file.Path targetFile = historyDir.resolve(fileName);
+            
+            if (!java.nio.file.Files.exists(targetFile)) {
+                throw new RuntimeException("History file not found: " + targetFile);
+            }
+            
+            String json = java.nio.file.Files.readString(targetFile);
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.readValue(json, VeracodeReportDTO.class);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load history file " + fileName + ": " + e.getMessage(), e);
+        }
+    }
+
     private int getNextRunningNumber(java.nio.file.Path dir, String sanitizedAppName) {
         try {
             if (!java.nio.file.Files.exists(dir)) return 1;
@@ -588,12 +624,24 @@ public class VeracodeService {
                                 var archAttr = attrs.getNamedItem("architecture");
                                 var fileNameAttr = attrs.getNamedItem("file_name");
                                 
+                                String moduleName = (nameAttr != null) ? nameAttr.getNodeValue() : "";
+                                String fileName = (fileNameAttr != null) ? fileNameAttr.getNodeValue() : "";
+                                
+                                boolean isIgnored = veracodeConfig.getIgnoreModules().stream()
+                                    .anyMatch(ignore -> (!moduleName.isEmpty() && moduleName.toLowerCase().contains(ignore.toLowerCase())) ||
+                                                        (!fileName.isEmpty() && fileName.toLowerCase().contains(ignore.toLowerCase())));
+                                
+                                if (isIgnored) {
+                                    debugLog("DEBUG: Skipping architecture/selection for ignored module: " + (moduleName.isEmpty() ? fileName : moduleName));
+                                    continue;
+                                }
+
                                 if (nameAttr != null) {
-                                    dto.selectedModules.add(nameAttr.getNodeValue());
+                                    dto.selectedModules.add(moduleName);
                                 }
                                 // If fileName is present in detailed report, add it too to ensure matches
                                 if (fileNameAttr != null) {
-                                    dto.selectedModules.add(fileNameAttr.getNodeValue());
+                                    dto.selectedModules.add(fileName);
                                 }
                                 if (archAttr != null) {
                                     archSet.add(mapToPrettyName(archAttr.getNodeValue()));
@@ -621,95 +669,71 @@ public class VeracodeService {
 
     private void generateDetailedBreakdown(String xml, VeracodeReport report, VeracodeReportDTO dto) {
         try {
-            var factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
-            factory.setNamespaceAware(true);
-            var builder = factory.newDocumentBuilder();
-            var doc = builder.parse(new java.io.ByteArrayInputStream(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-
-            // Build issueId -> mitigation descriptions map from JAXB model
-            var mitigationsByIssueId = new java.util.HashMap<String, List<String>>();
-            if (report != null && report.getSeverities() != null) {
-                for (var severity : report.getSeverities()) {
-                    if (severity.getCategories() == null) continue;
-                    for (var category : severity.getCategories()) {
-                        if (category.getCwes() == null) continue;
-                        for (var cwe : category.getCwes()) {
-                            if (cwe.getStaticFlaws() == null || cwe.getStaticFlaws().getFlaws() == null) continue;
-                            for (var modelFlaw : cwe.getStaticFlaws().getFlaws()) {
-                                if (modelFlaw.getIssueId() == null) continue;
-                                var descs = new java.util.ArrayList<String>();
-                                if (modelFlaw.getMitigationList() != null && modelFlaw.getMitigationList().getMitigations() != null) {
-                                    for (var m : modelFlaw.getMitigationList().getMitigations()) {
-                                        if (m.getDescription() != null && !m.getDescription().isEmpty()) {
-                                            descs.add(m.getDescription());
-                                        }
-                                    }
-                                }
-                                mitigationsByIssueId.put(String.valueOf(modelFlaw.getIssueId()), descs);
-                            }
-                        }
-                    }
-                }
-            }
+            if (report == null || report.getSeverities() == null) return;
 
             // Map to hold counts: Severity -> CWE -> List of Flaws
-            var severityMap = new java.util.TreeMap<Integer, java.util.Map<String, java.util.List<org.w3c.dom.Element>>>(java.util.Collections.reverseOrder());
-
-            var flaws = doc.getElementsByTagNameNS("*", "flaw");
+            var severityMap = new java.util.TreeMap<Integer, java.util.Map<String, java.util.List<Flaw>>>(java.util.Collections.reverseOrder());
             int totalSast = 0;
             List<VeracodeReportDTO.FindingDTO> findings = new java.util.ArrayList<>();
 
-            for (int i = 0; i < flaws.getLength(); i++) {
-                var flaw = (org.w3c.dom.Element) flaws.item(i);
-                String issueId = flaw.getAttribute("issueid");
-                String mitigationStatus = flaw.getAttribute("mitigation_status");
-                String remediationStatus = flaw.getAttribute("remediation_status");
+            for (Severity severity : report.getSeverities()) {
+                int sev = severity.getLevel();
+                if (severity.getCategories() == null) continue;
 
-                if (mitigationStatus != null) mitigationStatus = mitigationStatus.trim();
-                
-                // Logic: Exclude "accepted" or "Fixed" from breakdown and total
-                if ("accepted".equalsIgnoreCase(mitigationStatus) || "Fixed".equalsIgnoreCase(remediationStatus)) {
-                    continue;
-                }
+                for (Category category : severity.getCategories()) {
+                    if (category.getCwes() == null) continue;
 
-                int sev = Integer.parseInt(flaw.getAttribute("severity"));
-                String cweId = flaw.getAttribute("cweid");
-                String cwe = "CWE-" + cweId;
+                    for (Cwe cweObj : category.getCwes()) {
+                        if (cweObj.getStaticFlaws() == null || cweObj.getStaticFlaws().getFlaws() == null) continue;
 
-                severityMap.putIfAbsent(sev, new java.util.TreeMap<>());
-                severityMap.get(sev).putIfAbsent(cwe, new java.util.ArrayList<>());
-                severityMap.get(sev).get(cwe).add(flaw);
-                totalSast++;
+                        for (Flaw flaw : cweObj.getStaticFlaws().getFlaws()) {
+                            String mitigationStatus = flaw.getMitigationStatus();
+                            String remediationStatus = flaw.getRemediationStatus();
 
-                // Logic for findingsWithComments: Report ONLY mitigation_status="proposed" with actual comments
-                if ("proposed".equalsIgnoreCase(mitigationStatus)) {
-                    // Extract comments using DOM for consistency
-                    var mitNodes = flaw.getElementsByTagNameNS("*", "mitigation");
-                    if (mitNodes.getLength() == 0) continue;
+                            if (mitigationStatus != null) mitigationStatus = mitigationStatus.trim();
+                            
+                            // Logic: Exclude "accepted" or "Fixed" from breakdown and total
+                            if ("accepted".equalsIgnoreCase(mitigationStatus) || "Fixed".equalsIgnoreCase(remediationStatus)) {
+                                continue;
+                            }
 
-                    var comments = new java.util.ArrayList<String>();
-                    for (int k = 0; k < mitNodes.getLength(); k++) {
-                        var mitElem = (org.w3c.dom.Element) mitNodes.item(k);
-                        String comment = mitElem.getAttribute("description");
-                        if (comment == null || comment.isEmpty()) {
-                            comment = mitElem.getAttribute("comment");
+                            String cweId = String.valueOf(cweObj.getCweId());
+                            String cwe = "CWE-" + cweId;
+
+                            severityMap.putIfAbsent(sev, new java.util.TreeMap<>());
+                            severityMap.get(sev).putIfAbsent(cwe, new java.util.ArrayList<>());
+                            severityMap.get(sev).get(cwe).add(flaw);
+                            totalSast++;
+
+                            // Logic for findingsWithComments: Report ONLY mitigation_status="proposed" with actual comments
+                            if ("proposed".equalsIgnoreCase(mitigationStatus)) {
+                                List<String> comments = new ArrayList<>();
+                                if (flaw.getMitigationList() != null && flaw.getMitigationList().getMitigations() != null) {
+                                    for (ScaMitigation mit : flaw.getMitigationList().getMitigations()) {
+                                        String comment = mit.getDescription();
+                                        if (comment == null || comment.isEmpty()) {
+                                            comment = mit.getComment();
+                                        }
+                                        if (comment != null && !comment.isEmpty()) {
+                                            comments.add(comment);
+                                        }
+                                    }
+                                }
+
+                                if (!comments.isEmpty()) {
+                                    var fDto = new VeracodeReportDTO.FindingDTO();
+                                    fDto.type = "SAST";
+                                    fDto.id = String.valueOf(flaw.getIssueId());
+                                    fDto.cweid = cweId;
+                                    fDto.title = flaw.getCategoryName();
+                                    fDto.severity = getSeverityName(sev);
+                                    fDto.location = flaw.getSourceFile() + ":" + flaw.getLine();
+                                    fDto.userComments = comments;
+                                    fDto.remediation_due_date = calculateDueDate(flaw.getDateFirstOccurrence(), dto.overview.tier, fDto.severity);
+                                    findings.add(fDto);
+                                }
+                            }
                         }
-                        if (comment != null && !comment.isEmpty()) {
-                            comments.add(comment);
-                        }
-                    }
-
-                    if (!comments.isEmpty()) {
-                        var fDto = new VeracodeReportDTO.FindingDTO();
-                        fDto.type = "SAST";
-                        fDto.id = issueId;
-                        fDto.cweid = cweId;
-                        fDto.title = flaw.getAttribute("categoryname");
-                        fDto.severity = getSeverityName(sev);
-                        fDto.location = flaw.getAttribute("sourcefile") + ":" + flaw.getAttribute("line");
-                        fDto.userComments = comments;
-                        fDto.remediation_due_date = calculateDueDate(flaw.getAttribute("date_first_occurrence"), dto.overview.tier, fDto.severity);
-                        findings.add(fDto);
                     }
                 }
             }
@@ -726,7 +750,8 @@ public class VeracodeService {
                 cweMap.forEach((cwe, list) -> {
                     // Find oldest date
                     String oldestDate = list.stream()
-                        .map(e -> e.getAttribute("date_first_occurrence"))
+                        .map(Flaw::getDateFirstOccurrence)
+                        .filter(d -> d != null && !d.isEmpty())
                         .min(String::compareTo)
                         .orElse("");
                     
@@ -740,9 +765,12 @@ public class VeracodeService {
                 dto.sastSummary.breakdown.put(sevName, sevBreakdown);
             });
             
-            // Map SCA separately as it has its own section in Detailed Report
+            // Map SCA separately
             updateScaSummaryFromReport(report, dto);
             populateScaDetailSectionFromReport(report, dto);
+            
+            // Finalize Mitigation Breakdowns by looping over the populated lists
+            populateMitigationBreakdowns(dto);
             
         } catch (Exception e) {
             System.err.println("Error generating detailed breakdown: " + e.getMessage());
@@ -1001,6 +1029,30 @@ public class VeracodeService {
             breakdown.put(getSeverityName(sev), b);
         }
         return breakdown;
+    }
+
+    private void populateMitigationBreakdowns(VeracodeReportDTO dto) {
+        // SAST Breakdown
+        for (VeracodeReportDTO.FindingDTO f : dto.findingsWithCommentsSAST) {
+            dto.mitigationBreakdownSAST.put("Total", dto.mitigationBreakdownSAST.get("Total") + 1);
+            String sev = f.severity;
+            String key = switch (sev) {
+                case "Very High", "High" -> "High";
+                case "Medium" -> "Medium";
+                case "Low", "Very Low" -> "Low";
+                default -> "Information";
+            };
+            dto.mitigationBreakdownSAST.put(key, dto.mitigationBreakdownSAST.get(key) + 1);
+        }
+
+        // SCA Breakdown
+        for (VeracodeReportDTO.FindingDTO f : dto.findingsWithCommentsSCA) {
+            dto.mitigationBreakdownSCA.put("Total", dto.mitigationBreakdownSCA.get("Total") + 1);
+            String sev = f.severity;
+            if (dto.mitigationBreakdownSCA.containsKey(sev)) {
+                dto.mitigationBreakdownSCA.put(sev, dto.mitigationBreakdownSCA.get(sev) + 1);
+            }
+        }
     }
 
     private String calculateTier(String policyName) {

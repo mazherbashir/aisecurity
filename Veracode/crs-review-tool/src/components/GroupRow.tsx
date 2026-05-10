@@ -31,11 +31,13 @@ export const GroupRow: React.FC<GroupRowProps> = ({
   onViewFull
 }) => {
   const [isPulling, setIsPulling] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   const handlePullAI = async () => {
     setIsPulling(true);
     await onPullAI();
     setIsPulling(false);
+    setIsEditing(true);
   };
 
   return (
@@ -103,7 +105,7 @@ export const GroupRow: React.FC<GroupRowProps> = ({
             )}
           </div>
 
-          {group.aiComment ? (
+          {group.aiComment || isEditing ? (
             <div className="relative group/ai">
               <textarea
                 value={group.aiComment}
@@ -111,7 +113,7 @@ export const GroupRow: React.FC<GroupRowProps> = ({
                 onDoubleClick={onViewFull}
                 title="Double click to view full screen"
                 className="w-full p-3 text-[11px] bg-blue-500/5 border border-blue-500/20 rounded-xl text-blue-100 focus:border-blue-500/50 outline-none transition-all min-h-[80px] resize-none leading-relaxed cursor-pointer"
-                placeholder="AI assessment pending..."
+                placeholder="Enter your mitigation proposal or pull AI analysis..."
               />
               <div className="absolute right-3 top-3 opacity-30 group-hover/ai:opacity-100 transition-opacity">
                  <Sparkles className="text-blue-400" size={14} />
@@ -134,14 +136,22 @@ export const GroupRow: React.FC<GroupRowProps> = ({
               </div>
             </div>
           ) : (
-            <button
-              onClick={handlePullAI}
-              disabled={isPulling}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50"
-            >
-              {isPulling ? <RefreshCcw size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              Pull AI Recommendation
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handlePullAI}
+                disabled={isPulling}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50"
+              >
+                {isPulling ? <RefreshCcw size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                Pull AI Recommendation
+              </button>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 border border-slate-700 text-slate-400 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-700 hover:text-white transition-all"
+              >
+                Mitigation Proposal
+              </button>
+            </div>
           )}
         </div>
       </td>
@@ -156,9 +166,9 @@ export const GroupRow: React.FC<GroupRowProps> = ({
             {group.status}
           </div>
         ) : (
-           <div className="text-[10px] text-slate-600 font-bold uppercase tracking-widest px-3 py-1.5 border border-slate-800 rounded-lg">
-             Pending
-           </div>
+            <div className="text-[10px] text-slate-600 font-bold uppercase tracking-widest px-3 py-1.5 border border-slate-800 rounded-lg">
+              Proposed
+            </div>
         )}
       </td>
     </tr>

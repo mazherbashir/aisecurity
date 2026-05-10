@@ -29,6 +29,7 @@ public class ConfigController {
         info.put("history", configService.getLatestHistoryFiles());
         info.put("engines", configService.getAiEngines());
         info.put("scanValidityDays", configService.getScanValidityDays());
+        info.put("noSca", configService.getNoSca());
         return info;
     }
 

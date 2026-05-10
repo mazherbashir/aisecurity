@@ -11,6 +11,13 @@ public class VeracodeReportDTO {
     public List<ScaDetailDTO> scaDetails = new ArrayList<>();
     public List<FindingDTO> findingsWithCommentsSAST = new ArrayList<>();
     public List<FindingDTO> findingsWithCommentsSCA = new ArrayList<>();
+
+    @com.fasterxml.jackson.annotation.JsonProperty("sastMitigationProposal")
+    public java.util.Map<String, Integer> mitigationBreakdownSAST = new java.util.LinkedHashMap<>();
+    
+    @com.fasterxml.jackson.annotation.JsonProperty("scaMitigationProposal")
+    public java.util.Map<String, Integer> mitigationBreakdownSCA = new java.util.LinkedHashMap<>();
+
     public List<String> unselectedModules = new ArrayList<>();
     public List<String> selectedModules = new ArrayList<>();
     public List<String> architectures = new ArrayList<>();

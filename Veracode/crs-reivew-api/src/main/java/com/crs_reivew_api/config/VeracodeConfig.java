@@ -6,10 +6,19 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Properties;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Configuration
 @ConfigurationProperties(prefix = "veracode.api")
 public class VeracodeConfig {
+    private static final Logger logger = LoggerFactory.getLogger(VeracodeConfig.class);
+
 
     private String url;
     private boolean debug;
@@ -31,7 +40,47 @@ public class VeracodeConfig {
     private String sastPrompt;
     private String scaPrompt;
     private int scanValidityDays = 90;
+    private List<String> noSca = new ArrayList<>();
     private Key key = new Key();
+
+    @PostConstruct
+    public void loadExternalConfig() {
+        String userHome = System.getProperty("user.home");
+        File credentialsFile = new File(userHome, ".crs-tool/credentials");
+        if (credentialsFile.exists()) {
+            logger.info("Loading external credentials from {}", credentialsFile.getAbsolutePath());
+            Properties props = new Properties();
+            try (FileInputStream fis = new FileInputStream(credentialsFile)) {
+                props.load(fis);
+                this.geminiKey = getProp(props, "geminiKey", this.geminiKey);
+                this.geminiModel = getProp(props, "geminiModel", this.geminiModel);
+                this.azureKey = getProp(props, "azureKey", this.azureKey);
+                this.azureEndpoint = getProp(props, "azureEndpoint", this.azureEndpoint);
+                this.azureDeployment = getProp(props, "azureDeployment", this.azureDeployment);
+                logger.info("Successfully loaded AI configuration from {}", credentialsFile.getAbsolutePath());
+            } catch (IOException e) {
+                logger.error("Failed to load credentials file: {}", e.getMessage());
+            }
+        } else {
+            logger.warn("Credentials file not found at {}. AI keys will be read from environment or application.properties if available.", credentialsFile.getAbsolutePath());
+        }
+    }
+
+    private String getProp(Properties props, String key, String defaultValue) {
+        String val = props.getProperty("crs.api." + key);
+        if (val == null) {
+            val = props.getProperty("veracode.api." + key);
+        }
+        return val != null ? val : defaultValue;
+    }
+
+    public List<String> getNoSca() {
+        return noSca;
+    }
+
+    public void setNoSca(List<String> noSca) {
+        this.noSca = noSca;
+    }
 
     public int getHistoryLimit() {
         return historyLimit;

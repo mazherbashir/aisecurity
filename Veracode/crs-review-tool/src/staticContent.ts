@@ -110,4 +110,15 @@ If the scan contains all the application components and their modules are not al
 For more information on scan quality and module selection, please see the <a target="_blank" href="https://pwceur.sharepoint.com/:w:/r/sites/GBL-IFS-NIS-Application-Security/AppReadiness/CRS%20Documents/Client-Facing%20Documentation/CRS%20Process%20Overview.docx?d=w60b17b59a86342efa122e0767f68490f&nav=eyJoIjoiMjA5MzI3MDY0NCJ9">Ensuring Scan Quality</a> section of the <a class="crs-rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/:w:/r/sites/GBL-IFS-NIS-Application-Security/AppReadiness/CRS%20Documents/Client-Facing%20Documentation/CRS%20Process%20Overview.docx?d=w60b17b59a86342efa122e0767f68490f">CRS Process Overview</a> document.
 `;
   }
+
+  public static scanTooOldMsg(overview: any) {
+    const scanLink = `https://analysiscenter.veracode.com/auth/index.jsp#StaticOverview:${overview.accountId}:${overview.appId}:${overview.buildId}:${overview.analysisId}:${overview.staticAnalysisUnitId || ''}::::${overview.sandboxId || ''}`;
+    return `
+<h3 class="heading bg-red">Scan Too Old</h3></br>
+The latest policy scan <code><a target="_blank" href="${scanLink}">${overview.scanName}</a></code> from ${overview.generationDate || '[Date]'} cannot be considered valid for sign-off as it is too old and may contain vulnerabilities that have been identified since the scan has been performed.<br/>
+<br/>
+Code Review Services will only take action on full application policy scans in Veracode. If a new full scan of all of the modules in the application has been completed in the sandbox, the <a target="_blank" href="https://docs.veracode.com/r/t_promote_sandbox">sandbox scan can be promoted to a policy scan</a> without the need to run a new scan.<br/>
+<br/>
+Additionally, CRS does not require periodic sign-off unless material production changes (see page 9 of the <a target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/PwC%20ISP%20Terms%20and%20Definitions.pdf">PwC Information Security Policy Terms and Definitions</a>) are made. However, during the development process it is required that scans are run during all development activities to identify current risks that require remediation.`;
+  }
 }

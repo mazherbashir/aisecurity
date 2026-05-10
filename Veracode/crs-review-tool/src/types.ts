@@ -43,4 +43,4 @@ export interface AggregatedGroup {
 
 export type ToolName = 'Veracode' | 'Checkmarx';
 
-export type AIProvider = 'gemini' | 'azure';
+export type AIProvider = string;

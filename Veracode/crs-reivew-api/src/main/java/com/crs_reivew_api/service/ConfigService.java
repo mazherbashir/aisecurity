@@ -25,6 +25,10 @@ public class ConfigService {
         return veracodeConfig.getScanValidityDays();
     }
 
+    public java.util.List<String> getNoSca() {
+        return veracodeConfig.getNoSca();
+    }
+
     public java.util.List<String> getLatestHistoryFiles() {
         int limit = veracodeConfig.getHistoryLimit();
         if (limit <= 0) limit = 10;
@@ -36,7 +40,7 @@ public class ConfigService {
             
             try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(historyDir)) {
                 return stream
-                    .filter(java.nio.file.Files::isRegularFile)
+                    .filter(p -> java.nio.file.Files.isRegularFile(p) && !p.getFileName().toString().equalsIgnoreCase("applications.json"))
                     .sorted((p1, p2) -> {
                         try {
                             return java.nio.file.Files.getLastModifiedTime(p2)
