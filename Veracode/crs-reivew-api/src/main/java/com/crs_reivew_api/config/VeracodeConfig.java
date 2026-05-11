@@ -41,6 +41,7 @@ public class VeracodeConfig {
     private String scaPrompt;
     private int scanValidityDays = 90;
     private List<String> noSca = new ArrayList<>();
+    private String mitigationProposalEnabled = "true";
     private Key key = new Key();
 
     @PostConstruct
@@ -216,6 +217,14 @@ public class VeracodeConfig {
 
     public void setKey(Key key) {
         this.key = key;
+    }
+
+    public String getMitigationProposalEnabled() {
+        return mitigationProposalEnabled;
+    }
+
+    public void setMitigationProposalEnabled(String mitigationProposalEnabled) {
+        this.mitigationProposalEnabled = mitigationProposalEnabled;
     }
 
     public List<String> getIgnoreModules() {

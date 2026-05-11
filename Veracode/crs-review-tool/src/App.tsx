@@ -748,6 +748,7 @@ export default function App() {
   const [scaDetails, setScaDetails] = useState<any[]>([]);
   const [backendError, setBackendError] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [suggestedApps, setSuggestedApps] = useState<string[]>([]);
   const [lastRawResponse, setLastRawResponse] = useState<any>(null);
   const [debugPastedJson, setDebugPastedJson] = useState("");
@@ -1367,9 +1368,9 @@ export default function App() {
     setIsSubmitting(false);
     setSelectedGroups(new Set());
     if (successCount === selectedItems.length) {
-      alert(`Successfully ${actionType} ${successCount}/${selectedItems.length} groups.`);
+      setSuccessMessage(`Successfully ${actionType} ${successCount}/${selectedItems.length} groups.`);
     } else if (successCount > 0) {
-      alert(`Successfully ${actionType} ${successCount}/${selectedItems.length} groups. Some failed: ${lastErrorMsg}`);
+      setSuccessMessage(`Successfully ${actionType} ${successCount}/${selectedItems.length} groups. Some failed: ${lastErrorMsg}`);
     } else {
       let parsedErr: any = {};
       try {
@@ -2475,6 +2476,46 @@ export default function App() {
             </motion.div>
           </div>
         )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {successMessage && (
+            <div className="fixed inset-0 z-[160] flex items-center justify-center p-6 bg-transparent pointer-events-none">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSuccessMessage(null)}
+                className="absolute inset-0 bg-black/60 pointer-events-auto"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="w-full max-w-xl bg-[#0a0c10] border border-emerald-500/30 rounded-2xl flex flex-col shadow-2xl overflow-hidden p-8 relative z-10 pointer-events-auto"
+              >
+                <div className="text-center space-y-6">
+                  <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto border border-emerald-500/30">
+                    <CheckCircle2 className="text-emerald-500" size={32} />
+                  </div>
+                  <div className="space-y-4">
+                    <h2 className="text-xl font-black tracking-tight text-white uppercase leading-tight">
+                      Success
+                    </h2>
+                    <p className="text-sm font-medium text-slate-300">
+                      {successMessage}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSuccessMessage(null)}
+                    className="px-8 py-3 bg-white hover:bg-slate-200 text-black font-black rounded-xl transition-all active:scale-95 shadow-xl shadow-white/10 text-xs tracking-widest uppercase w-full max-w-[200px] mx-auto block"
+                  >
+                    Okay
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
         </AnimatePresence>
 
         <AnimatePresence>

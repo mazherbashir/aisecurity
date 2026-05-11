@@ -207,17 +207,20 @@ public class VeracodeService {
     }
 
     public String updateMitigation(String buildId, String flawIdList, String action, String comment) {
+        String mode = veracodeConfig.getMitigationProposalEnabled();
+        
+        if ("false".equalsIgnoreCase(mode)) {
+            throw new RuntimeException("Mitigation Configuration is disabled. Please enabled it if you want to send the equest to Veracode");
+        }
+
+        if ("debug".equalsIgnoreCase(mode)) {
+            debugLog("DEBUG: Mitigation Proposal Bypass (Debug Mode). Build: " + buildId + ", Action: " + action);
+            return "Success (Debug Mode - Request Bypassed)";
+        }
+
         try {
             MitigationAPIWrapper mitigationWrapper = new MitigationAPIWrapper();
             setupCredentials(mitigationWrapper);
-            
-            // Veracode Mitigation Actions: 
-            // "fp" -> False Positive
-            // "design" -> Mitigate by Design
-            // "env" -> Mitigate by Network Environment
-            // "comment" -> Add Comment
-            // "accept" -> Approve
-            // "reject" -> Reject
             
             String xml = mitigationWrapper.updateMitigationInfo(buildId, flawIdList, action, comment);
             debugLog("DEBUG: Mitigation Update Response: " + xml);
