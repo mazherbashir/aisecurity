@@ -33,6 +33,7 @@ export interface AggregatedGroup {
   groupId: string;
   type: 'SAST' | 'SCA';
   cweId: string | number;
+  identifier?: string;
   comments: string;
   description: string;
   records: Finding[];

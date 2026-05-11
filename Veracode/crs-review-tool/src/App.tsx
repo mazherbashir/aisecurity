@@ -152,14 +152,23 @@ function aggregateFindings(
     const location = finding.location || "Unknown Location";
     const description = `${title} | ${severity} | ${location}`;
 
+    // For SCA rely on title or id for identifier 
+    let identifier: string | undefined = undefined;
+    if (type === "SCA") {
+      identifier = finding.id && finding.id !== "N/A" && finding.id !== "0" && !finding.id.startsWith("sca-")
+        ? finding.id
+        : (finding.title !== "Unknown Product" && finding.title !== "Unknown Finding" ? finding.title : `CWE-${cweId}`);
+    }
+
     // Create a stable group ID
-    const groupId = `${type}-${cweId}-${comments}`.substring(0, 500);
+    const groupId = `${type}-${identifier || cweId}-${comments}`.substring(0, 500);
 
     if (!groups[groupId]) {
       groups[groupId] = {
         groupId,
         type,
         cweId,
+        identifier,
         comments,
         description,
         records: [],
@@ -229,6 +238,7 @@ function ReviewTabContent({
   sastSummary,
   configNoSca = [],
   configScanValidityDays = 90,
+  aggregatedData,
 }: {
   overview: any;
   backendSastSummary: any;
@@ -237,6 +247,7 @@ function ReviewTabContent({
   sastSummary: any;
   configNoSca?: string[];
   configScanValidityDays?: number;
+  aggregatedData: { sast: AggregatedGroup[]; sca: AggregatedGroup[] };
 }) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -281,16 +292,56 @@ function ReviewTabContent({
       Object.entries(backendSastSummary.breakdown).forEach(
         ([severity, data]: [string, any]) => {
           data.findings?.forEach((finding: any) => {
-            const cweId = finding.cwe.match(/\d+/);
+            const cweIdMatch = finding.cwe.match(/\d+/);
+            const extractedCwe = cweIdMatch ? cweIdMatch[0] : "";
             const remediationDate =
               (finding.remediation_due_date || "").split(" ")[0] || "N/A";
-            rows += `<tr>
-                <td><span class="crs-rounded minwidth ${severity.toLowerCase()}">${severity}</span></td>
-                <td><a target="_blank" href="https://cwe.mitre.org/data/definitions/${cweId ? cweId[0] : ""}.html">${finding.cwe}</a></td>
-                <td><span class="crs-rounded sev bg-gold">None</span></td>
-                <td>${finding.count}</td>
+              
+            let approvedCount = 0;
+            let rejectedCount = 0;
+            const originalCount = parseInt(finding.count, 10) || 0;
+            
+            if (aggregatedData?.sast) {
+              for (const g of aggregatedData.sast) {
+                // Normalize severity strings to match what comes from backend
+                let gSev = g.severity;
+                if (gSev === "VeryHigh") gSev = "Very High";
+                if (gSev === "Information") gSev = "Info";
+                
+                let bSev = severity;
+                if (bSev === "VeryHigh") bSev = "Very High";
+                if (bSev === "Information") bSev = "Info";
+                
+                if (String(g.cweId) === String(extractedCwe) && gSev === bSev) {
+                  if (g.status === "approved") {
+                    approvedCount += g.records.length;
+                  }
+                  if (g.status === "rejected") {
+                    rejectedCount += g.records.length;
+                  }
+                }
+              }
+            }
+            
+            const noneCount = Math.max(0, originalCount - approvedCount - rejectedCount);
+            const severityClass = severity.toLowerCase().replace(" ", "");
+
+            const buildRow = (count: number, label: string, bgClass: string) => {
+              if (count <= 0) return "";
+              return `<tr>
+                <td><span class="crs-rounded minwidth ${severityClass}">${severity}</span></td>
+                <td><a target="_blank" href="https://cwe.mitre.org/data/definitions/${extractedCwe}.html">${finding.cwe}</a></td>
+                <td><span class="crs-rounded sev ${bgClass}">${label}</span></td>
+                <td>${count}</td>
                 <td>${remediationDate}</td>
             </tr>`;
+            };
+
+            const noneHtml = buildRow(noneCount, "None", "bg-gold");
+            const approvedHtml = buildRow(approvedCount, "Approved", "bg-green");
+            const rejectedHtml = buildRow(rejectedCount, "Rejected", "bg-red");
+            
+            rows += noneHtml + approvedHtml + rejectedHtml;
           });
         },
       );
@@ -457,36 +508,100 @@ Code Review Services recommends upgrading the third-party component with a vulne
             Low: 4,
           };
 
-          parsedSeverities.sort(
-            (a, b) =>
-              (severityOrder[a.sev] || 99) - (severityOrder[b.sev] || 99),
-          );
+          let totalCounts: Record<string, number> = { "Very High": 0, "High": 0, "Medium": 0, "Low": 0 };
+          parsedSeverities.forEach((p) => {
+            let s = p.sev.trim();
+            if (s === "VeryHigh") s = "Very High";
+            if (s === "Info" || s === "Information") s = "Low";
+            if (s !== "Very High" && s !== "High" && s !== "Medium" && s !== "Low") return;
+            totalCounts[s] = (totalCounts[s] || 0) + (parseInt(p.count, 10) || 0);
+          });
 
-          const severityHtml = parsedSeverities
-            .map((p) => {
-              if (!p.sev) return "";
-              const sevClass = p.sev.toLowerCase().replace(" ", "");
-              return `<span class="crs-rounded minwidth ${sevClass}">${p.sev}</span>: ${p.count}`;
-            })
-            .join("<br/>");
+          let approvedCves: string[] = [];
+          let rejectedCves: string[] = [];
+          let noneCves: string[] = [];
 
-          const cveLinks = (detail.cveList || "")
-            .split(",")
-            .map(
-              (cve: string) =>
-                `<a target="_blank" href="http://web.nvd.nist.gov/view/vuln/detail?vulnId=${cve.trim()}">${cve.trim()}</a>`,
-            )
-            .join("</div><div>");
+          let approvedCounts: Record<string, number> = { "Very High": 0, "High": 0, "Medium": 0, "Low": 0 };
+          let rejectedCounts: Record<string, number> = { "Very High": 0, "High": 0, "Medium": 0, "Low": 0 };
+          let noneCounts: Record<string, number> = { ...totalCounts };
 
-          return `
+          const cvesInPackage = (detail.cveList || "").split(",").map((c: string) => c.trim()).filter(Boolean);
+
+          cvesInPackage.forEach((cve: string) => {
+            let status = "none";
+            let severity = "Medium";
+
+            if (aggregatedData?.sca) {
+              for (const g of aggregatedData.sca) {
+                if (g.identifier === cve) {
+                  const locMatch = g.records.some((r) => r.location === detail.packageName);
+                  if (locMatch || g.identifier === cve) {
+                    status = g.status || "none";
+                    let s = g.severity.trim();
+                    if (s === "VeryHigh") s = "Very High";
+                    if (s === "Info" || s === "Information") s = "Low";
+                    if (s !== "Very High" && s !== "High" && s !== "Medium" && s !== "Low") s = "Medium";
+                    severity = s;
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (status === "approved") {
+              approvedCves.push(cve);
+              approvedCounts[severity] = (approvedCounts[severity] || 0) + 1;
+            } else if (status === "rejected") {
+              rejectedCves.push(cve);
+              rejectedCounts[severity] = (rejectedCounts[severity] || 0) + 1;
+            } else {
+              noneCves.push(cve);
+            }
+          });
+
+          Object.keys(noneCounts).forEach((s) => {
+            noneCounts[s] -= (approvedCounts[s] || 0);
+            noneCounts[s] -= (rejectedCounts[s] || 0);
+            if (noneCounts[s] < 0) noneCounts[s] = 0;
+          });
+
+          const buildRow = (cves: string[], countsObj: Record<string, number>, label: string, bgClass: string) => {
+            if (cves.length === 0) return "";
+
+            const severitiesToRender = Object.entries(countsObj)
+              .filter(([sev, c]) => c > 0)
+              .sort(([sevA], [sevB]) => (severityOrder[sevA] || 99) - (severityOrder[sevB] || 99))
+              .map(([sev, c]) => {
+                const sevClass = sev.toLowerCase().replace(" ", "");
+                return `<span class="crs-rounded minwidth ${sevClass}">${sev}</span>: ${c}`;
+              });
+
+            if (severitiesToRender.length === 0) return "";
+
+            const severityHtml = severitiesToRender.join("<br/>");
+            const cveLinks = cves
+              .map(
+                (cve) =>
+                  `<a target="_blank" href="http://web.nvd.nist.gov/view/vuln/detail?vulnId=${cve}">${cve}</a>`,
+              )
+              .join("</div><div>");
+
+            return `
         <tr>
             <td>${detail.packageName}</td>
             <td>${detail.version}</td>
             <td>${severityHtml}</td>
             <td>${detail.remediation_due_date || "N/A"}</td>
             <td><div class="top_row"><div>${cveLinks}</div></div></td>
-            <td><span class="crs-rounded minwidth bg-gold">None</span></td>
+            <td><span class="crs-rounded minwidth ${bgClass}">${label}</span></td>
         </tr>`;
+          };
+
+          const noneRow = buildRow(noneCves, noneCounts, "None", "bg-gold");
+          const appRow = buildRow(approvedCves, approvedCounts, "Approved", "bg-green");
+          const rejRow = buildRow(rejectedCves, rejectedCounts, "Rejected", "bg-red");
+
+          return noneRow + appRow + rejRow;
         })
         .join("");
 
@@ -1041,7 +1156,7 @@ export default function App() {
     const secretPattern = /\b(password|pwd|secret|token|api_key|apikey|user-name|username|credential|key)\b/i;
     
     // Check if any comment contains sensitive info
-    const hasSensitiveInfo = group.comments.some(comment => secretPattern.test(comment));
+    const hasSensitiveInfo = secretPattern.test(group.comments);
 
     if (hasSensitiveInfo) {
       alert("Sensitive information detected in comments (e.g., username, password, key). Cannot send data to AI.");
@@ -1097,7 +1212,9 @@ export default function App() {
 
     const missingComments = selected.filter((g) => !g.aiComment || g.aiComment.trim() === "");
     if (missingComments.length > 0) {
-      alert(`Missing AI Recommendation or Mitigation Proposal for ${missingComments.length} selected items. Please add comments before submitting.`);
+      const missingNames = missingComments.map(g => g.type === "SCA" && g.identifier ? g.identifier : `CWE-${g.cweId}`).join("\n• ");
+      setErrorType("MITIGATION_COMMENTS_REQUIRED");
+      setBackendError(`Mitigation proposals or Review comments are missing for the following selected items:\n\n• ${missingNames}\n\nPlease add comments for all selected items before submitting approvals or rejections.`);
       return;
     }
 
@@ -1886,6 +2003,7 @@ export default function App() {
                       sastSummary={sastSummary}
                       configNoSca={configNoSca}
                       configScanValidityDays={configScanValidityDays}
+                      aggregatedData={aggregatedData}
                     />
                   ) : (
                     <>
@@ -2297,7 +2415,7 @@ export default function App() {
             >
               <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
                 <h2 className="text-sm font-black uppercase tracking-widest text-blue-400">
-                  Confirm Batch {batchModalConfig.actionType === "approved" ? "Approve" : "Reject"}
+                  Confirm {batchModalConfig.actionType === "approved" ? "Approval" : "Rejection"}
                 </h2>
               </div>
               <div className="p-6">
@@ -2305,16 +2423,35 @@ export default function App() {
                   You are about to submit mitigation proposals for the following {batchModalConfig.selectedItems.reduce((acc, item) => acc + item.records.length, 0)} records:
                 </p>
                 <div className="space-y-2 mb-6 max-h-[40vh] overflow-auto">
-                  {Object.entries(
+                  {Object.values(
                     batchModalConfig.selectedItems.reduce((acc, item) => {
-                      const key = item.cweId;
-                      acc[key] = (acc[key] || 0) + item.records.length;
+                      const displayKey = item.type === "SCA" && item.identifier ? item.identifier : `CWE-${item.cweId}`;
+                      let gSev = item.severity;
+                      if (gSev === "VeryHigh") gSev = "Very High";
+                      if (gSev === "Information") gSev = "Info";
+
+                      const key = `${displayKey}__${gSev}`;
+                      if (!acc[key]) {
+                        acc[key] = { displayKey, count: 0, severity: gSev };
+                      }
+                      acc[key].count += item.records.length;
                       return acc;
-                    }, {} as Record<string, number>)
-                  ).map(([cwe, count]) => (
-                    <div key={cwe} className="flex justify-between items-center p-3 bg-slate-900 border border-slate-800 rounded-lg">
-                      <span className="font-mono text-xs font-black text-slate-400 uppercase">CWE-{cwe}</span>
-                      <span className="text-xs font-black text-blue-400 bg-blue-500/10 px-2 py-1 rounded">{count} records</span>
+                    }, {} as Record<string, { displayKey: string; count: number; severity: string }>)
+                  ).map(({ displayKey, count, severity }) => (
+                    <div key={`${displayKey}__${severity}`} className="flex justify-between items-center p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-xs font-black text-slate-400 uppercase">{displayKey}</span>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[9px] font-black uppercase tracking-widest leading-none shrink-0 ${
+                          severity === 'Very High' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
+                          severity === 'High' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                          severity === 'Medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
+                          severity === 'Low' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                          'bg-slate-800 text-slate-500 border-slate-700'
+                        }`}>
+                          {severity}
+                        </span>
+                      </div>
+                      <span className="text-xs font-black text-blue-400 bg-blue-500/10 px-2 py-1 rounded shrink-0">{count} {count === 1 ? 'record' : 'records'}</span>
                     </div>
                   ))}
                 </div>
@@ -2402,10 +2539,10 @@ export default function App() {
                       "The specified application profile could not be found. Please select from the suggestions above or check the profile name."
                     ) : errorType === "SYSTEM_ERROR" ? (
                       "The backend service or Veracode API encountered a critical issue. Please check the error message above for details."
+                    ) : errorType === "MITIGATION_COMMENTS_REQUIRED" ? (
+                      "Please provide mitigation comments or recommendations for all selected items to proceed."
                     ) : (
-                      <>
-                        The application is running in <span className="text-red-400 font-bold uppercase">Production Mode</span>. Mock data fallbacks are disabled to prevent data leakage.
-                      </>
+                      "Please review the error details and try again."
                     )}
                   </p>
                   
