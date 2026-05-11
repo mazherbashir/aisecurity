@@ -271,8 +271,17 @@ function ReviewTabContent({
       overview.applicationName || "---",
     );
 
-    const daysSinceScan = overview.generationDate
-      ? (new Date().getTime() - new Date(overview.generationDate).getTime()) /
+    const getEffectiveScanDate = (ovw: any) => {
+      if (ovw?.scanName) {
+        const match = ovw.scanName.match(/^\d{4}-\d{2}-\d{2}/);
+        if (match) return match[0];
+      }
+      return ovw?.generationDate || null;
+    };
+    const effectiveDate = getEffectiveScanDate(overview);
+
+    const daysSinceScan = effectiveDate
+      ? (new Date().getTime() - new Date(effectiveDate).getTime()) /
         (1000 * 3600 * 24)
       : 0;
     const isActuallyTooOld = daysSinceScan > configScanValidityDays;
@@ -960,12 +969,27 @@ export default function App() {
 
         const packagingAnomalies = getSafeArray("packagingAnomalies");
         const unselectedModules = getSafeArray("unselectedModules");
+        
+        // Merge configNoSca into scaEcosystems
+        let currentScaEcosystems = data.scaEcosystems || "";
+        let ecosArray: string[] = [];
+        if (typeof currentScaEcosystems === "string") {
+          ecosArray = currentScaEcosystems.replace(/[\[\]]/g, "").split(",").map((s) => s.trim()).filter(Boolean);
+        } else if (Array.isArray(currentScaEcosystems)) {
+          ecosArray = [...currentScaEcosystems];
+        }
+        
+        configNoSca.forEach((noSca) => {
+          if (!ecosArray.some((e: string) => e.toLowerCase() === noSca.toLowerCase())) {
+            ecosArray.push(noSca);
+          }
+        });
 
         const mergedOverview = {
           ...mockOverview,
           ...data.overview,
           architectures: data.architectures || [],
-          scaEcosystems: data.scaEcosystems || "",
+          scaEcosystems: ecosArray.length > 0 ? `[${ecosArray.join(", ")}]` : "",
           packagingAnomalies,
           unselectedModules,
           selectedModules: data.selectedModules || [],
@@ -1872,9 +1896,18 @@ export default function App() {
                     </p>
                   </div>
                   {(() => {
-                    const daysSinceScan = activeOverview.generationDate
+                    const getEffectiveScanDate = (ovw: any) => {
+                      if (ovw?.scanName) {
+                        const match = ovw.scanName.match(/^\d{4}-\d{2}-\d{2}/);
+                        if (match) return match[0];
+                      }
+                      return ovw?.generationDate || null;
+                    };
+                    const effectiveDate = getEffectiveScanDate(activeOverview);
+
+                    const daysSinceScan = effectiveDate
                       ? (new Date().getTime() -
-                          new Date(activeOverview.generationDate).getTime()) /
+                          new Date(effectiveDate).getTime()) /
                         (1000 * 3600 * 24)
                       : 0;
                     if (daysSinceScan > configScanValidityDays) {
