@@ -85,6 +85,15 @@ export const GroupRow: React.FC<GroupRowProps> = ({
               {group.severity}
             </span>
           </div>
+          {group.type === 'SAST' && group.records && group.records.length > 0 && (
+            <div className="mt-1 text-[9px] text-slate-500 font-mono flex gap-1">
+              <span className="text-slate-600 font-black">ID:</span>
+              <span className="text-slate-400">
+                {group.records.slice(0, 3).map((r: any) => r.issue_id || r.id).join(", ")}
+                {group.records.length > 3 ? ", ..." : ""}
+              </span>
+            </div>
+          )}
         </div>
       </td>
       <td className="p-4 align-top">
