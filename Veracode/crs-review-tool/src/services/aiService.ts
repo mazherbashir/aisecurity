@@ -1,4 +1,5 @@
 import { AIProvider } from '../types';
+import { getEndpoint } from '../config';
 
 export async function getAIResponseForComment(comment: string, type: 'SCA' | 'SAST', provider: AIProvider = 'gemini'): Promise<string> {
   if (!comment || comment.trim() === '') {
@@ -6,7 +7,7 @@ export async function getAIResponseForComment(comment: string, type: 'SCA' | 'SA
   }
 
   try {
-    const response = await fetch('http://localhost:8081/api/ai/analyze', {
+    const response = await fetch(getEndpoint('aiAnalyze'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

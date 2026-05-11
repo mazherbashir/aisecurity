@@ -47,6 +47,7 @@ import { sampleReportData } from "./data";
 import { getAIResponseForComment } from "./services/aiService";
 import { GroupRow } from "./components/GroupRow";
 import { CWE_BASE_URL } from "./constants";
+import { getEndpoint } from "./config";
 import { StaticContent } from "./staticContent";
 
 // --- Error Boundary and Debug Logger Support ---
@@ -662,6 +663,7 @@ ${scaTableRows}
     sastSummary,
     scaDetails,
     isScanTooOld,
+    aggregatedData,
   ]);
 
   const [rawHtml, setRawHtml] = useState(formattedHeader);
@@ -780,6 +782,7 @@ export default function App() {
   const [detailedGroup, setDetailedGroup] = useState<AggregatedGroup | null>(
     null,
   );
+  const [sensitiveGroupToBypass, setSensitiveGroupToBypass] = useState<AggregatedGroup | null>(null);
 
   const [configNoSca, setConfigNoSca] = useState<string[]>([]);
   const [configEngines, setConfigEngines] = useState<string[]>([
@@ -793,7 +796,7 @@ export default function App() {
     useState<number>(90);
 
   useEffect(() => {
-    fetch("/api/config/info")
+    fetch(getEndpoint('configInfo'))
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data.noSca)) setConfigNoSca(data.noSca);
@@ -888,7 +891,7 @@ export default function App() {
 
   const fetchPrompts = async () => {
     try {
-      const res = await fetch("/api/config/prompts");
+      const res = await fetch(getEndpoint('configPrompts'));
       const data = await res.json();
       setSastSystemPrompt(data.sastPrompt);
       setScaSystemPrompt(data.scaPrompt);
@@ -901,7 +904,7 @@ export default function App() {
 
   const savePrompts = async () => {
     try {
-      const res = await fetch("/api/config/prompts", {
+      const res = await fetch(getEndpoint('configPrompts'), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1073,7 +1076,7 @@ export default function App() {
     let handled = false;
     try {
       const response = await fetch(
-        `/api/getfinalreport?application-name=${encodeURIComponent(appProfile)}`,
+        `${getEndpoint('getFinalReport')}?application-name=${encodeURIComponent(appProfile)}`,
       );
 
       if (!response.ok) {
@@ -1125,7 +1128,7 @@ export default function App() {
       const data = await response.json();
       processImportedData(data);
 
-      fetch("/api/config/info")
+      fetch(getEndpoint('configInfo'))
         .then((res) => res.json())
         .then((data) => {
           if (Array.isArray(data.history)) {
@@ -1176,17 +1179,19 @@ export default function App() {
     }
   };
 
-  const handlePullAIResponse = async (group: AggregatedGroup) => {
+  const handlePullAIResponse = async (group: AggregatedGroup, forceBypass = false) => {
     // Basic secret detection in comments before sending to AI
     const secretPattern = /\b(password|pwd|secret|token|api_key|apikey|user-name|username|credential|key)\b/i;
     
     // Check if any comment contains sensitive info
     const hasSensitiveInfo = secretPattern.test(group.comments);
 
-    if (hasSensitiveInfo) {
-      alert("Sensitive information detected in comments (e.g., username, password, key). Cannot send data to AI.");
+    if (hasSensitiveInfo && !forceBypass) {
+      setSensitiveGroupToBypass(group);
       return;
     }
+    
+    setSensitiveGroupToBypass(null);
 
     // Call API with engine name, user comments (group.comments), and finding type (SCA/SAST)
     const response = await getAIResponseForComment(
@@ -1273,7 +1278,7 @@ export default function App() {
       };
 
       try {
-        const response = await fetch("/api/veracode/mitigation", {
+        const response = await fetch(getEndpoint('veracodeMitigation'), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1322,37 +1327,6 @@ export default function App() {
              }
              return updated;
           });
-
-          if (actionType === "approved") {
-            setBackendSastSummary((prev: any) => {
-               if (!prev || !prev.breakdown) return prev;
-               const breakdown = { ...prev.breakdown };
-               let sevKey = group.severity;
-               if (!breakdown[sevKey] && breakdown[sevKey.replace("Information", "Info")]) {
-                 sevKey = sevKey.replace("Information", "Info");
-               } else if (!breakdown[sevKey] && breakdown[sevKey.replace("Info", "Information")]) {
-                 sevKey = sevKey.replace("Info", "Information");
-               }
-               if (!breakdown[sevKey]) return prev;
-
-               const sevData = { ...breakdown[sevKey] };
-               if (sevData.findings) {
-                  const newFindings = sevData.findings.map((f: any) => {
-                     const cweMatch = f.cwe ? f.cwe.match(/\d+/) : null;
-                     if (cweMatch && cweMatch[0] === String(group.cweId)) {
-                        return { ...f, count: Math.max(0, f.count - group.records.length) };
-                     }
-                     return f;
-                  }).filter((f: any) => f.count > 0);
-                  sevData.findings = newFindings;
-               }
-               sevData.total = Math.max(0, sevData.total - group.records.length);
-               breakdown[sevKey] = sevData;
-               
-               const totalVulnerabilities = Math.max(0, prev.vulnerabilities - group.records.length);
-               return { ...prev, breakdown, vulnerabilities: totalVulnerabilities };
-            });
-          }
         } else {
           setScaMitigationProposal((prev: any) => {
              if (!prev) return prev;
@@ -1366,22 +1340,6 @@ export default function App() {
              }
              return updated;
           });
-
-          if (actionType === "approved") {
-            setBackendScaSummary((prev: any) => {
-               if (!prev || !prev.breakdown) return prev;
-               const breakdown = { ...prev.breakdown };
-               const sevKey = group.severity;
-               if (!breakdown[sevKey]) return prev;
-
-               const sevData = { ...breakdown[sevKey] };
-               sevData.total = Math.max(0, sevData.total - group.records.length);
-               breakdown[sevKey] = sevData;
-               
-               const totalVulnerabilities = Math.max(0, prev.vulnerabilities - group.records.length);
-               return { ...prev, breakdown, vulnerabilities: totalVulnerabilities };
-            });
-          }
         }
       } catch (err: any) {
         console.error(`Error during batch action for ${group.groupId}:`, err.message);
@@ -2424,6 +2382,58 @@ export default function App() {
                   >
                     Close Analysis
                   </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Sensitive Information Bypass Modal */}
+        <AnimatePresence>
+          {sensitiveGroupToBypass && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-transparent pointer-events-none">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSensitiveGroupToBypass(null)}
+                className="absolute inset-0 bg-black/60 pointer-events-auto"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="w-full max-w-lg bg-[#0a0c10] border border-orange-500/30 rounded-xl flex flex-col shadow-2xl overflow-hidden relative z-10 pointer-events-auto"
+              >
+                <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-orange-500/10">
+                  <h2 className="text-sm font-black flex items-center gap-2 uppercase tracking-widest text-orange-400">
+                    <AlertCircle size={18} /> Sensitive Information Detected
+                  </h2>
+                </div>
+                <div className="p-6 pb-2">
+                  <p className="text-sm text-slate-300 mb-4">
+                    We detected potential sensitive information (e.g., username, password, key) in the finding's comments.
+                  </p>
+                  <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 mb-4">
+                    <p className="text-xs text-slate-400 font-mono whitespace-pre-wrap max-h-40 overflow-y-auto">{sensitiveGroupToBypass.comments}</p>
+                  </div>
+                  <p className="text-xs text-orange-400/80 italic mb-6">
+                    If this is a false positive and does not contain actual credentials, you can bypass this check to fetch the AI response.
+                  </p>
+                  <div className="flex justify-end gap-3 mb-2">
+                    <button
+                      onClick={() => setSensitiveGroupToBypass(null)}
+                      className="px-6 py-2.5 bg-slate-800 text-slate-300 text-xs font-black uppercase tracking-widest rounded-lg hover:bg-slate-700 transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handlePullAIResponse(sensitiveGroupToBypass, true)}
+                      className="px-6 py-2.5 bg-orange-600 hover:bg-orange-500 text-white text-xs font-black uppercase tracking-widest rounded-lg transition"
+                    >
+                      Bypass & Pull AI
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             </div>
