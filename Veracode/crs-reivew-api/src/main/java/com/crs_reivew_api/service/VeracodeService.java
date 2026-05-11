@@ -320,10 +320,13 @@ public class VeracodeService {
         dto.overview.sandboxId = report.getSandboxId();
         dto.overview.tier = calculateTier(report.getPolicyName());
 
+        dto.overview.staticAnalysisUnitId = report.getStaticAnalysisUnitId();
         if (report.getStaticAnalysis() != null) {
             dto.overview.sastScore = report.getStaticAnalysis().getScore();
             dto.overview.sastRating = report.getStaticAnalysis().getRating();
-            dto.overview.staticAnalysisUnitId = report.getStaticAnalysis().getStaticAnalysisUnitId();
+            if (dto.overview.staticAnalysisUnitId == null) {
+                dto.overview.staticAnalysisUnitId = report.getStaticAnalysis().getStaticAnalysisUnitId();
+            }
         }
 
         // Conditionally Fetch Build Info

@@ -21,6 +21,7 @@ public class VeracodeReport {
     @XmlAttribute(name = "account_id") private String accountId;
     @XmlAttribute(name = "analysis_id") private String analysisId;
     @XmlAttribute(name = "sandbox_id") private String sandboxId;
+    @XmlAttribute(name = "static_analysis_unit_id") private String staticAnalysisUnitId;
 
     public String getAppName() { return appName; }
     public String getAppId() { return appId; }
@@ -32,6 +33,7 @@ public class VeracodeReport {
     public String getAccountId() { return accountId; }
     public String getAnalysisId() { return analysisId; }
     public String getSandboxId() { return sandboxId; }
+    public String getStaticAnalysisUnitId() { return staticAnalysisUnitId; }
     public StaticAnalysis getStaticAnalysis() { return staticAnalysis; }
     public List<Severity> getSeverities() { return severities; }
     public SoftwareCompositionAnalysis getSca() { return sca; }

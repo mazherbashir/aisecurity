@@ -80,8 +80,8 @@ Confirm if you have any third-party components/dependencies. If so, to successfu
   }
 
   public static moduleSelectionMsg(overview: any, selectedModules: string[], unselectedModules: string[]) {
-    const scanLink = `https://analysiscenter.veracode.com/auth/index.jsp#AnalyzeAppModuleList:${overview.accountId}:${overview.appId}:${overview.buildId}:${overview.analysisId}:results:${overview.sandboxId || ''}`;
-    const reviewModulesUrl = `https://analysiscenter.veracode.com/auth/index.jsp#AnalyzeAppModuleList:${overview.accountId}:${overview.appId}:${overview.buildId}:${overview.analysisId}:results`;
+    const scanLink = `https://analysiscenter.veracode.com/auth/index.jsp#StaticOverview:${overview.accountId}:${overview.appId}:${overview.buildId}:${overview.analysisId}:${overview.staticAnalysisUnitId}::::${overview.sandboxId || ''}`;
+    const reviewModulesUrl = `https://analysiscenter.veracode.com/auth/index.jsp#AnalyzeAppModuleList:${overview.accountId}:${overview.appId}:${overview.buildId}:${overview.analysisId}:${overview.staticAnalysisUnitId}:::results:${overview.sandboxId}`;
 
     const selectedList = selectedModules.map(m => `\t<li><code>${m}</code></li>`).join('\n');
     const unselectedList = unselectedModules.map(m => `\t<li><code>${m}</code></li>`).join('\n');
