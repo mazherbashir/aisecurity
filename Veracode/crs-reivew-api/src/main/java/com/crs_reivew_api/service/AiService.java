@@ -24,7 +24,18 @@ public class AiService {
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public String callAi(String engine, String prompt) throws Exception {
+    public static class AiResult {
+        public String text;
+        public int inTokens;
+        public int outTokens;
+        public AiResult(String text, int inTokens, int outTokens) {
+            this.text = text;
+            this.inTokens = inTokens;
+            this.outTokens = outTokens;
+        }
+    }
+
+    public AiResult callAi(String engine, String prompt) throws Exception {
         logger.info("Calling AI engine: {}", engine);
         if ("gemini".equalsIgnoreCase(engine)) {
             return callGemini(prompt);
@@ -34,7 +45,7 @@ public class AiService {
         throw new IllegalArgumentException("Unsupported AI engine: " + engine);
     }
 
-    private String callGemini(String prompt) throws Exception {
+    private AiResult callGemini(String prompt) throws Exception {
         String key = veracodeConfig.getGeminiKey();
         String model = veracodeConfig.getGeminiModel();
         if (key == null || key.isEmpty()) throw new RuntimeException("Gemini API key is missing");
@@ -63,11 +74,15 @@ public class AiService {
 
         JsonNode root = objectMapper.readTree(response.body());
         JsonNode textNode = root.path("candidates").path(0).path("content").path("parts").path(0).path("text");
-        
-        return textNode.isMissingNode() ? response.body() : textNode.asText();
+        String text = textNode.isMissingNode() ? response.body() : textNode.asText();
+
+        int inTokens = root.path("usageMetadata").path("promptTokenCount").asInt(0);
+        int outTokens = root.path("usageMetadata").path("candidatesTokenCount").asInt(0);
+
+        return new AiResult(text, inTokens, outTokens);
     }
 
-    private String callAzure(String prompt) throws Exception {
+    private AiResult callAzure(String prompt) throws Exception {
         String key = veracodeConfig.getAzureKey();
         String endpoint = veracodeConfig.getAzureEndpoint();
         String deployment = veracodeConfig.getAzureDeployment();
@@ -98,7 +113,11 @@ public class AiService {
 
         JsonNode root = objectMapper.readTree(response.body());
         JsonNode contentNode = root.path("choices").path(0).path("message").path("content");
+        String text = contentNode.isMissingNode() ? response.body() : contentNode.asText();
 
-        return contentNode.isMissingNode() ? response.body() : contentNode.asText();
+        int inTokens = root.path("usage").path("prompt_tokens").asInt(0);
+        int outTokens = root.path("usage").path("completion_tokens").asInt(0);
+
+        return new AiResult(text, inTokens, outTokens);
     }
 }

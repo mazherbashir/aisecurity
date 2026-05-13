@@ -14,7 +14,8 @@ export const mockOverview = {
   "sastRating": "B",
   "scanLanguages": ["JavaScript", ".NET"],
   "packagingAnomalies": [],
-  "unselectedModules": ["FusionCommonLib.dll"]
+  "unselectedModules": ["FusionCommonLib.dll"],
+  "gracePeriod": "veryhigh/high:60 , Medium:90 , Low:180"
 };
 
 export const mockSastSummary = {

@@ -15,6 +15,7 @@ export interface SastFinding {
   severity: string;
   location: string;
   userComments: string[];
+  description?: string;
 }
 
 export interface ScaFinding {
@@ -25,6 +26,7 @@ export interface ScaFinding {
   severity: string;
   location: string;
   userComments: string[];
+  cve_summary?: string;
 }
 
 export type Finding = SastFinding | ScaFinding;

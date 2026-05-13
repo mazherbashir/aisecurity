@@ -1196,20 +1196,33 @@ export default function App() {
     setLoadingAIGroups(prev => new Set(prev).add(group.groupId));
 
     try {
+      let flawId: string | undefined;
+      let flawSummary: string | undefined;
+
+      if (group.type === "SAST") {
+        flawId = String(group.cweId).startsWith("CWE-") ? String(group.cweId) : `CWE-${group.cweId}`;
+        flawSummary = (group.records[0] as any)?.description;
+      } else if (group.type === "SCA") {
+        flawId = group.records[0]?.id;
+        flawSummary = (group.records[0] as any)?.cve_summary;
+      }
+
       // Call API with engine name, user comments (group.comments), and finding type (SCA/SAST)
       const response = await getAIResponseForComment(
         group.comments,
         group.type,
         aiProvider,
+        flawId,
+        flawSummary
       );
       
       const estimatedInputTokens = Math.ceil((group.comments || "").length / 4) + 150; // Approximating ~150 prompt tokens
       const estimatedOutputTokens = Math.ceil((response.result || "").length / 4);
 
       updateGroupAIComment(group.groupId, response.result, {
-        inputTokens: estimatedInputTokens,
-        outputTokens: estimatedOutputTokens,
-        totalTokens: estimatedInputTokens + estimatedOutputTokens,
+        inputTokens: response.inputTokens || estimatedInputTokens,
+        outputTokens: response.outputTokens || estimatedOutputTokens,
+        totalTokens: response.totalTokens || (estimatedInputTokens + estimatedOutputTokens),
       });
     } finally {
       setLoadingAIGroups(prev => {
@@ -1469,6 +1482,7 @@ export default function App() {
         scanLanguages: [],
         packagingAnomalies: [],
         unselectedModules: [],
+        gracePeriod: "---"
       };
     }
     return resultsLoaded ? overview : mockOverview;
@@ -1880,18 +1894,18 @@ export default function App() {
               <div className="col-span-9 bento-card flex flex-col bg-slate-900 border-slate-800 overflow-hidden min-h-0 min-w-0">
                 {/* Metadata Panel */}
                 <div className="p-5 border-b border-slate-800 bg-slate-950/40 flex flex-wrap items-start">
-                  <div className="flex flex-col mr-16">
+                  <div className="flex flex-col mr-4 lg:mr-6 flex-1 min-w-[200px] max-w-[320px]">
                     <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
                       Profile
                     </span>
                     <p
-                      className="text-[11px] font-bold text-white truncate max-w-[260px]"
+                      className="text-[11px] font-bold text-white truncate w-full"
                       title={activeOverview.applicationName}
                     >
                       {activeOverview.applicationName}
                     </p>
                   </div>
-                  <div className="flex flex-col mr-16">
+                  <div className="flex flex-col mr-8 lg:mr-14">
                     <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
                       Scan Name
                     </span>
@@ -1902,7 +1916,7 @@ export default function App() {
                       {activeOverview.scanName}
                     </p>
                   </div>
-                  <div className="flex flex-col mr-16">
+                  <div className="flex flex-col mr-6 lg:mr-10">
                     <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
                       Date
                     </span>
@@ -1931,7 +1945,7 @@ export default function App() {
                       : 0;
                     if (daysSinceScan > configScanValidityDays) {
                       return (
-                        <div className="flex flex-col mr-12 bg-red-900/40 px-6 py-2 rounded-lg border-2 border-red-500/50 justify-center">
+                        <div className="flex flex-col mr-6 lg:mr-8 bg-red-900/40 px-6 py-2 rounded-lg border-2 border-red-500/50 justify-center">
                           <p className="text-xl font-bold text-red-500">
                             Scan is older then {configScanValidityDays} days
                           </p>
@@ -1940,18 +1954,44 @@ export default function App() {
                     }
                     return null;
                   })()}
-                  <div className="flex flex-col mr-12">
+                  <div className="flex flex-col mr-4 flex-1 min-w-[250px]">
                     <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
                       Policy
                     </span>
                     <p
-                      className="text-[11px] font-bold text-slate-400 truncate max-w-[180px]"
+                      className="text-[11px] font-bold text-slate-400 truncate w-full"
                       title={activeOverview.policyName}
                     >
                       {activeOverview.policyName}
                     </p>
+                    {activeOverview.gracePeriod && activeOverview.gracePeriod !== "---" && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {activeOverview.gracePeriod.split(',').map((period, index) => {
+                          const trimPeriod = period.trim();
+                          let colorClass = "bg-blue-600/10 text-blue-400 border-blue-500/20";
+                          if (trimPeriod.toLowerCase().includes("high")) colorClass = "bg-red-600/10 text-red-400 border-red-500/20";
+                          else if (trimPeriod.toLowerCase().includes("medium")) colorClass = "bg-amber-600/10 text-amber-400 border-amber-500/20";
+                          else if (trimPeriod.toLowerCase().includes("low")) colorClass = "bg-emerald-600/10 text-emerald-400 border-emerald-500/20";
+                          
+                          return (
+                          <span 
+                            key={index} 
+                            className={`text-[8px] font-bold px-1 py-px rounded border whitespace-nowrap hidden lg:inline-block ${colorClass}`}
+                            title={trimPeriod}
+                          >
+                            {trimPeriod.replace(/:/g, ': ').toUpperCase()}
+                          </span>
+                        )})}
+                        <span 
+                          className="text-[9px] font-medium text-slate-400 truncate w-full lg:hidden"
+                          title={activeOverview.gracePeriod}
+                        >
+                          {activeOverview.gracePeriod.replace(/:/g, ': ')}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex flex-col">
+                  <div className="flex flex-col flex-shrink-0">
                     <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
                       Compliance
                     </span>

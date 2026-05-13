@@ -375,10 +375,29 @@ public class VeracodeService {
         dto.overview.analysisId = report.getAnalysisId();
         dto.overview.scanName = report.getScanName();
         dto.overview.generationDate = report.getGenerationDate();
-        dto.overview.policyName = report.getPolicyName();
+        
+        String rawPolicyName = report.getPolicyName();
+        if (rawPolicyName != null && rawPolicyName.startsWith("PwC_DC")) {
+            // Strip 'PwC_DC' and any numbers immediately following it
+            dto.overview.policyName = rawPolicyName.replaceAll("^PwC_DC\\d*", "");
+        } else {
+            dto.overview.policyName = rawPolicyName;
+        }
+        
         dto.overview.policyComplianceStatus = report.getPolicyComplianceStatus();
         dto.overview.sandboxId = report.getSandboxId();
         dto.overview.tier = calculateTier(report.getPolicyName());
+        
+        if (dto.overview.tier != null && !"N/A".equals(dto.overview.tier)) {
+            var gracePeriods = veracodeConfig.getGracePeriods();
+            if (gracePeriods.containsKey(dto.overview.tier)) {
+                var tierMap = gracePeriods.get(dto.overview.tier);
+                Integer h = tierMap.getOrDefault("High", 0);
+                Integer m = tierMap.getOrDefault("Medium", 0);
+                Integer l = tierMap.getOrDefault("Low", 0);
+                dto.overview.gracePeriod = String.format("veryhigh/high:%d , Medium:%d , Low:%d", h, m, l);
+            }
+        }
 
         dto.overview.staticAnalysisUnitId = report.getStaticAnalysisUnitId();
         if (report.getStaticAnalysis() != null) {
@@ -794,6 +813,7 @@ public class VeracodeService {
                                     fDto.title = flaw.getCategoryName();
                                     fDto.severity = getSeverityName(sev);
                                     fDto.location = flaw.getSourceFile() + ":" + flaw.getLine();
+                                    fDto.description = flaw.getDescription();
                                     fDto.userComments = comments;
                                     fDto.remediation_due_date = calculateDueDate(flaw.getDateFirstOccurrence(), dto.overview.tier, fDto.severity);
                                     findings.add(fDto);
@@ -899,6 +919,7 @@ public class VeracodeService {
                     fDto.title = vuln.getCveId();
                     fDto.severity = getSeverityName(sev);
                     fDto.location = comp.getLibrary();
+                    fDto.cve_summary = vuln.getSummary();
                     fDto.userComments = scaComments;
                     fDto.remediation_due_date = calculateDueDate(vuln.getFirstFoundDate(), dto.overview.tier, fDto.severity);
                     dto.findingsWithCommentsSCA.add(fDto);

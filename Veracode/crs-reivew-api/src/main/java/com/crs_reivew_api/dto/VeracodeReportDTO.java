@@ -40,6 +40,7 @@ public class VeracodeReportDTO {
         public String staticAnalysisUnitId;
         public String sandboxId;
         public String tier;
+        public String gracePeriod;
     }
 
     public static class SeveritySummaryDTO {
@@ -64,6 +65,7 @@ public class VeracodeReportDTO {
         public int totalVulnerablePackages;
     }
 
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
     public static class FindingDTO {
         public String type; // SAST or SCA
         public String id;
@@ -71,6 +73,8 @@ public class VeracodeReportDTO {
         public String title;
         public String severity; // High, Medium, etc.
         public String location;
+        public String description;
+        public String cve_summary;
         public List<String> userComments;
         public String remediation_due_date;
     }
