@@ -783,6 +783,7 @@ export default function App() {
     null,
   );
   const [sensitiveGroupToBypass, setSensitiveGroupToBypass] = useState<AggregatedGroup | null>(null);
+  const [loadingAIGroups, setLoadingAIGroups] = useState<Set<string>>(new Set());
 
   const [configNoSca, setConfigNoSca] = useState<string[]>([]);
   const [configEngines, setConfigEngines] = useState<string[]>([
@@ -835,7 +836,7 @@ export default function App() {
       // Strictly no mock data in production
       return {
         vulnerabilities: 0,
-        breakdown: { High: 0, Medium: 0, Low: 0, Information: 0 },
+        breakdown: { "Very High": 0, High: 0, Medium: 0, Low: 0, Information: 0 },
       };
     }
 
@@ -1192,27 +1193,44 @@ export default function App() {
     }
     
     setSensitiveGroupToBypass(null);
+    setLoadingAIGroups(prev => new Set(prev).add(group.groupId));
 
-    // Call API with engine name, user comments (group.comments), and finding type (SCA/SAST)
-    const response = await getAIResponseForComment(
-      group.comments,
-      group.type,
-      aiProvider,
-    );
-    updateGroupAIComment(group.groupId, response);
+    try {
+      // Call API with engine name, user comments (group.comments), and finding type (SCA/SAST)
+      const response = await getAIResponseForComment(
+        group.comments,
+        group.type,
+        aiProvider,
+      );
+      
+      const estimatedInputTokens = Math.ceil((group.comments || "").length / 4) + 150; // Approximating ~150 prompt tokens
+      const estimatedOutputTokens = Math.ceil((response.result || "").length / 4);
+
+      updateGroupAIComment(group.groupId, response.result, {
+        inputTokens: estimatedInputTokens,
+        outputTokens: estimatedOutputTokens,
+        totalTokens: estimatedInputTokens + estimatedOutputTokens,
+      });
+    } finally {
+      setLoadingAIGroups(prev => {
+        const next = new Set(prev);
+        next.delete(group.groupId);
+        return next;
+      });
+    }
   };
 
-  const updateGroupAIComment = (groupId: string, newComment: string) => {
+  const updateGroupAIComment = (groupId: string, newComment: string, aiMetrics?: any) => {
     setAggregatedData((prev) => ({
       sast: prev.sast.map((g) =>
-        g.groupId === groupId ? { ...g, aiComment: newComment } : g,
+        g.groupId === groupId ? { ...g, aiComment: newComment, ...(aiMetrics ? { aiMetrics } : {}) } : g,
       ),
       sca: prev.sca.map((g) =>
-        g.groupId === groupId ? { ...g, aiComment: newComment } : g,
+        g.groupId === groupId ? { ...g, aiComment: newComment, ...(aiMetrics ? { aiMetrics } : {}) } : g,
       ),
     }));
     setDetailedGroup((prev) =>
-      prev?.groupId === groupId ? { ...prev, aiComment: newComment } : prev,
+      prev?.groupId === groupId ? { ...prev, aiComment: newComment, ...(aiMetrics ? { aiMetrics } : {}) } : prev,
     );
   };
 
@@ -1260,7 +1278,7 @@ export default function App() {
     
     setIsSubmitting(true);
     const { actionType, selectedItems } = batchModalConfig;
-    const actionStr = actionType === "approved" ? "accept" : "reject";
+    const actionStr = actionType === "approved" ? "accepted" : "rejected";
     const buildId = activeOverview.buildId || "";
 
     setBatchModalConfig(null);
@@ -1314,6 +1332,7 @@ export default function App() {
              if (!prev) return prev;
              const updated = { ...prev };
              let sev = group.severity;
+             if (sev === 'VeryHigh') sev = 'Very High';
              if (!updated[sev] && updated[sev.replace("Information", "Info")] !== undefined) {
                sev = sev.replace("Information", "Info");
              } else if (!updated[sev] && updated[sev.replace("Info", "Information")] !== undefined) {
@@ -1327,11 +1346,34 @@ export default function App() {
              }
              return updated;
           });
+
+          if (actionType === "approved") {
+            setBackendSastSummary((prev: any) => {
+               if (!prev || !prev.breakdown) return prev;
+               const breakdown = { ...prev.breakdown };
+               let sevKey = group.severity;
+               if (sevKey === 'VeryHigh') sevKey = 'Very High';
+               if (!breakdown[sevKey] && breakdown[sevKey.replace("Information", "Info")]) {
+                 sevKey = sevKey.replace("Information", "Info");
+               } else if (!breakdown[sevKey] && breakdown[sevKey.replace("Info", "Information")]) {
+                 sevKey = sevKey.replace("Info", "Information");
+               }
+               if (!breakdown[sevKey]) return prev;
+
+               const sevData = { ...breakdown[sevKey] };
+               sevData.total = Math.max(0, sevData.total - group.records.length);
+               breakdown[sevKey] = sevData;
+               
+               const totalVulnerabilities = Math.max(0, prev.vulnerabilities - group.records.length);
+               return { ...prev, breakdown, vulnerabilities: totalVulnerabilities };
+            });
+          }
         } else {
           setScaMitigationProposal((prev: any) => {
              if (!prev) return prev;
              const updated = { ...prev };
-             const sev = group.severity;
+             let sev = group.severity;
+             if (sev === 'VeryHigh') sev = 'Very High';
              if (updated[sev] !== undefined) {
                updated[sev] = Math.max(0, updated[sev] - group.records.length);
              }
@@ -1340,6 +1382,23 @@ export default function App() {
              }
              return updated;
           });
+
+          if (actionType === "approved") {
+            setBackendScaSummary((prev: any) => {
+               if (!prev || !prev.breakdown) return prev;
+               const breakdown = { ...prev.breakdown };
+               let sevKey = group.severity;
+               if (sevKey === 'VeryHigh') sevKey = 'Very High';
+               if (!breakdown[sevKey]) return prev;
+
+               const sevData = { ...breakdown[sevKey] };
+               sevData.total = Math.max(0, sevData.total - group.records.length);
+               breakdown[sevKey] = sevData;
+               
+               const totalVulnerabilities = Math.max(0, prev.vulnerabilities - group.records.length);
+               return { ...prev, breakdown, vulnerabilities: totalVulnerabilities };
+            });
+          }
         }
       } catch (err: any) {
         console.error(`Error during batch action for ${group.groupId}:`, err.message);
@@ -1586,7 +1645,7 @@ export default function App() {
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-1">
-                        {["High", "Medium", "Low", "Information"].map((sev) => {
+                        {["Very High", "High", "Medium", "Low", "Information"].map((sev) => {
                           const count =
                             (sastSummary.breakdown as any)[sev] || 0;
                           return (
@@ -1595,12 +1654,14 @@ export default function App() {
                               className="flex-1 min-w-[48px] p-2 rounded-lg border border-slate-800/50 flex flex-col items-center justify-center text-center bg-slate-800/10"
                             >
                               <span className="text-[8px] text-slate-500 uppercase font-black tracking-tighter mb-0.5 select-none">
-                                {sev}
+                                {sev === "Very High" ? "V. HIGH" : sev === "Information" ? "INFO" : sev}
                               </span>
                               <span
                                 className={`text-[13px] font-mono font-black ${
                                   (count as number) > 0
-                                    ? sev === "High"
+                                    ? sev === "Very High"
+                                      ? "text-purple-400"
+                                    : sev === "High"
                                       ? "text-red-400"
                                       : sev === "Medium"
                                         ? "text-orange-400"
@@ -2039,6 +2100,7 @@ export default function App() {
                                   toggleGroupSelection(group.groupId)
                                 }
                                 onPullAI={() => handlePullAIResponse(group)}
+                                isPulling={loadingAIGroups.has(group.groupId)}
                                 onUpdateAIComment={(val) =>
                                   updateGroupAIComment(group.groupId, val)
                                 }
@@ -2329,13 +2391,26 @@ export default function App() {
                           </div>
                         )}
                       </div>
-                      <div className="flex justify-end gap-3 mt-4">
-                        <button
-                          onClick={() => handlePullAIResponse(detailedGroup)}
-                          className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white text-[11px] font-black uppercase tracking-[0.2em] rounded-xl hover:bg-blue-500 transition-all shadow-lg active:scale-95"
-                        >
-                          <RefreshCcw size={14} /> Refresh AI Assessment
-                        </button>
+                      <div className="flex justify-between items-center mt-4">
+                        <div className="flex items-center gap-4">
+                          {detailedGroup.aiMetrics && (
+                            <div className="flex gap-4 text-[10px] text-slate-500 font-mono bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
+                              <div><span className="text-slate-400 mr-1">IN:</span>{detailedGroup.aiMetrics.inputTokens || '-'}</div>
+                              <div><span className="text-slate-400 mr-1">OUT:</span>{detailedGroup.aiMetrics.outputTokens || '-'}</div>
+                              <div className="text-emerald-400 font-black"><span className="text-slate-400 mr-1 font-mono font-normal">TOTAL:</span>{detailedGroup.aiMetrics.totalTokens || '-'}</div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex justify-end gap-3">
+                          <button
+                            onClick={() => handlePullAIResponse(detailedGroup)}
+                            disabled={loadingAIGroups.has(detailedGroup.groupId)}
+                            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white text-[11px] font-black uppercase tracking-[0.2em] rounded-xl hover:bg-blue-500 transition-all shadow-lg active:scale-95 disabled:opacity-50"
+                          >
+                            <RefreshCcw size={14} className={loadingAIGroups.has(detailedGroup.groupId) ? "animate-spin" : ""} /> 
+                            {loadingAIGroups.has(detailedGroup.groupId) ? "ANALYZING..." : "Refresh AI Assessment"}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>

@@ -18,6 +18,7 @@ interface GroupRowProps {
   isSelected: boolean;
   onSelect: () => void;
   onPullAI: () => Promise<void> | void;
+  isPulling: boolean;
   onUpdateAIComment: (val: string) => void;
   onViewFull: () => void;
 }
@@ -27,16 +28,14 @@ export const GroupRow: React.FC<GroupRowProps> = ({
   isSelected, 
   onSelect, 
   onPullAI, 
+  isPulling,
   onUpdateAIComment,
   onViewFull
 }) => {
-  const [isPulling, setIsPulling] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
   const handlePullAI = async () => {
-    setIsPulling(true);
     await onPullAI();
-    setIsPulling(false);
     setIsEditing(true);
   };
 

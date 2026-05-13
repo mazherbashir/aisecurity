@@ -1,9 +1,13 @@
 import { AIProvider } from '../types';
 import { getEndpoint } from '../config';
 
-export async function getAIResponseForComment(comment: string, type: 'SCA' | 'SAST', provider: AIProvider = 'gemini'): Promise<string> {
+export interface AIResponse {
+  result: string;
+}
+
+export async function getAIResponseForComment(comment: string, type: 'SCA' | 'SAST', provider: AIProvider = 'gemini'): Promise<AIResponse> {
   if (!comment || comment.trim() === '') {
-    return 'No valid customer comments provided for AI analysis.';
+    return { result: 'No valid customer comments provided for AI analysis.' };
   }
 
   try {
@@ -19,16 +23,28 @@ export async function getAIResponseForComment(comment: string, type: 'SCA' | 'SA
       }),
     });
 
-    const data = await response.json();
-
-    if (!response.ok || data.status !== 'success') {
-      throw new Error(data.error || 'Server error or failed status');
+    const text = await response.text();
+    let data;
+    
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (e) {
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status} - ${text}`);
+      }
+      throw new Error(`Invalid JSON response: ${text.substring(0, 100)}...`);
     }
 
-    return data.result || 'AI could not generate a response.';
+    if (!response.ok || data.status !== 'success') {
+      throw new Error(data.error || `HTTP error! status: ${response.status}`);
+    }
+
+    return {
+      result: data.result || 'AI could not generate a response.',
+    };
   } catch (error) {
     console.error('Error fetching AI response:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
-    return `Error [${provider}]: ${errorMessage}`;
+    return { result: `Error [${provider}]: ${errorMessage}` };
   }
 }

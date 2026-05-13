@@ -16,7 +16,7 @@ let config: AppConfig = {
     configPrompts: '/api/config/prompts',
     getFinalReport: '/getfinalreport',
     veracodeMitigation: '/api/veracode/mitigation',
-    aiAnalyze: '/api/ai/analyze'
+    aiAnalyze: '/api/ai'
   }
 };
 

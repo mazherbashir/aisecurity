@@ -20,6 +20,7 @@ export const mockOverview = {
 export const mockSastSummary = {
   vulnerabilities: 152,
   breakdown: {
+    "Very High": 0,
     "High": 1,
     "Medium": 1,
     "Low": 145,

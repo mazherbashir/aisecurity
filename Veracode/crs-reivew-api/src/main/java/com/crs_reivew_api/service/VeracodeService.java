@@ -207,6 +207,17 @@ public class VeracodeService {
     }
 
     public String updateMitigation(String buildId, String flawIdList, String action, String comment) {
+        // Map UI actions to Veracode expected actions
+        String mappedAction = action;
+        if (action != null) {
+            String lowerAction = action.trim().toLowerCase();
+            if (lowerAction.equals("accept") || lowerAction.equals("approve")) {
+                mappedAction = "accepted";
+            } else if (lowerAction.equals("reject")) {
+                mappedAction = "rejected";
+            }
+        }
+
         String mode = veracodeConfig.getMitigationProposalEnabled();
         
         if ("false".equalsIgnoreCase(mode)) {
@@ -214,16 +225,39 @@ public class VeracodeService {
         }
 
         if ("debug".equalsIgnoreCase(mode)) {
-            debugLog("DEBUG: Mitigation Proposal Bypass (Debug Mode). Build: " + buildId + ", Action: " + action);
+            debugLog("DEBUG: Mitigation Proposal Bypass (Debug Mode). Build: " + buildId + ", Action: " + mappedAction);
             return "Success (Debug Mode - Request Bypassed)";
         }
+
+        StringBuilder debugInfo = new StringBuilder();
+        debugInfo.append("====== VERACODE API REQUEST ======\n");
+        debugInfo.append("Endpoint URL: https://analysiscenter.veracode.com/api/5.0/updatemitigationinfo.do\n");
+        debugInfo.append("HTTP Method: POST\n");
+        debugInfo.append("Content-Type: application/x-www-form-urlencoded\n");
+        debugInfo.append("Parameters Sent:\n");
+        debugInfo.append("  build_id: ").append(buildId).append("\n");
+        debugInfo.append("  action: ").append(mappedAction).append("\n");
+        debugInfo.append("  flaw_id_list: ").append(flawIdList).append("\n");
+        debugInfo.append("  comment: ").append(comment).append("\n");
+        debugInfo.append("==================================\n");
+
+        System.out.println(debugInfo.toString());
 
         try {
             MitigationAPIWrapper mitigationWrapper = new MitigationAPIWrapper();
             setupCredentials(mitigationWrapper);
             
-            String xml = mitigationWrapper.updateMitigationInfo(buildId, flawIdList, action, comment);
-            debugLog("DEBUG: Mitigation Update Response: " + xml);
+            String xml = mitigationWrapper.updateMitigationInfo(buildId, flawIdList, mappedAction, comment);
+            
+            debugInfo.append("====== VERACODE API RESPONSE ======\n");
+            debugInfo.append(xml).append("\n");
+            debugInfo.append("===================================\n");
+            
+            System.out.println("====== VERACODE API RESPONSE ======");
+            System.out.println(xml);
+            System.out.println("===================================");
+            
+            saveDebugLog(debugInfo.toString());
             
             if (xml.contains("<error>")) {
                 throw new RuntimeException("Veracode API Error: " + xml);
@@ -231,6 +265,19 @@ public class VeracodeService {
             
             return xml;
         } catch (Exception e) {
+            debugInfo.append("====== VERACODE API EXCEPTION ======\n");
+            debugInfo.append(e.toString()).append("\n");
+            for (StackTraceElement element : e.getStackTrace()) {
+                debugInfo.append("\t").append(element.toString()).append("\n");
+            }
+            debugInfo.append("====================================\n");
+            
+            System.err.println("====== VERACODE API EXCEPTION ======");
+            e.printStackTrace();
+            System.err.println("====================================");
+            
+            saveDebugLog(debugInfo.toString());
+            
             throw new RuntimeException("Failed to update mitigation: " + e.getMessage(), e);
         }
     }
@@ -275,6 +322,19 @@ public class VeracodeService {
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to set up API credentials using provided keys", e);
+        }
+    }
+
+    private void saveDebugLog(String content) {
+        try {
+            String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+            java.nio.file.Path logDir = java.nio.file.Paths.get("veracode", "logs");
+            java.nio.file.Files.createDirectories(logDir);
+            String fileName = String.format("mitigation_debug_%s.txt", timestamp);
+            java.nio.file.Files.writeString(logDir.resolve(fileName), content);
+            System.out.println("Saved detailed mitigation debug info to: " + logDir.resolve(fileName).toAbsolutePath());
+        } catch (Exception e) {
+            System.err.println("Warning: Could not save debug log: " + e.getMessage());
         }
     }
 

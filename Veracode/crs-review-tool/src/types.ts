@@ -29,6 +29,12 @@ export interface ScaFinding {
 
 export type Finding = SastFinding | ScaFinding;
 
+export interface AIMetrics {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
 export interface AggregatedGroup {
   groupId: string;
   type: 'SAST' | 'SCA';
@@ -39,6 +45,7 @@ export interface AggregatedGroup {
   records: Finding[];
   severity: string;
   aiComment: string;
+  aiMetrics?: AIMetrics;
   status?: 'approved' | 'rejected';
 }
 

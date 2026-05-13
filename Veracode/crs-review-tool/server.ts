@@ -182,14 +182,20 @@ async function startServer() {
         }
 
         const data = await response.json();
-        res.json({ text: data.choices[0].message.content });
+        res.json({
+          status: 'success',
+          result: data.choices[0].message.content,
+        });
       } else {
         const geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
         const response = await geminiClient.models.generateContent({
-          model: "gemini-3-flash-preview",
+          model: "gemini-1.5-flash",
           contents: prompt,
         });
-        res.json({ text: response.text || 'AI could not generate a response.' });
+        res.json({
+          status: 'success',
+          result: response.text || 'AI could not generate a response.',
+        });
       }
     } catch (error) {
       console.error('Error fetching AI response:', error);
