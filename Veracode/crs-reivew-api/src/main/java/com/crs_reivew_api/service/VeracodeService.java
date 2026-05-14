@@ -244,6 +244,10 @@ public class VeracodeService {
         System.out.println(debugInfo.toString());
 
         try {
+            if ("REST".equalsIgnoreCase(veracodeConfig.getMitigationApiType())) {
+                return submitRestMitigation(buildId, flawIdList, mappedAction, comment);
+            }
+
             MitigationAPIWrapper mitigationWrapper = new MitigationAPIWrapper();
             setupCredentials(mitigationWrapper);
             
@@ -282,7 +286,7 @@ public class VeracodeService {
         }
     }
 
-    private void setupCredentials(Object wrapper) {
+    private String[] getCredentials() {
         String id = veracodeConfig.getKey().getId();
         String secret = veracodeConfig.getKey().getSecret();
 
@@ -311,6 +315,13 @@ public class VeracodeService {
         if (id == null || id.isEmpty() || secret == null || secret.isEmpty()) {
             throw new RuntimeException("CRITICAL: Veracode credentials not found. Please ensure 'veracode_api_key_id' and 'veracode_api_key_secret' are set in application.properties or your local ~/.veracode/credentials file.");
         }
+        return new String[]{id, secret};
+    }
+
+    private void setupCredentials(com.veracode.apiwrapper.AbstractAPIWrapper wrapper) {
+        String[] creds = getCredentials();
+        String id = creds[0];
+        String secret = creds[1];
 
         try {
             if (wrapper instanceof UploadAPIWrapper) {
@@ -323,6 +334,100 @@ public class VeracodeService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to set up API credentials using provided keys", e);
         }
+    }
+
+    private String submitRestMitigation(String buildId, String flawIdList, String action, String comment) throws Exception {
+        String[] creds = getCredentials();
+        String id = creds[0];
+        String secret = creds[1];
+
+        // Step 1: Get legacy App ID from build info
+        java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+        java.net.URL buildUrl = new java.net.URL("https://analysiscenter.veracode.com/api/5.0/getbuildinfo.do?build_id=" + buildId);
+        String buildAuth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, buildUrl, "GET");
+        
+        java.net.http.HttpRequest buildReq = java.net.http.HttpRequest.newBuilder()
+            .uri(java.net.URI.create(buildUrl.toString()))
+            .header("Authorization", buildAuth)
+            .GET()
+            .build();
+            
+        java.net.http.HttpResponse<String> buildRes = client.send(buildReq, java.net.http.HttpResponse.BodyHandlers.ofString());
+        String buildXml = buildRes.body();
+        if (buildXml == null || buildXml.contains("<error>")) {
+            throw new RuntimeException("Failed to get build info for build " + buildId + ": " + buildXml);
+        }
+        
+        String appId = null;
+        try {
+            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new org.xml.sax.InputSource(new java.io.StringReader(buildXml)));
+            var nodes = doc.getElementsByTagName("buildinfo");
+            if (nodes.getLength() > 0) {
+                appId = nodes.item(0).getAttributes().getNamedItem("app_id").getNodeValue();
+            }
+        } catch(Exception e) {
+            throw new RuntimeException("Error parsing build info XML", e);
+        }
+        
+        if (appId == null) {
+            throw new RuntimeException("Could not find legacy app_id for build " + buildId);
+        }
+        
+        // Step 2: Get Application GUID
+        java.net.URL appsUrl = new java.net.URL("https://api.veracode.com/appsec/v1/applications?legacy_id=" + appId);
+        String appsAuth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, appsUrl, "GET");
+        
+        java.net.http.HttpRequest appsReq = java.net.http.HttpRequest.newBuilder()
+            .uri(java.net.URI.create(appsUrl.toString()))
+            .header("Authorization", appsAuth)
+            .GET()
+            .build();
+            
+        java.net.http.HttpResponse<String> appsRes = client.send(appsReq, java.net.http.HttpResponse.BodyHandlers.ofString());
+        if (appsRes.statusCode() != 200) {
+            throw new RuntimeException("Failed to get application GUID: " + appsRes.body());
+        }
+        
+        String appGuid = null;
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.JsonNode appsRoot = mapper.readTree(appsRes.body());
+        com.fasterxml.jackson.databind.JsonNode appsArr = appsRoot.path("_embedded").path("applications");
+        if (appsArr.isArray() && appsArr.size() > 0) {
+            appGuid = appsArr.get(0).path("guid").asText();
+        }
+        
+        if (appGuid == null || appGuid.isEmpty()) {
+            throw new RuntimeException("Application GUID not found in API response for legacy ID " + appId);
+        }
+        
+        // Step 3: Post Annotation
+        java.net.URL annUrl = new java.net.URL("https://api.veracode.com/appsec/v2/applications/" + appGuid + "/annotations");
+        String annAuth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, annUrl, "POST");
+        
+        // Use REST API action string uppercase mapping if needed. REST API requires "ACCEPTED" or "REJECTED"
+        String restAction = action.toUpperCase();
+        
+        com.fasterxml.jackson.databind.node.ObjectNode payload = mapper.createObjectNode();
+        payload.put("issue_list", flawIdList);
+        payload.put("comment", comment);
+        payload.put("action", restAction);
+        
+        java.net.http.HttpRequest annReq = java.net.http.HttpRequest.newBuilder()
+            .uri(java.net.URI.create(annUrl.toString()))
+            .header("Authorization", annAuth)
+            .header("Content-Type", "application/json")
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload.toString()))
+            .build();
+            
+        java.net.http.HttpResponse<String> annRes = client.send(annReq, java.net.http.HttpResponse.BodyHandlers.ofString());
+        if (annRes.statusCode() < 200 || annRes.statusCode() >= 300) {
+            throw new RuntimeException("REST API Mitigation failed (" + annRes.statusCode() + "): " + annRes.body());
+        }
+        
+        debugLog("DEBUG: REST Mitigation Success: " + annRes.body());
+        return annRes.body();
     }
 
     private void saveDebugLog(String content) {

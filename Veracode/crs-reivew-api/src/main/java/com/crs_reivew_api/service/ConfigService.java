@@ -18,7 +18,13 @@ public class ConfigService {
     private static final String CONFIG_FILE = "src/main/resources/application.properties";
 
     public java.util.List<String> getAiEngines() {
-        return veracodeConfig.getAiEngines();
+        java.util.List<String> combined = new java.util.ArrayList<>(veracodeConfig.getAiEngines());
+        combined.addAll(veracodeConfig.getEngineModels());
+        return combined;
+    }
+
+    public java.util.List<String> getEngineModels() {
+        return veracodeConfig.getEngineModels();
     }
 
     public int getScanValidityDays() {

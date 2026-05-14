@@ -41,6 +41,11 @@ public class VeracodeConfig {
     private String scaPrompt;
     private int scanValidityDays = 90;
     private List<String> noSca = new ArrayList<>();
+    private String sharedServiceEndpoint;
+    private String sharedServiceKey;
+    private String sharedServiceRole = "user";
+    private List<String> engineModels = new ArrayList<>();
+    private String mitigationApiType = "XML";
     private String mitigationProposalEnabled = "true";
     private Key key = new Key();
 
@@ -58,6 +63,7 @@ public class VeracodeConfig {
                 this.azureKey = getProp(props, "azureKey", this.azureKey);
                 this.azureEndpoint = getProp(props, "azureEndpoint", this.azureEndpoint);
                 this.azureDeployment = getProp(props, "azureDeployment", this.azureDeployment);
+                this.sharedServiceKey = getProp(props, "sharedServiceKey", this.sharedServiceKey);
                 logger.info("Successfully loaded AI configuration from {}", credentialsFile.getAbsolutePath());
             } catch (IOException e) {
                 logger.error("Failed to load credentials file: {}", e.getMessage());
@@ -225,6 +231,46 @@ public class VeracodeConfig {
 
     public void setMitigationProposalEnabled(String mitigationProposalEnabled) {
         this.mitigationProposalEnabled = mitigationProposalEnabled;
+    }
+
+    public String getSharedServiceRole() {
+        return sharedServiceRole;
+    }
+
+    public void setSharedServiceRole(String sharedServiceRole) {
+        this.sharedServiceRole = sharedServiceRole;
+    }
+
+    public String getMitigationApiType() {
+        return mitigationApiType;
+    }
+
+    public void setMitigationApiType(String mitigationApiType) {
+        this.mitigationApiType = mitigationApiType;
+    }
+
+    public String getSharedServiceEndpoint() {
+        return sharedServiceEndpoint;
+    }
+
+    public void setSharedServiceEndpoint(String sharedServiceEndpoint) {
+        this.sharedServiceEndpoint = sharedServiceEndpoint;
+    }
+
+    public String getSharedServiceKey() {
+        return sharedServiceKey;
+    }
+
+    public void setSharedServiceKey(String sharedServiceKey) {
+        this.sharedServiceKey = sharedServiceKey;
+    }
+
+    public List<String> getEngineModels() {
+        return engineModels;
+    }
+
+    public void setEngineModels(List<String> engineModels) {
+        this.engineModels = engineModels;
     }
 
     public List<String> getIgnoreModules() {
