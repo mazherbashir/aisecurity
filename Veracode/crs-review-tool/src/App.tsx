@@ -1339,6 +1339,11 @@ export default function App() {
             g.groupId === group.groupId ? { ...g, status: actionType } : g,
           ),
         }));
+        setSelectedGroups((prev) => {
+          const next = new Set(prev);
+          next.delete(group.groupId);
+          return next;
+        });
 
         const isSAST = group.type === "SAST";
         

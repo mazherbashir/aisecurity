@@ -45,7 +45,7 @@ export const GroupRow: React.FC<GroupRowProps> = ({
         <input 
           type="checkbox" 
           className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-blue-500 focus:ring-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          checked={isSelected}
+          checked={!group.status && isSelected}
           onChange={onSelect}
           disabled={!!group.status}
         />
