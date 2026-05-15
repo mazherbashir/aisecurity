@@ -94,6 +94,8 @@ public class AiService {
                .addObject()
                .put("role", veracodeConfig.getSharedServiceRole())
                .put("content", prompt);
+        payload.put("max_tokens", veracodeConfig.getSharedServiceMaxTokens());
+        payload.put("stream", false);
 
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(url))

@@ -44,6 +44,7 @@ public class VeracodeConfig {
     private String sharedServiceEndpoint;
     private String sharedServiceKey;
     private String sharedServiceRole = "user";
+    private int sharedServiceMaxTokens = 1000;
     private List<String> engineModels = new ArrayList<>();
     private String mitigationApiType = "XML";
     private String mitigationProposalEnabled = "true";
@@ -239,6 +240,14 @@ public class VeracodeConfig {
 
     public void setSharedServiceRole(String sharedServiceRole) {
         this.sharedServiceRole = sharedServiceRole;
+    }
+
+    public int getSharedServiceMaxTokens() {
+        return sharedServiceMaxTokens;
+    }
+
+    public void setSharedServiceMaxTokens(int sharedServiceMaxTokens) {
+        this.sharedServiceMaxTokens = sharedServiceMaxTokens;
     }
 
     public String getMitigationApiType() {
