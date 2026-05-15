@@ -53,8 +53,8 @@ public class VeracodeService {
 
         if (java.nio.file.Files.exists(cachePath)) {
             long lastModified = java.nio.file.Files.getLastModifiedTime(cachePath).toMillis();
-            long thirtyDaysMillis = 30L * 24 * 60 * 60 * 1000;
-            if (System.currentTimeMillis() - lastModified < thirtyDaysMillis) {
+            long oneDayMillis = 1L * 24 * 60 * 60 * 1000;
+            if (System.currentTimeMillis() - lastModified < oneDayMillis) {
                 shouldRefresh = false;
             }
         }
@@ -206,7 +206,7 @@ public class VeracodeService {
         }
     }
 
-    public String updateMitigation(String buildId, String flawIdList, String action, String comment) {
+    public String updateMitigation(String buildId, String appId, String flawIdList, String action, String comment) {
         // Map UI actions to Veracode expected actions
         String mappedAction = action;
         if (action != null) {
@@ -229,11 +229,16 @@ public class VeracodeService {
             return "Success (Debug Mode - Request Bypassed)";
         }
 
+        String apiType = veracodeConfig.getMitigationApiType();
         StringBuilder debugInfo = new StringBuilder();
         debugInfo.append("====== VERACODE API REQUEST ======\n");
-        debugInfo.append("Endpoint URL: https://analysiscenter.veracode.com/api/5.0/updatemitigationinfo.do\n");
+        debugInfo.append("API Type: ").append(apiType).append("\n");
+        if ("REST".equalsIgnoreCase(apiType)) {
+            debugInfo.append("Endpoint: REST Annotations API\n");
+        } else {
+            debugInfo.append("Endpoint URL: https://analysiscenter.veracode.com/api/5.0/updatemitigationinfo.do\n");
+        }
         debugInfo.append("HTTP Method: POST\n");
-        debugInfo.append("Content-Type: application/x-www-form-urlencoded\n");
         debugInfo.append("Parameters Sent:\n");
         debugInfo.append("  build_id: ").append(buildId).append("\n");
         debugInfo.append("  action: ").append(mappedAction).append("\n");
@@ -245,7 +250,7 @@ public class VeracodeService {
 
         try {
             if ("REST".equalsIgnoreCase(veracodeConfig.getMitigationApiType())) {
-                return submitRestMitigation(buildId, flawIdList, mappedAction, comment);
+                return submitRestMitigation(buildId, appId, flawIdList, mappedAction, comment);
             }
 
             MitigationAPIWrapper mitigationWrapper = new MitigationAPIWrapper();
@@ -336,43 +341,37 @@ public class VeracodeService {
         }
     }
 
-    private String submitRestMitigation(String buildId, String flawIdList, String action, String comment) throws Exception {
+    private String submitRestMitigation(String buildId, String appId, String flawIdList, String action, String comment) throws Exception {
         String[] creds = getCredentials();
         String id = creds[0];
         String secret = creds[1];
-
-        // Step 1: Get legacy App ID from build info
         java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
-        java.net.URL buildUrl = new java.net.URL("https://analysiscenter.veracode.com/api/5.0/getbuildinfo.do?build_id=" + buildId);
-        String buildAuth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, buildUrl, "GET");
-        
-        java.net.http.HttpRequest buildReq = java.net.http.HttpRequest.newBuilder()
-            .uri(java.net.URI.create(buildUrl.toString()))
-            .header("Authorization", buildAuth)
-            .GET()
-            .build();
+
+        // Step 1: Resolve appId if not provided
+        if (appId == null || appId.isEmpty()) {
+            ResultsAPIWrapper resultsWrapper = new ResultsAPIWrapper();
+            setupCredentials(resultsWrapper);
             
-        java.net.http.HttpResponse<String> buildRes = client.send(buildReq, java.net.http.HttpResponse.BodyHandlers.ofString());
-        String buildXml = buildRes.body();
-        if (buildXml == null || buildXml.contains("<error>")) {
-            throw new RuntimeException("Failed to get build info for build " + buildId + ": " + buildXml);
-        }
-        
-        String appId = null;
-        try {
-            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
-            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
-            org.w3c.dom.Document doc = builder.parse(new org.xml.sax.InputSource(new java.io.StringReader(buildXml)));
-            var nodes = doc.getElementsByTagName("buildinfo");
-            if (nodes.getLength() > 0) {
-                appId = nodes.item(0).getAttributes().getNamedItem("app_id").getNodeValue();
+            String buildXml = resultsWrapper.detailedReport(buildId);
+            if (buildXml == null || buildXml.contains("<error>")) {
+                throw new RuntimeException("Failed to get detailed report for build " + buildId + ": " + buildXml);
             }
-        } catch(Exception e) {
-            throw new RuntimeException("Error parsing build info XML", e);
+            
+            try {
+                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                DocumentBuilder builder = factory.newDocumentBuilder();
+                Document doc = builder.parse(new InputSource(new StringReader(buildXml)));
+                var nodes = doc.getElementsByTagName("detailedreport");
+                if (nodes.getLength() > 0) {
+                    appId = nodes.item(0).getAttributes().getNamedItem("app_id").getNodeValue();
+                }
+            } catch(Exception e) {
+                throw new RuntimeException("Error parsing detailed report XML", e);
+            }
         }
         
-        if (appId == null) {
-            throw new RuntimeException("Could not find legacy app_id for build " + buildId);
+        if (appId == null || appId.isEmpty()) {
+            throw new RuntimeException("Could not resolve legacy app_id for build " + buildId);
         }
         
         // Step 2: Get Application GUID

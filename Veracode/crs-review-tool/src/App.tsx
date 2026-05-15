@@ -1223,6 +1223,7 @@ export default function App() {
         inputTokens: response.inputTokens || estimatedInputTokens,
         outputTokens: response.outputTokens || estimatedOutputTokens,
         totalTokens: response.totalTokens || (estimatedInputTokens + estimatedOutputTokens),
+        engine: response.engine || aiProvider
       });
     } finally {
       setLoadingAIGroups(prev => {
@@ -1303,6 +1304,7 @@ export default function App() {
 
       const payload = {
         buildId,
+        appId: activeOverview.appId || "",
         flawIdList,
         action: actionStr,
         comment: group.aiComment,
@@ -2109,18 +2111,19 @@ export default function App() {
                                 className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-blue-500 focus:ring-0"
                                 onChange={(e) => {
                                   if (e.target.checked) {
-                                    const ids = currentGroups.map(
-                                      (g) => g.groupId,
-                                    );
+                                    const ids = currentGroups
+                                      .filter((g) => !g.status)
+                                      .map((g) => g.groupId);
                                     setSelectedGroups(new Set(ids));
                                   } else {
                                     setSelectedGroups(new Set());
                                   }
                                 }}
                                 checked={
-                                  currentGroups.length > 0 &&
-                                  selectedGroups.size === currentGroups.length
+                                  currentGroups.filter(g => !g.status).length > 0 &&
+                                  selectedGroups.size === currentGroups.filter(g => !g.status).length
                                 }
+                                disabled={currentGroups.filter(g => !g.status).length === 0}
                               />
                             </th>
                             <th className="p-4 w-20">Qty</th>
@@ -2418,9 +2421,10 @@ export default function App() {
                               e.target.value,
                             )
                           }
-                          className="w-full h-full bg-transparent text-sm text-blue-100 leading-relaxed border-none outline-none focus:ring-0 resize-none font-sans relative z-10"
+                          className="w-full h-full bg-transparent text-sm text-blue-100 leading-relaxed border-none outline-none focus:ring-0 resize-none font-sans relative z-10 disabled:opacity-50 disabled:cursor-not-allowed"
                           placeholder="Enter your mitigation proposal or pull AI analysis..."
                           rows={12}
+                          disabled={!!detailedGroup.status}
                         />
                         {!detailedGroup.aiComment && (
                           <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600 pointer-events-none">
@@ -2444,11 +2448,11 @@ export default function App() {
                         <div className="flex justify-end gap-3">
                           <button
                             onClick={() => handlePullAIResponse(detailedGroup)}
-                            disabled={loadingAIGroups.has(detailedGroup.groupId)}
+                            disabled={loadingAIGroups.has(detailedGroup.groupId) || !!detailedGroup.status}
                             className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white text-[11px] font-black uppercase tracking-[0.2em] rounded-xl hover:bg-blue-500 transition-all shadow-lg active:scale-95 disabled:opacity-50"
                           >
                             <RefreshCcw size={14} className={loadingAIGroups.has(detailedGroup.groupId) ? "animate-spin" : ""} /> 
-                            {loadingAIGroups.has(detailedGroup.groupId) ? "ANALYZING..." : "Refresh AI Assessment"}
+                            {loadingAIGroups.has(detailedGroup.groupId) ? "ANALYZING..." : `Refresh AI Assessment (${aiProvider})`}
                           </button>
                         </div>
                       </div>

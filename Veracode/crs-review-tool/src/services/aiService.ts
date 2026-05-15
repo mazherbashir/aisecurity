@@ -6,6 +6,7 @@ export interface AIResponse {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  engine?: string;
 }
 
 export async function getAIResponseForComment(
@@ -64,7 +65,8 @@ export async function getAIResponseForComment(
       result: data.result || 'AI could not generate a response.',
       inputTokens: inTokens,
       outputTokens: outTokens,
-      totalTokens: inTokens + outTokens
+      totalTokens: inTokens + outTokens,
+      engine: data.engine
     };
   } catch (error) {
     console.error('Error fetching AI response:', error);

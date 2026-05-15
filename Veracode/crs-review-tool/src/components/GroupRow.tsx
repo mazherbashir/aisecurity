@@ -44,9 +44,10 @@ export const GroupRow: React.FC<GroupRowProps> = ({
       <td className="p-4 align-top text-center">
         <input 
           type="checkbox" 
-          className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-blue-500 focus:ring-0 cursor-pointer"
+          className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-blue-500 focus:ring-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           checked={isSelected}
           onChange={onSelect}
+          disabled={!!group.status}
         />
       </td>
       <td className="p-4 align-top">
@@ -124,8 +125,9 @@ export const GroupRow: React.FC<GroupRowProps> = ({
                 onChange={(e) => onUpdateAIComment(e.target.value)}
                 onDoubleClick={onViewFull}
                 title="Double click to view full screen"
-                className="w-full p-3 text-[11px] bg-blue-500/5 border border-blue-500/20 rounded-xl text-blue-100 focus:border-blue-500/50 outline-none transition-all min-h-[80px] resize-none leading-relaxed cursor-pointer"
+                className="w-full p-3 text-[11px] bg-blue-500/5 border border-blue-500/20 rounded-xl text-blue-100 focus:border-blue-500/50 outline-none transition-all min-h-[80px] resize-none leading-relaxed cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder="Enter your mitigation proposal or pull AI analysis..."
+                disabled={!!group.status}
               />
               <div className="absolute right-3 top-3 opacity-30 group-hover/ai:opacity-100 transition-opacity">
                  <Sparkles className="text-blue-400" size={14} />
@@ -140,8 +142,9 @@ export const GroupRow: React.FC<GroupRowProps> = ({
                 </button>
                 <button 
                   onClick={handlePullAI} 
-                  className="p-1.5 bg-slate-900 border border-slate-700 rounded-lg hover:border-blue-500 text-blue-400 transition-all shadow-xl"
+                  className="p-1.5 bg-slate-900 border border-slate-700 rounded-lg hover:border-blue-500 text-blue-400 transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Regenerate"
+                  disabled={!!group.status || isPulling}
                 >
                   <RefreshCcw size={12} className={isPulling ? 'animate-spin' : ''} />
                 </button>
@@ -151,8 +154,8 @@ export const GroupRow: React.FC<GroupRowProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={handlePullAI}
-                disabled={isPulling}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50"
+                disabled={isPulling || !!group.status}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isPulling ? <RefreshCcw size={14} className="animate-spin" /> : <Sparkles size={14} />}
                 Pull AI Recommendation

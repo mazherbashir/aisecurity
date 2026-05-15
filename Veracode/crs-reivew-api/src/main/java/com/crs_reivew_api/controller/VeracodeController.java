@@ -53,11 +53,12 @@ public class VeracodeController {
     @org.springframework.web.bind.annotation.PostMapping("/api/veracode/mitigation")
     public String updateMitigation(@org.springframework.web.bind.annotation.RequestBody java.util.Map<String, String> payload) {
         String buildId = payload.get("buildId");
+        String appId = payload.get("appId");
         String flawIdList = payload.get("flawIdList");
         String action = payload.get("action");
         String comment = payload.get("comment");
         
-        System.out.println("Received mitigation update request for Build ID: " + buildId + ", Flaws: " + flawIdList + ", Action: " + action);
-        return veracodeService.updateMitigation(buildId, flawIdList, action, comment);
+        System.out.println("Received mitigation update request for Build ID: " + buildId + ", App ID: " + appId + ", Flaws: " + flawIdList + ", Action: " + action);
+        return veracodeService.updateMitigation(buildId, appId, flawIdList, action, comment);
     }
 }
