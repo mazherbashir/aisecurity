@@ -358,7 +358,7 @@ function ReviewTabContent({
     }
 
     const sastSection =
-      sastSummary && sastSummary.vulnerabilities > 0
+      rows !== ""
         ? StaticContent.sastHeader + rows + StaticContent.sastFooter
         : "";
 
@@ -390,7 +390,7 @@ function ReviewTabContent({
     }
 
     let scaSection = "";
-    if (backendScaSummary && backendScaSummary.vulnerabilities > 0) {
+    if (backendScaSummary) {
       const breakdown = backendScaSummary.breakdown || {};
       const severities = [
         {
@@ -773,7 +773,23 @@ export default function App() {
   const [sastMitigationProposal, setSastMitigationProposal] = useState<any>(null);
   const [scaMitigationProposal, setScaMitigationProposal] = useState<any>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [aiProvider, setAiProvider] = useState<AIProvider>("Gemini");
+  const [aiProvider, setAiProvider] = useState<AIProvider>(() => {
+    const saved = localStorage.getItem("preferred_ai_provider");
+    return (saved as AIProvider) || "Gemini";
+  });
+  const [hideProcessedFindings, setHideProcessedFindings] = useState<boolean>(() => {
+    return localStorage.getItem("hide_processed_findings") === "true";
+  });
+
+  // Persist user preferences
+  useEffect(() => {
+    localStorage.setItem("preferred_ai_provider", aiProvider);
+  }, [aiProvider]);
+
+  useEffect(() => {
+    localStorage.setItem("hide_processed_findings", String(hideProcessedFindings));
+  }, [hideProcessedFindings]);
+
   const [sastSystemPrompt, setSastSystemPrompt] = useState<string>("");
   const [scaSystemPrompt, setScaSystemPrompt] = useState<string>("");
   const [initialSastPrompt, setInitialSastPrompt] = useState<string>("");
@@ -803,7 +819,10 @@ export default function App() {
         if (Array.isArray(data.noSca)) setConfigNoSca(data.noSca);
         if (Array.isArray(data.engines)) {
           setConfigEngines(data.engines);
-          if (data.engines.length > 0) setAiProvider(data.engines[0]);
+          const saved = localStorage.getItem("preferred_ai_provider");
+          if (!saved && data.engines.length > 0) {
+            setAiProvider(data.engines[0]);
+          }
         }
         if (Array.isArray(data.history)) setConfigHistory(data.history);
         if (typeof data.scanValidityDays === "number")
@@ -1347,6 +1366,79 @@ export default function App() {
 
         const isSAST = group.type === "SAST";
         
+        if (isSAST) {
+          setSastMitigationProposal((prev: any) => {
+             if (!prev) return prev;
+             const updated = { ...prev };
+             let sev = group.severity;
+             if (sev === 'VeryHigh') sev = 'Very High';
+             if (!updated[sev] && updated[sev.replace("Information", "Info")] !== undefined) {
+               sev = sev.replace("Information", "Info");
+             } else if (!updated[sev] && updated[sev.replace("Info", "Information")] !== undefined) {
+               sev = sev.replace("Info", "Information");
+             }
+             if (updated[sev] !== undefined) {
+               updated[sev] = Math.max(0, updated[sev] - group.records.length);
+             }
+             if (updated.Total !== undefined) {
+               updated.Total = Math.max(0, updated.Total - group.records.length);
+             }
+             return updated;
+          });
+
+          if (actionType === "approved") {
+            setBackendSastSummary((prev: any) => {
+               if (!prev || !prev.breakdown) return prev;
+               const breakdown = { ...prev.breakdown };
+               let sevKey = group.severity;
+               if (sevKey === 'VeryHigh') sevKey = 'Very High';
+               if (!breakdown[sevKey] && breakdown[sevKey.replace("Information", "Info")]) {
+                 sevKey = sevKey.replace("Information", "Info");
+               } else if (!breakdown[sevKey] && breakdown[sevKey.replace("Info", "Information")]) {
+                 sevKey = sevKey.replace("Info", "Information");
+               }
+               if (!breakdown[sevKey]) return prev;
+
+               const sevData = { ...breakdown[sevKey] };
+               sevData.total = Math.max(0, sevData.total - group.records.length);
+               breakdown[sevKey] = sevData;
+               
+               const totalVulnerabilities = Math.max(0, prev.vulnerabilities - group.records.length);
+               return { ...prev, breakdown, vulnerabilities: totalVulnerabilities };
+            });
+          }
+        } else {
+          setScaMitigationProposal((prev: any) => {
+             if (!prev) return prev;
+             const updated = { ...prev };
+             let sev = group.severity;
+             if (sev === 'VeryHigh') sev = 'Very High';
+             if (updated[sev] !== undefined) {
+               updated[sev] = Math.max(0, updated[sev] - group.records.length);
+             }
+             if (updated.Total !== undefined) {
+               updated.Total = Math.max(0, updated.Total - group.records.length);
+             }
+             return updated;
+          });
+
+          if (actionType === "approved") {
+            setBackendScaSummary((prev: any) => {
+               if (!prev || !prev.breakdown) return prev;
+               const breakdown = { ...prev.breakdown };
+               let sevKey = group.severity;
+               if (sevKey === 'VeryHigh') sevKey = 'Very High';
+               if (!breakdown[sevKey]) return prev;
+
+               const sevData = { ...breakdown[sevKey] };
+               sevData.total = Math.max(0, sevData.total - group.records.length);
+               breakdown[sevKey] = sevData;
+               
+               const totalVulnerabilities = Math.max(0, prev.vulnerabilities - group.records.length);
+               return { ...prev, breakdown, vulnerabilities: totalVulnerabilities };
+            });
+          }
+        }
       } catch (err: any) {
         console.error(`Error during batch action for ${group.groupId}:`, err.message);
         lastErrorMsg = err.message;
@@ -1392,10 +1484,16 @@ export default function App() {
     });
   };
 
-  const currentGroups =
-    activeTab === "SAST"
+  const currentGroups = React.useMemo(() => {
+    const raw = activeTab === "SAST"
       ? getSortedGroups(aggregatedData.sast)
       : getSortedGroups(aggregatedData.sca);
+    
+    if (hideProcessedFindings) {
+      return raw.filter(g => !g.status);
+    }
+    return raw;
+  }, [activeTab, aggregatedData, hideProcessedFindings]);
 
   const activeOverview = React.useMemo(() => {
     const IS_PRODUCTION =
@@ -2170,11 +2268,24 @@ export default function App() {
 
                 <div className="p-6 space-y-8 overflow-y-auto">
                   <section className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
-                        SAST Prompt Engine
-                      </h3>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+                        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
+                          SAST Prompt Engine
+                        </h3>
+                      </div>
+                      <div 
+                        className="flex items-center gap-2 cursor-pointer group/toggle" 
+                        onClick={() => setHideProcessedFindings(!hideProcessedFindings)}
+                      >
+                        <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold group-hover/toggle:text-slate-400 transition-colors">
+                          Hide Processed Mitigation
+                        </span>
+                        <div className={`w-8 h-4 rounded-full relative transition-colors ${hideProcessedFindings ? 'bg-blue-600' : 'bg-slate-700'}`}>
+                          <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${hideProcessedFindings ? 'left-[18px]' : 'left-0.5'}`} />
+                        </div>
+                      </div>
                     </div>
                     <textarea
                       value={sastSystemPrompt}
