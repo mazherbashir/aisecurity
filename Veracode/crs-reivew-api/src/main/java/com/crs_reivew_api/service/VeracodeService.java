@@ -30,13 +30,21 @@ public class VeracodeService {
     public String getAppId(String appName) {
         if (appName != null) appName = appName.trim();
         try {
-            Map<String, String> appMap = getApplicationsMap();
+            Map<String, String> appMap = getApplicationsMap(false);
             
             if (appMap.containsKey(appName)) {
                 return appMap.get(appName);
             }
             
-            // Fuzzy match if not found
+            // Cache miss! Let's force a refresh to get the latest list from Veracode
+            debugLog("DEBUG: Cache miss for '" + appName + "', forcing fresh API update...");
+            appMap = getApplicationsMap(true);
+            
+            if (appMap.containsKey(appName)) {
+                return appMap.get(appName);
+            }
+            
+            // Still not found? Perform fuzzy matching on the updated list
             List<String> suggestions = findBestMatches(appName, appMap.keySet());
             throw new VeracodeException("Application '" + appName + "' not found.", "INVALID_APP", suggestions);
             
@@ -47,16 +55,20 @@ public class VeracodeService {
         }
     }
 
-    private Map<String, String> getApplicationsMap() throws Exception {
+    private Map<String, String> getApplicationsMap(boolean forceRefresh) throws Exception {
         java.nio.file.Path cachePath = java.nio.file.Paths.get("veracode", "history", "applications.json");
-        boolean shouldRefresh = true;
+        boolean shouldRefresh = forceRefresh;
 
-        if (java.nio.file.Files.exists(cachePath)) {
+        if (!shouldRefresh && java.nio.file.Files.exists(cachePath)) {
             long lastModified = java.nio.file.Files.getLastModifiedTime(cachePath).toMillis();
             long oneDayMillis = 1L * 24 * 60 * 60 * 1000;
             if (System.currentTimeMillis() - lastModified < oneDayMillis) {
                 shouldRefresh = false;
+            } else {
+                shouldRefresh = true;
             }
+        } else if (!java.nio.file.Files.exists(cachePath)) {
+            shouldRefresh = true;
         }
 
         if (!shouldRefresh) {
@@ -187,6 +199,8 @@ public class VeracodeService {
             JAXBContext context = JAXBContext.newInstance(VeracodeReport.class);
             Unmarshaller unmarshaller = context.createUnmarshaller();
             return (VeracodeReport) unmarshaller.unmarshal(new StringReader(xml));
+        } catch (RuntimeException re) {
+            throw re;
         } catch (Exception e) {
             throw new RuntimeException("Failed to get report object", e);
         }
@@ -213,7 +227,7 @@ public class VeracodeService {
         }
     }
 
-    public String updateMitigation(String buildId, String appId, String flawIdList, String action, String comment) {
+    public String updateMitigation(String buildId, String appId, String flawIdList, String action, String comment, String cveId, String type) {
         // Map UI actions to Veracode expected actions
         String mappedAction = action;
         if (action != null) {
@@ -250,6 +264,8 @@ public class VeracodeService {
         debugInfo.append("  build_id: ").append(buildId).append("\n");
         debugInfo.append("  action: ").append(mappedAction).append("\n");
         debugInfo.append("  flaw_id_list: ").append(flawIdList).append("\n");
+        debugInfo.append("  cve_id: ").append(cveId).append("\n");
+        debugInfo.append("  type: ").append(type).append("\n");
         debugInfo.append("  comment: ").append(comment).append("\n");
         debugInfo.append("==================================\n");
 
@@ -257,7 +273,7 @@ public class VeracodeService {
 
         try {
             if ("REST".equalsIgnoreCase(veracodeConfig.getMitigationApiType())) {
-                return submitRestMitigation(buildId, appId, flawIdList, mappedAction, comment);
+                return submitRestMitigation(buildId, appId, flawIdList, mappedAction, comment, cveId, type);
             }
 
             MitigationAPIWrapper mitigationWrapper = new MitigationAPIWrapper();
@@ -348,7 +364,7 @@ public class VeracodeService {
         }
     }
 
-    private String submitRestMitigation(String buildId, String appId, String flawIdList, String action, String comment) throws Exception {
+    private String submitRestMitigation(String buildId, String appId, String flawIdList, String action, String comment, String cveIdUI, String typeUI) throws Exception {
         String[] creds = getCredentials();
         String id = creds[0];
         String secret = creds[1];
@@ -383,9 +399,21 @@ public class VeracodeService {
         
         // Step 2: Get Application GUID
         String appGuid = getApplicationGuid(appId);
+        String cveId = cveIdUI;
+        boolean isSca = "SCA".equalsIgnoreCase(typeUI);
+
+        // If flawIdList is a CVE, resolve it dynamically to Veracode's internal component ID!
+        if (flawIdList != null && flawIdList.toUpperCase().startsWith("CVE-")) {
+            cveId = flawIdList.toUpperCase();
+            flawIdList = resolveScaCveToFindingId(appGuid, flawIdList);
+            isSca = true;
+        } else if (isSca) {
+            // We already have cveId and component_id from the UI, no reverse lookup needed!
+        }
         
         // Step 3: Post Annotation
-        java.net.URL annUrl = new java.net.URL("https://api.veracode.com/appsec/v2/applications/" + appGuid + "/annotations");
+        String endpointPath = isSca ? "/sca-annotations" : "/annotations";
+        java.net.URL annUrl = new java.net.URL("https://api.veracode.com/appsec/v2/applications/" + appGuid + endpointPath);
         String annAuth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, annUrl, "POST");
         
         // Use REST API action string uppercase mapping if needed. REST API requires "ACCEPTED" or "REJECTED"
@@ -393,9 +421,21 @@ public class VeracodeService {
         
         com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         com.fasterxml.jackson.databind.node.ObjectNode payload = mapper.createObjectNode();
-        payload.put("issue_list", flawIdList);
-        payload.put("comment", comment);
-        payload.put("action", restAction);
+        
+        if (isSca) {
+            // Undocumented Copilot Payload for SCA
+            payload.put("finding_id", appGuid); // Copilot says context_guid -> finding_id
+            payload.put("component_id", flawIdList);
+            if (cveId != null) {
+                payload.put("cve_id", cveId);
+            }
+            payload.put("action", restAction);
+            payload.put("comment", comment);
+        } else {
+            payload.put("issue_list", flawIdList);
+            payload.put("comment", comment);
+            payload.put("action", restAction);
+        }
         
         java.net.http.HttpRequest annReq = java.net.http.HttpRequest.newBuilder()
             .uri(java.net.URI.create(annUrl.toString()))
@@ -404,9 +444,23 @@ public class VeracodeService {
             .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload.toString()))
             .build();
             
+        System.out.println("DEBUG: Sending JSON payload to Veracode (" + annUrl.toString() + "):");
+        System.out.println(payload.toString());
+            
         java.net.http.HttpResponse<String> annRes = client.send(annReq, java.net.http.HttpResponse.BodyHandlers.ofString());
         if (annRes.statusCode() < 200 || annRes.statusCode() >= 300) {
-            throw new RuntimeException("REST API Mitigation failed (" + annRes.statusCode() + "): " + annRes.body());
+            String errorMsg = annRes.body();
+            try {
+                com.fasterxml.jackson.databind.JsonNode errNode = mapper.readTree(errorMsg);
+                if (errNode.has("_embedded") && errNode.get("_embedded").has("api_errors") && errNode.get("_embedded").get("api_errors").isArray()) {
+                    errorMsg = errNode.get("_embedded").get("api_errors").get(0).get("detail").asText();
+                } else if (errNode.has("message")) {
+                    errorMsg = errNode.get("message").asText();
+                }
+            } catch (Exception parseEx) {
+                // Keep raw body if parsing fails
+            }
+            throw new RuntimeException(errorMsg);
         }
         
         debugLog("DEBUG: REST Mitigation Success: " + annRes.body());
@@ -1084,7 +1138,8 @@ public class VeracodeService {
                 }
             }
 
-            updateScaSummaryFromReport(report, dto, pkgToFixedVersion);
+            java.util.Map<String, String> scaCveToFindingId = fetchScaFindingIdsAndLog(dto.overview.appId);
+            updateScaSummaryFromReport(report, dto, pkgToFixedVersion, scaCveToFindingId);
             populateScaDetailSectionFromReport(report, dto, pkgToFixedVersion);
             
             // Finalize Mitigation Breakdowns by looping over the populated lists
@@ -1096,7 +1151,9 @@ public class VeracodeService {
         }
     }
 
-    private void updateScaSummaryFromReport(VeracodeReport report, VeracodeReportDTO dto, java.util.Map<String, String> cveToFixedVersion) {
+    private void updateScaSummaryFromReport(VeracodeReport report, VeracodeReportDTO dto, 
+                                            java.util.Map<String, String> cveToFixedVersion,
+                                            java.util.Map<String, String> scaCveToFindingId) {
         if (report == null || report.getSca() == null || report.getSca().getVulnerableComponents() == null) {
             return;
         }
@@ -1146,7 +1203,13 @@ public class VeracodeService {
                 if (hasProposedAction) {
                     var fDto = new VeracodeReportDTO.FindingDTO();
                     fDto.type = "SCA";
-                    fDto.id = vuln.getCveId();
+                    
+                    // Look up internal numerical finding ID from REST map, fall back to cveId
+                    String cve = vuln.getCveId();
+                    String internalFindingId = (cve != null && scaCveToFindingId.containsKey(cve.toUpperCase())) ? 
+                        scaCveToFindingId.get(cve.toUpperCase()) : cve;
+                    
+                    fDto.id = internalFindingId;
                     fDto.cweid = vuln.getCweId();
                     fDto.title = vuln.getCveId();
                     fDto.severity = getSeverityName(sev);
@@ -1487,5 +1550,105 @@ public class VeracodeService {
             return v1.compareTo(v2) < 0;
         }
         return false;
+    }
+
+    private java.util.Map<String, String> fetchScaFindingIdsAndLog(String appId) {
+        java.util.Map<String, String> cveToFindingId = new java.util.HashMap<>();
+        try {
+            String appGuid = getApplicationGuid(appId);
+            if (appGuid == null || appGuid.isEmpty()) {
+                return cveToFindingId;
+            }
+
+            String[] creds = getCredentials();
+            String id = creds[0];
+            String secret = creds[1];
+
+            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+            java.net.URL url = new java.net.URL("https://api.veracode.com/appsec/v2/applications/" + appGuid + "/findings?scan_type=SCA");
+            String auth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, url, "GET");
+
+            java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create(url.toString()))
+                .header("Authorization", auth)
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+
+            java.net.http.HttpResponse<String> res = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+            
+            // Save raw findings JSON to log folder
+            try {
+                String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+                java.nio.file.Path logDir = java.nio.file.Paths.get("veracode", "logs");
+                java.nio.file.Files.createDirectories(logDir);
+                java.nio.file.Files.writeString(logDir.resolve("sca_findings_rest_" + appGuid + "_" + timestamp + ".json"), res.body());
+                debugLog("DEBUG: Saved raw REST SCA findings to log folder.");
+            } catch (Exception logEx) {
+                debugLog("DEBUG: Failed to save REST SCA findings to log: " + logEx.getMessage());
+            }
+
+            if (res.statusCode() == 200) {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                com.crs_reivew_api.dto.VeracodeScaFindingsRestDTO restDto = mapper.readValue(res.body(), com.crs_reivew_api.dto.VeracodeScaFindingsRestDTO.class);
+                if (restDto != null && restDto._embedded != null && restDto._embedded.findings != null) {
+                    for (var finding : restDto._embedded.findings) {
+                        if (finding.finding_details != null && finding.finding_details.cve != null) {
+                            String cve = finding.finding_details.cve.name;
+                            String internalId = finding.finding_details.component_id;
+                            if (cve != null && !cve.isEmpty() && internalId != null && !internalId.isEmpty()) {
+                                cveToFindingId.put(cve.toUpperCase(), internalId);
+                            }
+                        }
+                    }
+                }
+            } else {
+                debugLog("DEBUG: Failed to query SCA findings from REST API (" + res.statusCode() + "): " + res.body());
+            }
+        } catch (Exception e) {
+            debugLog("DEBUG: Error querying SCA REST findings: " + e.getMessage());
+        }
+        return cveToFindingId;
+    }
+
+    private String resolveScaCveToFindingId(String appGuid, String cveId) throws Exception {
+        String[] creds = getCredentials();
+        String id = creds[0];
+        String secret = creds[1];
+        java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+
+        java.net.URL url = new java.net.URL("https://api.veracode.com/appsec/v2/applications/" + appGuid + "/findings?scan_type=SCA");
+        String auth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, url, "GET");
+
+        java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+            .uri(java.net.URI.create(url.toString()))
+            .header("Authorization", auth)
+            .header("Accept", "application/json")
+            .GET()
+            .build();
+
+        java.net.http.HttpResponse<String> res = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+        if (res.statusCode() == 200) {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.crs_reivew_api.dto.VeracodeScaFindingsRestDTO restDto = mapper.readValue(res.body(), com.crs_reivew_api.dto.VeracodeScaFindingsRestDTO.class);
+            if (restDto != null && restDto._embedded != null && restDto._embedded.findings != null) {
+                for (var finding : restDto._embedded.findings) {
+                    if (finding.finding_details != null && finding.finding_details.cve != null) {
+                        String cve = finding.finding_details.cve.name;
+                        if (cveId.equalsIgnoreCase(cve)) {
+                            String internalId = finding.finding_details.component_id;
+                            if (internalId != null && !internalId.isEmpty()) {
+                                debugLog("DEBUG: Resolved SCA CVE " + cveId + " to internal Finding ID: " + internalId);
+                                return internalId;
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            debugLog("DEBUG: Failed to query SCA findings from REST API (" + res.statusCode() + "): " + res.body());
+        }
+        
+        throw new RuntimeException("Could not find a matching internal Veracode Finding ID for SCA CVE: " + cveId);
     }
 }

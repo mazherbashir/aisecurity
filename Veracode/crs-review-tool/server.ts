@@ -25,7 +25,7 @@ async function startServer() {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     if (useMocks) {
       return res.json({
-        engines: ["Gemini"],
+        engines: ["Gemini", "azure.gpt-4o"],
         scanValidityDays: 90,
         noSca: [],
         history: ["MockProfile1", "MockShopApp", "MockAdminPortal"]
@@ -89,8 +89,8 @@ async function startServer() {
              }
            },
            "AiEngine" : {
-             "aiEngines" : [ "Gemini" ],
-             "engineModels" : [ "azure.gpt-4o" ],
+             "aiEngines" : [ "Gemini", "azure.gpt-4o" ],
+             "engineModels" : [ "azure.gpt-4o", "gemini-1.5-flash" ],
              "sharedServiceEndpoint" : "https://genai-sharedservice-americas.pwcinternal.com/v1/chat/completions",
              "sharedServiceRole" : "user",
              "sharedServiceMaxTokens" : 1000
@@ -146,7 +146,28 @@ async function startServer() {
       if (!response.ok) {
         throw new Error(`Service at 127.0.0.1:8081 returned ${response.status}: ${response.statusText}`);
       }
-      const data = await response.json();
+      const data: any = await response.json();
+      
+      // Patch engines if they are missing or incomplete in production
+      if (data && data["AiEngine"]) {
+        if (!Array.isArray(data["AiEngine"].aiEngines) || data["AiEngine"].aiEngines.length <= 1) {
+          data["AiEngine"].aiEngines = ["Gemini", "azure.gpt-4o"];
+        }
+        if (!Array.isArray(data["AiEngine"].engineModels)) {
+          data["AiEngine"].engineModels = ["azure.gpt-4o", "gemini-1.5-flash"];
+        }
+      } else if (data) {
+        // If AiEngine section is totally missing, we'll let the frontend provide defaults
+        // but it's better to ensure it exists here as well
+        data["AiEngine"] = {
+          aiEngines: ["Gemini", "azure.gpt-4o"],
+          engineModels: ["azure.gpt-4o", "gemini-1.5-flash"],
+          sharedServiceEndpoint: "https://genai-sharedservice-americas.pwcinternal.com/v1/chat/completions",
+          sharedServiceRole: "user",
+          sharedServiceMaxTokens: 1000
+        };
+      }
+      
       res.json(data);
     } catch (error) {
       console.error('Error fetching prompts:', error);
@@ -235,16 +256,16 @@ async function startServer() {
       }
     }
 
-    const { comment, provider } = req.body;
+    const { prompt, engine } = req.body;
 
-    if (!comment) {
-      return res.status(400).json({ error: "Comment is required" });
+    if (!prompt) {
+      return res.status(400).json({ error: "Prompt is required" });
     }
 
-    const prompt = comment; // The prompt is now fully built on the frontend
+    const finalPrompt = prompt; // The prompt is now fully built on the frontend
 
     try {
-      if (provider === 'azure') {
+      if (engine === 'azure') {
         const apiKey = process.env.VITE_AZURE_OPENAI_KEY;
         const endpoint = process.env.VITE_AZURE_OPENAI_ENDPOINT;
         const deployment = process.env.VITE_AZURE_OPENAI_DEPLOYMENT;
@@ -287,7 +308,7 @@ async function startServer() {
         const geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
         const response = await geminiClient.models.generateContent({
           model: "gemini-1.5-flash",
-          contents: prompt,
+          contents: finalPrompt,
         });
         res.json({
           status: 'success',

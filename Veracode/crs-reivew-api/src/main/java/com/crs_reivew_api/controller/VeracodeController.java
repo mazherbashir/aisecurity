@@ -57,8 +57,10 @@ public class VeracodeController {
         String flawIdList = payload.get("flawIdList");
         String action = payload.get("action");
         String comment = payload.get("comment");
+        String cveId = payload.get("cveId");
+        String type = payload.get("type");
         
-        System.out.println("Received mitigation update request for Build ID: " + buildId + ", App ID: " + appId + ", Flaws: " + flawIdList + ", Action: " + action);
-        return veracodeService.updateMitigation(buildId, appId, flawIdList, action, comment);
+        System.out.println("Received mitigation update request for Build ID: " + buildId + ", App ID: " + appId + ", Flaws: " + flawIdList + ", Action: " + action + ", Type: " + type);
+        return veracodeService.updateMitigation(buildId, appId, flawIdList, action, comment, cveId, type);
     }
 }

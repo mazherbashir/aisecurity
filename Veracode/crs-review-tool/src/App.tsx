@@ -158,9 +158,10 @@ function aggregateFindings(
     // For SCA rely on title or id for identifier 
     let identifier: string | undefined = undefined;
     if (type === "SCA") {
-      identifier = finding.id && finding.id !== "N/A" && finding.id !== "0" && !finding.id.startsWith("sca-")
-        ? finding.id
-        : (finding.title !== "Unknown Product" && finding.title !== "Unknown Finding" ? finding.title : `CWE-${cweId}`);
+      // Use title as primary identifier for SCA as per user request
+      identifier = (finding.title && finding.title !== "Unknown Product" && finding.title !== "Unknown Finding")
+        ? finding.title
+        : (finding.id && finding.id !== "N/A" && finding.id !== "0" && !finding.id.startsWith("sca-") ? finding.id : `CWE-${cweId}`);
     }
 
     // Create a stable group ID
@@ -480,6 +481,7 @@ export default function App() {
   const [configNoSca, setConfigNoSca] = useState<string[]>([]);
   const [configEngines, setConfigEngines] = useState<string[]>([
     "Gemini",
+    "azure.gpt-4o",
     "Azure OpenAI",
     "OpenAI",
     "Anthropic",
@@ -516,12 +518,12 @@ export default function App() {
             saveScaLog: false
           }
         },
-        "AiEngine": data["AiEngine"] || {
-          aiEngines: data.aiEngines || [ "Gemini" ],
-          engineModels: data.engineModels || [ "azure.gpt-4o" ],
-          sharedServiceEndpoint: data.sharedServiceEndpoint || "https://genai-sharedservice-americas.pwcinternal.com/v1/chat/completions",
-          sharedServiceRole: data.sharedServiceRole || "user",
-          sharedServiceMaxTokens: data.sharedServiceMaxTokens || 1000
+        "AiEngine": {
+          aiEngines: data["AiEngine"]?.aiEngines || data.aiEngines || configEngines,
+          engineModels: data["AiEngine"]?.engineModels || data.engineModels || [ "azure.gpt-4o", "gemini-1.5-flash" ],
+          sharedServiceEndpoint: data["AiEngine"]?.sharedServiceEndpoint || data.sharedServiceEndpoint || "https://genai-sharedservice-americas.pwcinternal.com/v1/chat/completions",
+          sharedServiceRole: data["AiEngine"]?.sharedServiceRole || data.sharedServiceRole || "user",
+          sharedServiceMaxTokens: data["AiEngine"]?.sharedServiceMaxTokens || data.sharedServiceMaxTokens || 1000
         },
         "SecondaryAudit": data["SecondaryAudit"] || {
           auditorModel: data.auditorModel || "gpt-4o-mini",
@@ -569,20 +571,6 @@ export default function App() {
       // Ensure current settingsTab exists in the normalized config
       if (!normalizedData[settingsTab]) {
         setSettingsTab("SAST&SCA Prompts");
-      }
-      
-      // Update local states that derive from config
-      if (normalizedData["System"]) {
-        setConfigScanValidityDays(normalizedData["System"].scanValidityDays || 90);
-        if (normalizedData["System"].safeSCAVERSION) {
-          setScaSafeVersionEnabled(normalizedData["System"].safeSCAVERSION.scaSafeVersionEnabled);
-        }
-      }
-      if (normalizedData["Exclusions"] && Array.isArray(normalizedData["Exclusions"].noScaArchitectures)) {
-        setConfigNoSca(normalizedData["Exclusions"].noScaArchitectures);
-      }
-      if (normalizedData["AiEngine"] && Array.isArray(normalizedData["AiEngine"].aiEngines)) {
-        setConfigEngines(normalizedData["AiEngine"].aiEngines);
       }
     } catch (err) {
       console.error("Failed to fetch config", err);
@@ -1093,6 +1081,8 @@ export default function App() {
     let lastErrorMsg = "";
     for (const group of selectedItems) {
       const flawIdList = group.records.map((f: any) => f.issue_id || f.id).join(",");
+      const isSCA = group.type === "SCA";
+      const cveId = isSCA ? (group.records[0]?.title || null) : null;
 
       const payload = {
         buildId,
@@ -1100,6 +1090,8 @@ export default function App() {
         flawIdList,
         action: actionStr,
         comment: group.aiComment,
+        cveId,
+        type: group.type,
       };
 
       try {
