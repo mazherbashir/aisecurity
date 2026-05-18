@@ -1,0 +1,102 @@
+# Full‑Stack Application (Java + React)
+
+This repository contains a full‑stack application built with a **Java (Spring Boot)** backend and a **React** frontend.  
+The frontend is compiled and copied into the backend’s `src/main/resources/static` directory, allowing Spring Boot to serve the UI directly as a single deployable JAR.
+
+---
+
+## 📁 Project Structure
+
+root/
+│
+├── backend/                 # Spring Boot backend
+│   ├── src/
+│   └── pom.xml
+│
+├── frontend/                # React frontend
+│   ├── src/
+│   └── package.json
+│
+├── build.sh                 # Linux/macOS build script
+├── build.bat                # Windows build script
+└── README.md
+
+---
+
+## 🚀 Build Instructions
+
+### Linux / macOS
+Run from the project root:
+
+
+### Windows
+Run:
+
+
+Both scripts perform:
+
+1. Build React (`npm install` + `npm run build`)
+2. Clean backend static directory
+3. Copy React build output into backend
+4. Build Spring Boot backend (`mvn clean package`)
+5. Produce the final JAR in:
+
+
+---
+
+## ▶️ Running the Application
+
+After building, run:
+
+
+Default port: **8081**  
+The React UI is served automatically by Spring Boot.
+
+---
+
+## 🛠 Development Workflow
+
+### Frontend (React)
+
+
+Runs on port **3000**.
+
+### Backend (Spring Boot)
+
+
+Runs on port **8081**.
+
+---
+
+## 📦 Production Build Flow
+
+
+This ensures:
+
+- One deployable artifact  
+- No CORS issues  
+- No version drift  
+- Clean CI/CD pipeline  
+
+---
+
+## 🧪 Running Tests
+
+### Backend tests
+
+
+### Frontend tests
+
+
+---
+
+## 📄 License
+
+This project is proprietary unless a license is added.
+
+---
+
+## 👤 Author
+
+Mazher Bashir  
+Full‑stack engineer (Java + React)

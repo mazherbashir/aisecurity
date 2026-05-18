@@ -1,0 +1,33 @@
+# Build artifacts (rebuilt inside the container)
+target/
+
+# IDE & OS metadata
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Local test / scratch files
+*.class
+*.java
+abc.xml
+app.log
+*.json
+prettified_sample.json
+models*.json
+DirectTest*
+Reflect*
+TestUpload*
+TestWrapper*
+
+# Veracode data directories (mount these as volumes at runtime)
+veracode/
+
+# Docs
+README.md
+HELP.md

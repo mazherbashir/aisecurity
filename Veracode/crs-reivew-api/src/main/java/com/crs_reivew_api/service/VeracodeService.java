@@ -173,6 +173,13 @@ public class VeracodeService {
             setupCredentials(resultsWrapper);
             String xml = resultsWrapper.detailedReport(buildId);
             
+            if (xml != null && xml.contains("<error>")) {
+                if (xml.contains("No report available")) {
+                    throw new RuntimeException("Veracode Error: No report available. There may be a scan in progress. Please check Veracode or try again later.");
+                }
+                throw new RuntimeException("Veracode API Error: " + xml);
+            }
+            
             // Save to log file for analysis
             saveXmlToLog("detailed_report", buildId, xml);
 
@@ -375,31 +382,7 @@ public class VeracodeService {
         }
         
         // Step 2: Get Application GUID
-        java.net.URL appsUrl = new java.net.URL("https://api.veracode.com/appsec/v1/applications?legacy_id=" + appId);
-        String appsAuth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, appsUrl, "GET");
-        
-        java.net.http.HttpRequest appsReq = java.net.http.HttpRequest.newBuilder()
-            .uri(java.net.URI.create(appsUrl.toString()))
-            .header("Authorization", appsAuth)
-            .GET()
-            .build();
-            
-        java.net.http.HttpResponse<String> appsRes = client.send(appsReq, java.net.http.HttpResponse.BodyHandlers.ofString());
-        if (appsRes.statusCode() != 200) {
-            throw new RuntimeException("Failed to get application GUID: " + appsRes.body());
-        }
-        
-        String appGuid = null;
-        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        com.fasterxml.jackson.databind.JsonNode appsRoot = mapper.readTree(appsRes.body());
-        com.fasterxml.jackson.databind.JsonNode appsArr = appsRoot.path("_embedded").path("applications");
-        if (appsArr.isArray() && appsArr.size() > 0) {
-            appGuid = appsArr.get(0).path("guid").asText();
-        }
-        
-        if (appGuid == null || appGuid.isEmpty()) {
-            throw new RuntimeException("Application GUID not found in API response for legacy ID " + appId);
-        }
+        String appGuid = getApplicationGuid(appId);
         
         // Step 3: Post Annotation
         java.net.URL annUrl = new java.net.URL("https://api.veracode.com/appsec/v2/applications/" + appGuid + "/annotations");
@@ -408,6 +391,7 @@ public class VeracodeService {
         // Use REST API action string uppercase mapping if needed. REST API requires "ACCEPTED" or "REJECTED"
         String restAction = action.toUpperCase();
         
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         com.fasterxml.jackson.databind.node.ObjectNode payload = mapper.createObjectNode();
         payload.put("issue_list", flawIdList);
         payload.put("comment", comment);
@@ -430,6 +414,7 @@ public class VeracodeService {
     }
 
     private void saveDebugLog(String content) {
+        if (!veracodeConfig.isSaveXmlLogs()) return;
         try {
             String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
             java.nio.file.Path logDir = java.nio.file.Paths.get("veracode", "logs");
@@ -441,6 +426,108 @@ public class VeracodeService {
             System.err.println("Warning: Could not save debug log: " + e.getMessage());
         }
     }
+
+    private String getApplicationGuid(String appId) throws Exception {
+        String[] creds = getCredentials();
+        String id = creds[0];
+        String secret = creds[1];
+        java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+
+        java.net.URL appsUrl = new java.net.URL("https://api.veracode.com/appsec/v1/applications?legacy_id=" + appId);
+        String appsAuth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, appsUrl, "GET");
+        
+        java.net.http.HttpRequest appsReq = java.net.http.HttpRequest.newBuilder()
+            .uri(java.net.URI.create(appsUrl.toString()))
+            .header("Authorization", appsAuth)
+            .GET()
+            .build();
+            
+        java.net.http.HttpResponse<String> appsRes = client.send(appsReq, java.net.http.HttpResponse.BodyHandlers.ofString());
+        if (appsRes.statusCode() != 200) {
+            throw new RuntimeException("Failed to get application GUID: " + appsRes.body());
+        }
+        
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.JsonNode appsRoot = mapper.readTree(appsRes.body());
+        com.fasterxml.jackson.databind.JsonNode appsArr = appsRoot.path("_embedded").path("applications");
+        if (appsArr.isArray() && appsArr.size() > 0) {
+            return appsArr.get(0).path("guid").asText();
+        }
+        
+        throw new RuntimeException("Application GUID not found in API response for legacy ID " + appId);
+    }
+
+    private String fetchFixedVersionFromGitHub(String packageName, String ecosystem) {
+        String token = veracodeConfig.getGithubToken();
+        if (token == null || token.isEmpty()) {
+            if (veracodeConfig.isScaSafeVersionEnabled()) {
+                System.out.println("WARNING: SCA Safe Version is ENABLED but veracode.api.githubToken is NOT configured. Skipping remediation lookups.");
+            }
+            return null;
+        }
+
+        try {
+            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            
+            // Map to GitHub Ecosystems
+            String ghEcosystem = switch (ecosystem.toLowerCase()) {
+                case "maven" -> "MAVEN";
+                case "npm" -> "NPM";
+                case "pip", "pypi" -> "PIP";
+                case "go" -> "GO";
+                case "nuget" -> "NUGET";
+                case "rubygems", "gem" -> "RUBYGEMS";
+                case "crates.io", "rust" -> "RUST";
+                case "packagist", "php" -> "COMPOSER";
+                default -> null;
+            };
+
+            if (ghEcosystem == null) return null;
+
+            String query = "query { securityVulnerabilities(first: 1, package: \"" + packageName + "\", ecosystem: " + ghEcosystem + ") { " +
+                           "nodes { firstPatchedVersion { identifier } } } }";
+            
+            com.fasterxml.jackson.databind.node.ObjectNode root = mapper.createObjectNode();
+            root.put("query", query);
+
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create("https://api.github.com/graphql"))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + token)
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(root)))
+                .build();
+
+            java.net.http.HttpResponse<String> response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            
+            // Save raw GitHub response for verification (Granular control)
+            if (veracodeConfig.isSaveScaLog()) {
+                try {
+                    java.nio.file.Path logDir = java.nio.file.Paths.get("veracode", "logs");
+                    java.nio.file.Files.createDirectories(logDir);
+                    String safeName = packageName.replaceAll("[^a-zA-Z0-9]", "_");
+                    java.nio.file.Files.writeString(logDir.resolve("github_response_" + safeName + ".json"), response.body());
+                } catch (Exception e) {}
+            }
+
+            if (response.statusCode() == 200) {
+                com.fasterxml.jackson.databind.JsonNode resRoot = mapper.readTree(response.body());
+                com.fasterxml.jackson.databind.JsonNode nodes = resRoot.path("data").path("securityVulnerabilities").path("nodes");
+                if (nodes.isArray() && nodes.size() > 0) {
+                    String fixed = nodes.get(0).path("firstPatchedVersion").path("identifier").asText();
+                    if (fixed != null && !fixed.isEmpty() && !fixed.equals("null")) {
+                        return fixed;
+                    }
+                }
+            } else {
+                debugLog("DEBUG: GitHub GraphQL failed with status " + response.statusCode() + ": " + response.body());
+            }
+        } catch (Exception e) {
+            debugLog("DEBUG: GitHub API call failed: " + e.getMessage());
+        }
+        return null;
+    }
+
 
     public VeracodeReportDTO getFinalReport(String applicationName, String appId, String buildId, boolean includeBuildInfo) {
         if (applicationName != null) applicationName = applicationName.trim();
@@ -515,7 +602,6 @@ public class VeracodeService {
         // Conditionally Fetch Build Info
         if (includeBuildInfo) {
             try {
-                dto.buildInfo = getBuildInfo(effectiveBuildId);
             } catch (Exception e) {
                 System.err.println("Warning: Could not fetch build info: " + e.getMessage());
             }
@@ -783,7 +869,14 @@ public class VeracodeService {
         try {
             ResultsAPIWrapper resultsWrapper = new ResultsAPIWrapper();
             setupCredentials(resultsWrapper);
-            return resultsWrapper.detailedReport(buildId);
+            String xml = resultsWrapper.detailedReport(buildId);
+            if (xml != null && xml.contains("<error>")) {
+                if (xml.contains("No report available")) {
+                    throw new RuntimeException("Veracode Error: No report available. There may be a scan in progress. Please check Veracode or try again later.");
+                }
+                throw new RuntimeException("Veracode API Error: " + xml);
+            }
+            return xml;
         } catch (Exception e) {
             throw new RuntimeException("Failed to get raw detailed report", e);
         }
@@ -955,9 +1048,44 @@ public class VeracodeService {
                 dto.sastSummary.breakdown.put(sevName, sevBreakdown);
             });
             
-            // Map SCA separately
-            updateScaSummaryFromReport(report, dto);
-            populateScaDetailSectionFromReport(report, dto);
+            // Map SCA remediation data using GitHub GraphQL (Conditional)
+            java.util.Map<String, String> pkgToFixedVersion = new java.util.HashMap<>();
+            dto.scaSafeVersionEnabled = veracodeConfig.isScaSafeVersionEnabled();
+            
+            if (dto.scaSafeVersionEnabled && report.getSca() != null && report.getSca().getVulnerableComponents() != null) {
+                try {
+                    for (var comp : report.getSca().getVulnerableComponents().getComponents()) {
+                        // Only query for components that have active vulnerabilities
+                        boolean hasActiveVulns = false;
+                        if (comp.getVulnerabilityList() != null && comp.getVulnerabilityList().getVulnerabilities() != null) {
+                            for (var v : comp.getVulnerabilityList().getVulnerabilities()) {
+                                if (!isScaVulnerabilityMitigated(v) && v.getFixedVersion() == null) {
+                                    hasActiveVulns = true;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (hasActiveVulns) {
+                            String name = comp.getLibrary();
+                            String libId = comp.getLibraryId();
+                            if (libId != null && libId.contains(":")) {
+                                String ecosystem = libId.split(":")[0];
+                                String ghFixed = fetchFixedVersionFromGitHub(name, ecosystem);
+                                if (ghFixed != null) {
+                                    debugLog("DEBUG: GitHub found fix for " + name + ": " + ghFixed);
+                                    pkgToFixedVersion.put(name, ghFixed);
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("Warning: Could not fetch SCA data from GitHub: " + e.getMessage());
+                }
+            }
+
+            updateScaSummaryFromReport(report, dto, pkgToFixedVersion);
+            populateScaDetailSectionFromReport(report, dto, pkgToFixedVersion);
             
             // Finalize Mitigation Breakdowns by looping over the populated lists
             populateMitigationBreakdowns(dto);
@@ -968,7 +1096,7 @@ public class VeracodeService {
         }
     }
 
-    private void updateScaSummaryFromReport(VeracodeReport report, VeracodeReportDTO dto) {
+    private void updateScaSummaryFromReport(VeracodeReport report, VeracodeReportDTO dto, java.util.Map<String, String> cveToFixedVersion) {
         if (report == null || report.getSca() == null || report.getSca().getVulnerableComponents() == null) {
             return;
         }
@@ -1026,6 +1154,14 @@ public class VeracodeService {
                     fDto.cve_summary = vuln.getSummary();
                     fDto.userComments = scaComments;
                     fDto.remediation_due_date = calculateDueDate(vuln.getFirstFoundDate(), dto.overview.tier, fDto.severity);
+                    
+                    // Use REST-derived fixed version if XML is empty
+                    String fixedVer = vuln.getFixedVersion();
+                    if ((fixedVer == null || fixedVer.isEmpty() || "N/A".equals(fixedVer)) && cveToFixedVersion.containsKey(vuln.getCveId())) {
+                        fixedVer = cveToFixedVersion.get(vuln.getCveId());
+                    }
+                    fDto.fixedVersion = fixedVer;
+                    
                     dto.findingsWithCommentsSCA.add(fDto);
                 }
             }
@@ -1039,7 +1175,7 @@ public class VeracodeService {
         dto.scaSummary.breakdown.putAll(formatScaBreakdown(scaTotals));
     }
 
-    private void populateScaDetailSectionFromReport(VeracodeReport report, VeracodeReportDTO dto) {
+    private void populateScaDetailSectionFromReport(VeracodeReport report, VeracodeReportDTO dto, java.util.Map<String, String> cveToFixedVersion) {
         if (report == null || report.getSca() == null || report.getSca().getVulnerableComponents() == null) {
             return;
         }
@@ -1073,6 +1209,28 @@ public class VeracodeService {
                 var detail = new VeracodeReportDTO.ScaDetailDTO();
                 detail.packageName = library;
                 detail.version = comp.getVersion();
+                
+                // Get the safe version from GitHub/OSV fallback or XML
+                String ghsaFix = componentVulns.stream()
+                    .map(v -> {
+                        String fv = v.getFixedVersion();
+                        if ((fv == null || fv.isEmpty() || "N/A".equals(fv)) && cveToFixedVersion.containsKey(library)) {
+                            fv = cveToFixedVersion.get(library);
+                        }
+                        return fv;
+                    })
+                    .filter(v -> v != null && !v.isEmpty() && !"N/A".equals(v))
+                    .sorted((v1, v2) -> v2.compareTo(v1))
+                    .findFirst()
+                    .orElse(null);
+
+                if (ghsaFix == null) {
+                    detail.safeVersion = veracodeConfig.getScaNoFixMessage();
+                } else if (isVersionLower(ghsaFix, detail.version)) {
+                    detail.safeVersion = veracodeConfig.getScaStaleFixMessage();
+                } else {
+                    detail.safeVersion = ghsaFix;
+                }
                 
                 detail.firstFoundDate = componentVulns.stream()
                     .map(v -> v.getFirstFoundDate())
@@ -1311,5 +1469,23 @@ public class VeracodeService {
             .map(java.util.Map.Entry::getKey)
             .findFirst()
             .orElse(technicalName);
+    }
+
+    private boolean isVersionLower(String v1, String v2) {
+        if (v1 == null || v2 == null) return false;
+        try {
+            String[] parts1 = v1.replaceAll("[^0-9.]", "").split("\\.");
+            String[] parts2 = v2.replaceAll("[^0-9.]", "").split("\\.");
+            int length = Math.max(parts1.length, parts2.length);
+            for (int i = 0; i < length; i++) {
+                int p1 = i < parts1.length && !parts1[i].isEmpty() ? Integer.parseInt(parts1[i]) : 0;
+                int p2 = i < parts2.length && !parts2[i].isEmpty() ? Integer.parseInt(parts2[i]) : 0;
+                if (p1 < p2) return true;
+                if (p1 > p2) return false;
+            }
+        } catch (Exception e) {
+            return v1.compareTo(v2) < 0;
+        }
+        return false;
     }
 }

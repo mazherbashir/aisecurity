@@ -14,7 +14,7 @@ let config: AppConfig = {
   ENDPOINTS: {
     configInfo: '/api/config/info',
     configPrompts: '/api/config/prompts',
-    getFinalReport: '/getfinalreport',
+    getFinalReport: '/api/getfinalreport',
     veracodeMitigation: '/api/veracode/mitigation',
     aiAnalyze: '/api/ai'
   }

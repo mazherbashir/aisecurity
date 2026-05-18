@@ -27,23 +27,45 @@ public class ConfigController {
     public java.util.Map<String, Object> getConfigInfo() {
         java.util.Map<String, Object> info = new java.util.HashMap<>();
         info.put("history", configService.getLatestHistoryFiles());
-        info.put("engines", configService.getAiEngines());
+        
+        java.util.List<String> combinedEngines = new java.util.ArrayList<>();
+        if (configService.getAiEngines() != null) {
+            combinedEngines.addAll(configService.getAiEngines());
+        }
+        if (configService.getEngineModels() != null) {
+            combinedEngines.addAll(configService.getEngineModels());
+        }
+        info.put("engines", combinedEngines);
+        
         info.put("scanValidityDays", configService.getScanValidityDays());
         info.put("noSca", configService.getNoSca());
+        info.put("scaSafeVersionEnabled", configService.isScaSafeVersionEnabled());
         return info;
     }
 
     @GetMapping("/prompts")
-    public Map<String, String> getPrompts() {
-        return configService.getPrompts();
+    public com.crs_reivew_api.dto.GroupedSystemConfigDTO getPrompts() {
+        return configService.getGroupedSystemConfigDTO();
     }
 
     @PostMapping("/prompts")
-    public String updatePrompts(@RequestBody Map<String, String> payload) {
+    public String updatePrompts(@RequestBody com.crs_reivew_api.dto.GroupedSystemConfigDTO payload) {
         try {
-            String sastPrompt = payload.get("sastPrompt");
-            String scaPrompt = payload.get("scaPrompt");
-            configService.updatePrompts(sastPrompt, scaPrompt);
+            String sastPrompt = null;
+            String scaPrompt = null;
+            if (payload != null && payload.getSastAndScaPrompts() != null) {
+                sastPrompt = payload.getSastAndScaPrompts().getSastPrompt();
+                scaPrompt = payload.getSastAndScaPrompts().getScaPrompt();
+            }
+            
+            String auditorPrompt = null;
+            String fallbackText = null;
+            if (payload != null && payload.getSecondaryAudit() != null) {
+                auditorPrompt = payload.getSecondaryAudit().getAuditorPrompt();
+                fallbackText = payload.getSecondaryAudit().getFallbackText();
+            }
+            
+            configService.updatePrompts(sastPrompt, scaPrompt, auditorPrompt, fallbackText);
             return "Prompts updated successfully";
         } catch (Exception e) {
             return "Error updating prompts: " + e.getMessage();

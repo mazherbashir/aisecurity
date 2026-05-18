@@ -23,10 +23,8 @@ export async function getAIResponseForComment(
   try {
     const bodyArgs: any = { 
       engine: provider,
-      provider: provider, // keeping both for compat
-      prompt: comment,
-      comment: comment,   // keeping both for compat
-      type: type 
+      type: type,
+      prompt: comment
     };
     if (flawId) bodyArgs.flawId = flawId;
     if (flawSummary) bodyArgs.flawSummary = flawSummary;

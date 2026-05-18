@@ -48,6 +48,8 @@ import { getAIResponseForComment } from "./services/aiService";
 import { GroupRow } from "./components/GroupRow";
 import { CWE_BASE_URL } from "./constants";
 import { getEndpoint } from "./config";
+import { calculateIsScanTooOld, updateBackendSummary, updateMitigationProposal } from "./lib/state-update-utils";
+import { generateReviewSummary } from "./lib/summary-logic";
 import { StaticContent } from "./staticContent";
 
 // --- Error Boundary and Debug Logger Support ---
@@ -239,6 +241,7 @@ function ReviewTabContent({
   sastSummary,
   configNoSca = [],
   configScanValidityDays = 90,
+  scaSafeVersionEnabled = false,
   aggregatedData,
 }: {
   overview: any;
@@ -248,6 +251,7 @@ function ReviewTabContent({
   sastSummary: any;
   configNoSca?: string[];
   configScanValidityDays?: number;
+  scaSafeVersionEnabled?: boolean;
   aggregatedData: { sast: AggregatedGroup[]; sca: AggregatedGroup[] };
 }) {
   const [isEditMode, setIsEditMode] = useState(false);
@@ -280,12 +284,7 @@ function ReviewTabContent({
       return ovw?.generationDate || null;
     };
     const effectiveDate = getEffectiveScanDate(overview);
-
-    const daysSinceScan = effectiveDate
-      ? (new Date().getTime() - new Date(effectiveDate).getTime()) /
-        (1000 * 3600 * 24)
-      : 0;
-    const isActuallyTooOld = daysSinceScan > configScanValidityDays;
+    const isActuallyTooOld = calculateIsScanTooOld(effectiveDate, configScanValidityDays);
 
     // If scan is too old, ONLY display the scan too old message between header and footer
     if (isScanTooOld || isActuallyTooOld) {
@@ -297,342 +296,15 @@ function ReviewTabContent({
       );
     }
 
-    let rows = "";
-    if (backendSastSummary && backendSastSummary.breakdown) {
-      Object.entries(backendSastSummary.breakdown).forEach(
-        ([severity, data]: [string, any]) => {
-          data.findings?.forEach((finding: any) => {
-            const cweIdMatch = finding.cwe.match(/\d+/);
-            const extractedCwe = cweIdMatch ? cweIdMatch[0] : "";
-            const remediationDate =
-              (finding.remediation_due_date || "").split(" ")[0] || "N/A";
-              
-            let approvedCount = 0;
-            let rejectedCount = 0;
-            const originalCount = parseInt(finding.count, 10) || 0;
-            
-            if (aggregatedData?.sast) {
-              for (const g of aggregatedData.sast) {
-                // Normalize severity strings to match what comes from backend
-                let gSev = g.severity;
-                if (gSev === "VeryHigh") gSev = "Very High";
-                if (gSev === "Information") gSev = "Info";
-                
-                let bSev = severity;
-                if (bSev === "VeryHigh") bSev = "Very High";
-                if (bSev === "Information") bSev = "Info";
-                
-                if (String(g.cweId) === String(extractedCwe) && gSev === bSev) {
-                  if (g.status === "approved") {
-                    approvedCount += g.records.length;
-                  }
-                  if (g.status === "rejected") {
-                    rejectedCount += g.records.length;
-                  }
-                }
-              }
-            }
-            
-            const noneCount = Math.max(0, originalCount - approvedCount - rejectedCount);
-            const severityClass = severity.toLowerCase().replace(" ", "");
-
-            const buildRow = (count: number, label: string, bgClass: string) => {
-              if (count <= 0) return "";
-              return `<tr>
-                <td><span class="crs-rounded minwidth ${severityClass}">${severity}</span></td>
-                <td><a target="_blank" href="https://cwe.mitre.org/data/definitions/${extractedCwe}.html">${finding.cwe}</a></td>
-                <td><span class="crs-rounded sev ${bgClass}">${label}</span></td>
-                <td>${count}</td>
-                <td>${remediationDate}</td>
-            </tr>`;
-            };
-
-            const noneHtml = buildRow(noneCount, "None", "bg-gold");
-            const approvedHtml = buildRow(approvedCount, "Approved", "bg-green");
-            const rejectedHtml = buildRow(rejectedCount, "Rejected", "bg-red");
-            
-            rows += noneHtml + approvedHtml + rejectedHtml;
-          });
-        },
-      );
-    }
-
-    const sastSection =
-      rows !== ""
-        ? StaticContent.sastHeader + rows + StaticContent.sastFooter
-        : "";
-
-    let missingScaMessages = "";
-    if (overview.architectures && Array.isArray(overview.architectures)) {
-      let scaEcosystemsArray: string[] = [];
-      if (Array.isArray(overview.scaEcosystems)) {
-        scaEcosystemsArray = overview.scaEcosystems.map((s: string) =>
-          String(s).trim().toUpperCase(),
-        );
-      } else if (typeof overview.scaEcosystems === "string") {
-        scaEcosystemsArray = overview.scaEcosystems
-          .replace(/[\[\]]/g, "")
-          .split(",")
-          .map((s: string) => s.trim().toUpperCase());
-      }
-
-      configNoSca.forEach((item) => {
-        if (!scaEcosystemsArray.includes(item.toUpperCase())) {
-          scaEcosystemsArray.push(item.toUpperCase());
-        }
-      });
-
-      overview.architectures.forEach((arch: string) => {
-        if (!scaEcosystemsArray.includes(arch.toUpperCase())) {
-          missingScaMessages += StaticContent.missingScaMsg(arch);
-        }
-      });
-    }
-
-    let scaSection = "";
-    if (backendScaSummary) {
-      const breakdown = backendScaSummary.breakdown || {};
-      const severities = [
-        {
-          name: "Very High",
-          count: breakdown["Very High"]?.total || 0,
-          class: "veryhigh",
-        },
-        { name: "High", count: breakdown["High"]?.total || 0, class: "high" },
-        {
-          name: "Medium",
-          count: breakdown["Medium"]?.total || 0,
-          class: "medium",
-        },
-        { name: "Low", count: breakdown["Low"]?.total || 0, class: "low" },
-      ];
-      const activeSeverities = severities.filter((s) => s.count > 0);
-      const vulnerablePackages = backendScaSummary.totalVulnerablePackages || 0;
-      const totalPackages = backendScaSummary.totalPackages || 0;
-
-      let vulnerabilitySentencePart = "";
-      if (activeSeverities.length > 0) {
-        const descriptions = activeSeverities.map(
-          (s) =>
-            `${s.count} <span class="crs-rounded ${s.class}">${s.name}</span>`,
-        );
-        if (descriptions.length > 1) {
-          vulnerabilitySentencePart =
-            descriptions.slice(0, -1).join(", ") +
-            " and " +
-            descriptions.slice(-1);
-        } else {
-          vulnerabilitySentencePart = descriptions[0];
-        }
-      } else {
-        vulnerabilitySentencePart = "0";
-      }
-
-      const listItems = activeSeverities
-        .map(
-          (s) =>
-            `        <li><span class="crs-rounded minwidth ${s.class}">${s.name}</span>: ${s.count}</li>`,
-        )
-        .join("\n");
-
-      const scaEcosystems = (overview.scaEcosystems || "").toUpperCase();
-      const hasJS = scaEcosystems.includes("JAVASCRIPT");
-      const hasJava = scaEcosystems.includes("JAVA");
-
-      let hasRequest = false;
-      Object.values(breakdown).forEach((data: any) => {
-        data.findings?.forEach((finding: any) => {
-          if (
-            finding.packageName &&
-            finding.packageName.toLowerCase() === "request"
-          ) {
-            hasRequest = true;
-          }
-        });
-      });
-
-      const nodeMsgUsed = hasJS ? ` ${StaticContent.nodeMsg}` : "";
-      const requestMsgUsed = hasRequest ? StaticContent.requestMsg : "";
-      const javaMsgUsed = hasJava ? ` ${StaticContent.javaMsg}` : "";
-
-      const remediation_guidance = `Please be advised, the <a class="crs-rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/:b:/r/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a> requires that secure code findings identified during the Software Composition Analysis of third-party components must resolved via upgrade, removal, mitigation, or replacement.<br/><br/>
-Code Review Services recommends upgrading the third-party component with a vulnerability-free version when possible.${nodeMsgUsed} If no vulnerability-free version exists, then the following actions can be taken:
-<ol>
-    <li>Remove the component if it is not necessary or being used.</li>
-    <li>Analyze to determine if the reported vulnerability applies to the application.<ul>
-        <li>If the application <b>is not</b> affected, <a target="_blank" href="https://docs.veracode.com/r/Address_Veracode_SCA_Vulnerabilities">a mitigation proposal can be created</a>.</li>
-        <li>If the application <b>is</b> affected, there may be a defensive mechanism that can be implemented to mitigate the security risk.${javaMsgUsed}</li></ul></li>
-    <li>Replace the vulnerable component with a different component.</li>
-    <li>Actively look for a new patched version of the component and upgrade as soon as a fixed version is available.${requestMsgUsed}</li>
-</ol>
-<br/>`;
-
-      // Sort SCA details by highest severity first
-      const getHighestSeverity = (cnts: string) => {
-        const s = (cnts || "").toLowerCase().replace(" ", "");
-        if (s.includes("veryhigh")) return 1;
-        if (s.includes("high")) return 2;
-        if (s.includes("medium")) return 3;
-        if (s.includes("low")) return 4;
-        return 99;
-      };
-
-      const sortedScaDetails = [...scaDetails].sort(
-        (a, b) =>
-          getHighestSeverity(a.severityCounts) -
-          getHighestSeverity(b.severityCounts),
-      );
-
-      // SCA Details Table Rows
-      const scaTableRows = sortedScaDetails
-        .map((detail: any) => {
-          let countsStr = detail.severityCounts || "";
-          const severityMatches = Array.from(
-            countsStr.matchAll(
-              /(Very High|VeryHigh|High|Medium|Low):\s*(\d+)/g,
-            ),
-          );
-          let parsedSeverities: { sev: string; count: string }[] = [];
-
-          if (severityMatches.length > 0) {
-            parsedSeverities = severityMatches.map((m) => ({
-              sev: m[1] === "VeryHigh" ? "Very High" : m[1],
-              count: m[2],
-            }));
-          } else {
-            const parts = countsStr
-              .split(",")
-              .map((s: string) => s.trim())
-              .filter(Boolean);
-            parsedSeverities = parts.map((p: string) => {
-              const [sev, count] = p.split(":");
-              return { sev: (sev || "").trim(), count: (count || "").trim() };
-            });
-          }
-
-          const severityOrder: Record<string, number> = {
-            "Very High": 1,
-            VeryHigh: 1,
-            High: 2,
-            Medium: 3,
-            Low: 4,
-          };
-
-          let totalCounts: Record<string, number> = { "Very High": 0, "High": 0, "Medium": 0, "Low": 0 };
-          parsedSeverities.forEach((p) => {
-            let s = p.sev.trim();
-            if (s === "VeryHigh") s = "Very High";
-            if (s === "Info" || s === "Information") s = "Low";
-            if (s !== "Very High" && s !== "High" && s !== "Medium" && s !== "Low") return;
-            totalCounts[s] = (totalCounts[s] || 0) + (parseInt(p.count, 10) || 0);
-          });
-
-          let approvedCves: string[] = [];
-          let rejectedCves: string[] = [];
-          let noneCves: string[] = [];
-
-          let approvedCounts: Record<string, number> = { "Very High": 0, "High": 0, "Medium": 0, "Low": 0 };
-          let rejectedCounts: Record<string, number> = { "Very High": 0, "High": 0, "Medium": 0, "Low": 0 };
-          let noneCounts: Record<string, number> = { ...totalCounts };
-
-          const cvesInPackage = (detail.cveList || "").split(",").map((c: string) => c.trim()).filter(Boolean);
-
-          cvesInPackage.forEach((cve: string) => {
-            let status = "none";
-            let severity = "Medium";
-
-            if (aggregatedData?.sca) {
-              for (const g of aggregatedData.sca) {
-                if (g.identifier === cve) {
-                  const locMatch = g.records.some((r) => r.location === detail.packageName);
-                  if (locMatch || g.identifier === cve) {
-                    status = g.status || "none";
-                    let s = g.severity.trim();
-                    if (s === "VeryHigh") s = "Very High";
-                    if (s === "Info" || s === "Information") s = "Low";
-                    if (s !== "Very High" && s !== "High" && s !== "Medium" && s !== "Low") s = "Medium";
-                    severity = s;
-                    break;
-                  }
-                }
-              }
-            }
-
-            if (status === "approved") {
-              approvedCves.push(cve);
-              approvedCounts[severity] = (approvedCounts[severity] || 0) + 1;
-            } else if (status === "rejected") {
-              rejectedCves.push(cve);
-              rejectedCounts[severity] = (rejectedCounts[severity] || 0) + 1;
-            } else {
-              noneCves.push(cve);
-            }
-          });
-
-          Object.keys(noneCounts).forEach((s) => {
-            noneCounts[s] -= (approvedCounts[s] || 0);
-            noneCounts[s] -= (rejectedCounts[s] || 0);
-            if (noneCounts[s] < 0) noneCounts[s] = 0;
-          });
-
-          const buildRow = (cves: string[], countsObj: Record<string, number>, label: string, bgClass: string) => {
-            if (cves.length === 0) return "";
-
-            const severitiesToRender = Object.entries(countsObj)
-              .filter(([sev, c]) => c > 0)
-              .sort(([sevA], [sevB]) => (severityOrder[sevA] || 99) - (severityOrder[sevB] || 99))
-              .map(([sev, c]) => {
-                const sevClass = sev.toLowerCase().replace(" ", "");
-                return `<span class="crs-rounded minwidth ${sevClass}">${sev}</span>: ${c}`;
-              });
-
-            if (severitiesToRender.length === 0) return "";
-
-            const severityHtml = severitiesToRender.join("<br/>");
-            const cveLinks = cves
-              .map(
-                (cve) =>
-                  `<a target="_blank" href="http://web.nvd.nist.gov/view/vuln/detail?vulnId=${cve}">${cve}</a>`,
-              )
-              .join("</div><div>");
-
-            return `
-        <tr>
-            <td>${detail.packageName}</td>
-            <td>${detail.version}</td>
-            <td>${severityHtml}</td>
-            <td>${detail.remediation_due_date || "N/A"}</td>
-            <td><div class="top_row"><div>${cveLinks}</div></div></td>
-            <td><span class="crs-rounded minwidth ${bgClass}">${label}</span></td>
-        </tr>`;
-          };
-
-          const noneRow = buildRow(noneCves, noneCounts, "None", "bg-gold");
-          const appRow = buildRow(approvedCves, approvedCounts, "Approved", "bg-green");
-          const rejRow = buildRow(rejectedCves, rejectedCounts, "Rejected", "bg-red");
-
-          return noneRow + appRow + rejRow;
-        })
-        .join("");
-
-      scaSection = `
-<h3 class="heading bg-red">Third-party Components</h3><br/>
-A review of the third-party components in the Software Composition Analysis was performed. There are ${vulnerabilitySentencePart} severity vulnerabilities that affect ${vulnerablePackages} third-party components.<br/>
-<h4>Third-Party Component Summary</h4>
-<ul>
-    <li>Components: ${totalPackages}</li>
-    <li>Vulnerable Components: ${vulnerablePackages}</li>
-    <li>Vulnerabilities: ${backendScaSummary.vulnerabilities}<ul>
-${listItems}
-    </ul></li>
-</ul>
-<br/>
-${remediation_guidance}
-${StaticContent.scaDetailHeader}
-${scaTableRows}
-</table>
-`;
-    }
+    const { sastSection, scaSection, missingScaMessages } = generateReviewSummary({
+      backendSastSummary,
+      backendScaSummary,
+      aggregatedData,
+      overview,
+      configNoSca,
+      scaDetails,
+      scaSafeVersionEnabled
+    });
 
     let moduleSelectionSection = "";
     if (
@@ -660,11 +332,13 @@ ${scaTableRows}
     overview,
     backendSastSummary,
     backendScaSummary,
-    sastSummary,
     scaDetails,
     isScanTooOld,
     aggregatedData,
+    configNoSca,
+    configScanValidityDays
   ]);
+
 
   const [rawHtml, setRawHtml] = useState(formattedHeader);
   const [copied, setCopied] = useState(false);
@@ -777,24 +451,26 @@ export default function App() {
     const saved = localStorage.getItem("preferred_ai_provider");
     return (saved as AIProvider) || "Gemini";
   });
-  const [hideProcessedFindings, setHideProcessedFindings] = useState<boolean>(() => {
-    return localStorage.getItem("hide_processed_findings") === "true";
-  });
 
   // Persist user preferences
   useEffect(() => {
     localStorage.setItem("preferred_ai_provider", aiProvider);
   }, [aiProvider]);
 
+  // Unified Configuration State
+  const [fullConfig, setFullConfig] = useState<any>(null);
+  const [initialFullConfig, setInitialFullConfig] = useState<any>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<string>("SAST&SCA Prompts");
+  
+  const [hideProcessedFindings, setHideProcessedFindings] = useState<boolean>(() => {
+    return localStorage.getItem("hide_processed_findings") === "true";
+  });
+
   useEffect(() => {
     localStorage.setItem("hide_processed_findings", String(hideProcessedFindings));
   }, [hideProcessedFindings]);
 
-  const [sastSystemPrompt, setSastSystemPrompt] = useState<string>("");
-  const [scaSystemPrompt, setScaSystemPrompt] = useState<string>("");
-  const [initialSastPrompt, setInitialSastPrompt] = useState<string>("");
-  const [initialScaPrompt, setInitialScaPrompt] = useState<string>("");
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [detailedGroup, setDetailedGroup] = useState<AggregatedGroup | null>(
     null,
   );
@@ -811,24 +487,160 @@ export default function App() {
   const [configHistory, setConfigHistory] = useState<string[]>([]);
   const [configScanValidityDays, setConfigScanValidityDays] =
     useState<number>(90);
+  const [scaSafeVersionEnabled, setScaSafeVersionEnabled] = useState(false);
 
+  const fetchPrompts = async () => {
+    try {
+      const res = await fetch(getEndpoint('configPrompts'));
+      const data = await res.json();
+      
+      // Normalize data into the requested 5 groups (plus Exclusions if present)
+      // This handles cases where the backend might return flat keys or a different structure
+      const normalizedData: any = {
+        "SAST&SCA Prompts": data["SAST&SCA Prompts"] || {
+          sastPrompt: data.sastPrompt || "I’m providing information on a First Party Finding for an application in JSON format.\n\nDefinitions:\n- cwe id: The CWE ID of the finding\n- mitigation information: Actions taken by the application team (may be empty)\n\nYour task:\n1. Determine if this is a real security issue.\n2. Determine if the mitigation sufficiently reduces the risk.\n3. If not mitigated, clearly state why.\n\nInstructions (STRICT):\n- Start with: \"Proposal Approved\" or \"Proposal Rejected\"\n- Provide ONLY ONE short paragraph\n- Maximum 4–5 sentences\n- Maximum 120 words\n- No repetition, no extra explanation\n- Keep reasoning concise and direct\n- Follow Zero-Trust principles in evaluation but don't repeat it in para.\n\nDo not provide bullet points, headings, or long explanations.",
+          scaPrompt: data.scaPrompt || "I’m providing information on a Third Party (SCA) Finding in JSON format.\n\nDefinitions:\n- name: Vulnerable component name\n- cve id: CVE identifier\n- mitigation information: Actions taken by the application team (may be empty)\n\nYour task:\n1. Identify if a non-vulnerable version exists\n2. Identify if mitigation without upgrade is possible\n3. Assess if the finding could be a false positive\n4. Enforce strict security governance (Zero-Trust)\n\nSTRICT GOVERNANCE RULES:\n- If the vulnerability is still reported by the SCA tool → DO NOT accept false positive claim\n- If the source of the dependency is unclear → REJECT and require investigation\n- Always require validation with Veracode (or tool owner) before closure\n- Never approve based solely on assumption\n\nOUTPUT INSTRUCTIONS (STRICT):\n- Start with ONLY ONE of:\n  \"Proposal Approved\" OR \"Proposal Rejected\" OR \"Check Manually\"\n- Provide ONE paragraph only\n- Maximum 6 sentences\n- Maximum 150 words\n- Keep reasoning concise and direct\n- Do NOT explain CWE background\n- Avoid repetition and filler text\n\nCVE HANDLING:\n- If you are confident about the CVE → include a short reference link:"
+        },
+        "System": data["System"] || {
+          scanValidityDays: data.scanValidityDays || 90,
+          mitigationProposalEnabled: data.mitigationProposalEnabled ?? true,
+          mitigationApiType: data.mitigationApiType || "REST",
+          saveXmlLogs: data.saveXmlLogs ?? true,
+          saveJsonHistory: data.saveJsonHistory ?? true,
+          historyLimit: data.historyLimit || 10,
+          secondaryAuditEnabled: data.secondaryAuditEnabled ?? false,
+          safeSCAVERSION: data.safeSCAVERSION || {
+            scaSafeVersionEnabled: true,
+            scaStaleFixMessage: "No safe version found. Fix applies to a different major version. Check manually.",
+            scaNoFixMessage: "No safe version published in GHSA. Check manually.",
+            saveScaLog: false
+          }
+        },
+        "AiEngine": data["AiEngine"] || {
+          aiEngines: data.aiEngines || [ "Gemini" ],
+          engineModels: data.engineModels || [ "azure.gpt-4o" ],
+          sharedServiceEndpoint: data.sharedServiceEndpoint || "https://genai-sharedservice-americas.pwcinternal.com/v1/chat/completions",
+          sharedServiceRole: data.sharedServiceRole || "user",
+          sharedServiceMaxTokens: data.sharedServiceMaxTokens || 1000
+        },
+        "SecondaryAudit": data["SecondaryAudit"] || {
+          auditorModel: data.auditorModel || "gpt-4o-mini",
+          sharedAuditorEndpoint: data.sharedAuditorEndpoint || "https://genai-sharedservice-americas.pwcinternal.com/v1/chat/completions",
+          sharedAuditorMaxTokens: data.sharedAuditorMaxTokens || 1000,
+          sharedAuditorRole: data.sharedAuditorRole || "user",
+          auditorPrompt: data.auditorPrompt || "You are a Senior Security QA Auditor acting as a secondary verification layer. Your job is to strictly review the output generated by a primary evaluation model against the original input data.\n\nYou will be provided with two sets of data:\n1. [Original Request Data]: The raw vulnerability JSON payload.\n2. [Phase 1 Output]: The text response generated by the primary model.\n\nYour task is to independently verify the quality, accuracy, and constraint compliance of the Phase 1 Output.\n\n### CRITERIA FOR EVALUATION\n1. Accuracy Check: Did Phase 1 correctly interpret the vulnerability description and user comments? (e.g., If the user comments proved the value is a non-secret UI lookup GUID, did Phase 1 correctly identify it as a false positive?)\n2. Constraint Compliance Check: Did Phase 1 strictly adhere to its formatting boundaries?\n   - Does it start exactly with \"Proposal Approved\" or \"Proposal Rejected\"?\n   - Is it written as exactly ONE paragraph?\n   - Is it under 120 words and free of bullet points or headings?\n\n### OUTPUT FORMAT\nYou must output your audit evaluation strictly using the following Markdown template. Do not add conversational intro text or metadata.\n\n### Second Look Assessment\n- **Validation Verdict:** [Agree / Disagree with Phase 1 Verdict]\n- **Rule Compliance:** [Pass / Fail - state if formatting limits were met]\n- **Critique:** [2-3 sentences explaining your reasoning regarding the technical accuracy and compliance of Phase 1]",
+          fallbackText: data.fallbackText || "Proposal Rejected please perform a Manual Review as The Evaluator and Auditor model has contradiction!"
+        },
+        "Compliance": data["Compliance"] || {
+          tierMappings: data.tierMappings || {
+            "External": {
+              "Confidential": "tier-1",
+              "HighlyConfidential": "tier-1",
+              "Internal": "tier-2",
+              "Public": "tier-2"
+            },
+            "Internal": {
+              "Confidential": "tier-3b",
+              "HighlyConfidential": "tier-3a",
+              "Internal": "tier-3b",
+              "Public": "tier-3b"
+            }
+          },
+          gracePeriods: data.gracePeriods || {
+            "tier-4": { "VeryHigh" : 60, "High" : 60, "Medium" : 90, "Low" : 180 },
+            "tier-3b": { "VeryHigh" : 60, "High" : 60, "Medium" : 90, "Low" : 180 },
+            "tier-3a": { "VeryHigh" : 30, "High" : 30, "Medium" : 60, "Low" : 180 },
+            "tier-2": { "VeryHigh" : 10, "High" : 10, "Medium" : 30, "Low" : 180 },
+            "tier-1": { "VeryHigh" : 10, "High" : 10, "Medium" : 30, "Low" : 180 }
+          },
+          tierDropDown: data.tierDropDown || [ "tier-1", "tier-2", "tier-3a", "tier-3b", "tier-4" ]
+        },
+        "Exclusions": data["Exclusions"] || {
+          ignoredModules: data.ignoredModules || [ "Microsoft", "Azure", "System", "AspNetCore", "Newtonsoft", "EntityFramework", "NLog", "Log4Net", "AutoMapper", "AppInsights", "UnitTesting", "BouncyCastle", "Serilog", "Dapper", "OpenXml", "Serialization", "OpenXmlPowerTools", "GemBox", "SharpDocx", "Quartz", "sni.dll", "VeracodeJavaAPI.jar", ".test.dll", ".Tests.dll", ".map", "_nodemodule_", "fsmonitor-watchman.sample" ],
+          includedModules: data.includedModules || [ "veracodegen.htmla.pya", "pwc.", ".zip", ".war", "snapshot.jar", "0.jar", "pwc", "release.jar", "app_", ".bca", ".gz", "-service.jar", "-advancer.jar" ],
+          ignoredEcosystems: data.ignoredEcosystems || [ "so" ],
+          noScaArchitectures: data.noScaArchitectures || [ "Apex", "TSQL" ]
+        }
+      };
+
+      setFullConfig(normalizedData);
+      setInitialFullConfig(JSON.parse(JSON.stringify(normalizedData)));
+      
+      // Ensure current settingsTab exists in the normalized config
+      if (!normalizedData[settingsTab]) {
+        setSettingsTab("SAST&SCA Prompts");
+      }
+      
+      // Update local states that derive from config
+      if (normalizedData["System"]) {
+        setConfigScanValidityDays(normalizedData["System"].scanValidityDays || 90);
+        if (normalizedData["System"].safeSCAVERSION) {
+          setScaSafeVersionEnabled(normalizedData["System"].safeSCAVERSION.scaSafeVersionEnabled);
+        }
+      }
+      if (normalizedData["Exclusions"] && Array.isArray(normalizedData["Exclusions"].noScaArchitectures)) {
+        setConfigNoSca(normalizedData["Exclusions"].noScaArchitectures);
+      }
+      if (normalizedData["AiEngine"] && Array.isArray(normalizedData["AiEngine"].aiEngines)) {
+        setConfigEngines(normalizedData["AiEngine"].aiEngines);
+      }
+    } catch (err) {
+      console.error("Failed to fetch config", err);
+    }
+  };
+
+  const savePrompts = async () => {
+    try {
+      const res = await fetch(getEndpoint('configPrompts'), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fullConfig),
+      });
+      if (res.ok) {
+        setInitialFullConfig(JSON.parse(JSON.stringify(fullConfig)));
+        setIsSettingsOpen(false);
+        setSuccessMessage("Configuration updated successfully");
+        
+        // Update local derived states
+        if (fullConfig["System"]) {
+          setConfigScanValidityDays(fullConfig["System"].scanValidityDays || 90);
+        }
+      } else {
+        console.error("Failed to save config");
+        setBackendError("Failed to save configuration to backend");
+      }
+    } catch (err) {
+      console.error("Failed to save config", err);
+      setBackendError("Network error while saving configuration");
+    }
+  };
+
+  const toggleSettings = async () => {
+    if (!isSettingsOpen) {
+      await fetchPrompts();
+    }
+    setIsSettingsOpen(!isSettingsOpen);
+  };
+
+  const toggleTool = (tool: ToolName) => {
+    setSelectedTools((prev) =>
+      prev.includes(tool) ? prev.filter((t) => t !== tool) : [...prev, tool],
+    );
+  };
+
+  // Restore accidentally removed config fetching logic or ensure it's handled via fetchPrompts
   useEffect(() => {
     fetch(getEndpoint('configInfo'))
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data.noSca)) setConfigNoSca(data.noSca);
-        if (Array.isArray(data.engines)) {
-          setConfigEngines(data.engines);
-          const saved = localStorage.getItem("preferred_ai_provider");
-          if (!saved && data.engines.length > 0) {
-            setAiProvider(data.engines[0]);
-          }
-        }
         if (Array.isArray(data.history)) setConfigHistory(data.history);
-        if (typeof data.scanValidityDays === "number")
-          setConfigScanValidityDays(data.scanValidityDays);
+        if (Array.isArray(data.engines)) setConfigEngines(data.engines);
+        if (data.scanValidityDays) setConfigScanValidityDays(data.scanValidityDays);
       })
-      .catch((err) => console.error("Failed to fetch config:", err));
+      .catch((err) => console.error("Failed to fetch initial config info:", err));
+      
+    // Initial prompt fetch
+    fetchPrompts();
   }, []);
 
   // Dynamic Summaries
@@ -836,7 +648,6 @@ export default function App() {
     const IS_PRODUCTION =
       import.meta.env.PROD || import.meta.env.VITE_ENVIRONMENT === "production";
 
-    // Choose base summary
     let baseSummary = mockSastSummary;
     if (resultsLoaded && backendSastSummary) {
       baseSummary = {
@@ -852,7 +663,6 @@ export default function App() {
         breakdown: backendSastSummary.breakdown || {},
       };
     } else if (IS_PRODUCTION) {
-      // Strictly no mock data in production
       return {
         vulnerabilities: 0,
         breakdown: { "Very High": 0, High: 0, Medium: 0, Low: 0, Information: 0 },
@@ -869,7 +679,6 @@ export default function App() {
     const IS_PRODUCTION =
       import.meta.env.PROD || import.meta.env.VITE_ENVIRONMENT === "production";
 
-    // Choose base summary
     let baseSummary = mockScaSummary;
     if (resultsLoaded && backendScaSummary) {
       baseSummary = {
@@ -889,7 +698,6 @@ export default function App() {
         totalVulnerablePackages: backendScaSummary.totalVulnerablePackages || 0,
       };
     } else if (IS_PRODUCTION) {
-      // Strictly no mock data in production
       return {
         vulnerabilities: 0,
         breakdown: { "Very High": 0, High: 0, Medium: 0, Low: 0 },
@@ -905,62 +713,26 @@ export default function App() {
     };
   }, [resultsLoaded, backendScaSummary]);
 
-  useEffect(() => {
-    // processImportedData(sampleReportData); // Removed as requested
-  }, []);
-
-  const fetchPrompts = async () => {
-    try {
-      const res = await fetch(getEndpoint('configPrompts'));
-      const data = await res.json();
-      setSastSystemPrompt(data.sastPrompt);
-      setScaSystemPrompt(data.scaPrompt);
-      setInitialSastPrompt(data.sastPrompt);
-      setInitialScaPrompt(data.scaPrompt);
-    } catch (err) {
-      console.error("Failed to fetch prompts", err);
-    }
-  };
-
-  const savePrompts = async () => {
-    try {
-      const res = await fetch(getEndpoint('configPrompts'), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sastPrompt: sastSystemPrompt,
-          scaPrompt: scaSystemPrompt,
-        }),
-      });
-      if (res.ok) {
-        setInitialSastPrompt(sastSystemPrompt);
-        setInitialScaPrompt(scaSystemPrompt);
-        setIsSettingsOpen(false);
-      } else {
-        console.error("Failed to save prompts");
-      }
-    } catch (err) {
-      console.error("Failed to save prompts", err);
-    }
-  };
-
-  const toggleSettings = async () => {
-    if (!isSettingsOpen) {
-      await fetchPrompts();
-    }
-    setIsSettingsOpen(!isSettingsOpen);
-  };
-
-  const toggleTool = (tool: ToolName) => {
-    setSelectedTools((prev) =>
-      prev.includes(tool) ? prev.filter((t) => t !== tool) : [...prev, tool],
-    );
-  };
-
   const processImportedData = (data: any) => {
     console.log("CRITICAL: processImportedData called with:", data);
     try {
       setLastRawResponse(data);
+      if (data.scaSafeVersionEnabled !== undefined) {
+        setScaSafeVersionEnabled(data.scaSafeVersionEnabled);
+      }
+      
+      // Update fullConfig if these fields are present in the imported data (e.g. from dry-run JSON)
+      if (fullConfig) {
+        setFullConfig((prev: any) => {
+          if (!prev) return prev;
+          const next = JSON.parse(JSON.stringify(prev));
+          if (data.auditorPrompt && next["SecondaryAudit"]) next["SecondaryAudit"].auditorPrompt = data.auditorPrompt;
+          if (data.fallbackText && next["SecondaryAudit"]) next["SecondaryAudit"].fallbackText = data.fallbackText;
+          if (data.sastPrompt && next["SAST&SCA Prompts"]) next["SAST&SCA Prompts"].sastPrompt = data.sastPrompt;
+          if (data.scaPrompt && next["SAST&SCA Prompts"]) next["SAST&SCA Prompts"].scaPrompt = data.scaPrompt;
+          return next;
+        });
+      }
 
       if (!data || Object.keys(data).length === 0) {
         throw new Error("Invalid Response: Data is empty.");
@@ -1154,6 +926,9 @@ export default function App() {
           if (Array.isArray(data.history)) {
             setConfigHistory(data.history);
           }
+          if (Array.isArray(data.engines)) {
+            setConfigEngines(data.engines);
+          }
         })
         .catch((err) => console.warn("Failed to refresh history:", err));
     } catch (err: any) {
@@ -1314,8 +1089,6 @@ export default function App() {
     const actionStr = actionType === "approved" ? "accepted" : "rejected";
     const buildId = activeOverview.buildId || "";
 
-    setBatchModalConfig(null);
-
     let successCount = 0;
     let lastErrorMsg = "";
     for (const group of selectedItems) {
@@ -1367,76 +1140,16 @@ export default function App() {
         const isSAST = group.type === "SAST";
         
         if (isSAST) {
-          setSastMitigationProposal((prev: any) => {
-             if (!prev) return prev;
-             const updated = { ...prev };
-             let sev = group.severity;
-             if (sev === 'VeryHigh') sev = 'Very High';
-             if (!updated[sev] && updated[sev.replace("Information", "Info")] !== undefined) {
-               sev = sev.replace("Information", "Info");
-             } else if (!updated[sev] && updated[sev.replace("Info", "Information")] !== undefined) {
-               sev = sev.replace("Info", "Information");
-             }
-             if (updated[sev] !== undefined) {
-               updated[sev] = Math.max(0, updated[sev] - group.records.length);
-             }
-             if (updated.Total !== undefined) {
-               updated.Total = Math.max(0, updated.Total - group.records.length);
-             }
-             return updated;
-          });
+          setSastMitigationProposal((prev: any) => updateMitigationProposal(prev, group));
 
           if (actionType === "approved") {
-            setBackendSastSummary((prev: any) => {
-               if (!prev || !prev.breakdown) return prev;
-               const breakdown = { ...prev.breakdown };
-               let sevKey = group.severity;
-               if (sevKey === 'VeryHigh') sevKey = 'Very High';
-               if (!breakdown[sevKey] && breakdown[sevKey.replace("Information", "Info")]) {
-                 sevKey = sevKey.replace("Information", "Info");
-               } else if (!breakdown[sevKey] && breakdown[sevKey.replace("Info", "Information")]) {
-                 sevKey = sevKey.replace("Info", "Information");
-               }
-               if (!breakdown[sevKey]) return prev;
-
-               const sevData = { ...breakdown[sevKey] };
-               sevData.total = Math.max(0, sevData.total - group.records.length);
-               breakdown[sevKey] = sevData;
-               
-               const totalVulnerabilities = Math.max(0, prev.vulnerabilities - group.records.length);
-               return { ...prev, breakdown, vulnerabilities: totalVulnerabilities };
-            });
+            setBackendSastSummary((prev: any) => updateBackendSummary(prev, group));
           }
         } else {
-          setScaMitigationProposal((prev: any) => {
-             if (!prev) return prev;
-             const updated = { ...prev };
-             let sev = group.severity;
-             if (sev === 'VeryHigh') sev = 'Very High';
-             if (updated[sev] !== undefined) {
-               updated[sev] = Math.max(0, updated[sev] - group.records.length);
-             }
-             if (updated.Total !== undefined) {
-               updated.Total = Math.max(0, updated.Total - group.records.length);
-             }
-             return updated;
-          });
+          setScaMitigationProposal((prev: any) => updateMitigationProposal(prev, group));
 
           if (actionType === "approved") {
-            setBackendScaSummary((prev: any) => {
-               if (!prev || !prev.breakdown) return prev;
-               const breakdown = { ...prev.breakdown };
-               let sevKey = group.severity;
-               if (sevKey === 'VeryHigh') sevKey = 'Very High';
-               if (!breakdown[sevKey]) return prev;
-
-               const sevData = { ...breakdown[sevKey] };
-               sevData.total = Math.max(0, sevData.total - group.records.length);
-               breakdown[sevKey] = sevData;
-               
-               const totalVulnerabilities = Math.max(0, prev.vulnerabilities - group.records.length);
-               return { ...prev, breakdown, vulnerabilities: totalVulnerabilities };
-            });
+            setBackendScaSummary((prev: any) => updateBackendSummary(prev, group));
           }
         }
       } catch (err: any) {
@@ -1446,6 +1159,7 @@ export default function App() {
     }
     
     setIsSubmitting(false);
+    setBatchModalConfig(null);
     setSelectedGroups(new Set());
     if (successCount === selectedItems.length) {
       setSuccessMessage(`Successfully ${actionType} ${successCount}/${selectedItems.length} groups.`);
@@ -1905,16 +1619,22 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-1.5">
                       <button
                         onClick={() => handleBatchAction("approved")}
-                        disabled={selectedGroups.size === 0}
-                        className="py-2 bg-emerald-600/10 text-emerald-400 border border-emerald-500/20 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all disabled:opacity-20"
+                        disabled={selectedGroups.size === 0 || isSubmitting}
+                        className="py-2 bg-emerald-600/10 text-emerald-400 border border-emerald-500/20 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all disabled:opacity-20 flex items-center justify-center gap-1"
                       >
+                        {isSubmitting && batchModalConfig?.actionType === "approved" && (
+                          <RefreshCcw size={10} className="animate-spin" />
+                        )}
                         Approve
                       </button>
                       <button
                         onClick={() => handleBatchAction("rejected")}
-                        disabled={selectedGroups.size === 0}
-                        className="py-2 bg-red-600/10 text-red-400 border border-red-500/20 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all disabled:opacity-20"
+                        disabled={selectedGroups.size === 0 || isSubmitting}
+                        className="py-2 bg-red-600/10 text-red-400 border border-red-500/20 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all disabled:opacity-20 flex items-center justify-center gap-1"
                       >
+                        {isSubmitting && batchModalConfig?.actionType === "rejected" && (
+                          <RefreshCcw size={10} className="animate-spin" />
+                        )}
                         Reject
                       </button>
                     </div>
@@ -1969,13 +1689,7 @@ export default function App() {
                       return ovw?.generationDate || null;
                     };
                     const effectiveDate = getEffectiveScanDate(activeOverview);
-
-                    const daysSinceScan = effectiveDate
-                      ? (new Date().getTime() -
-                          new Date(effectiveDate).getTime()) /
-                        (1000 * 3600 * 24)
-                      : 0;
-                    if (daysSinceScan > configScanValidityDays) {
+                    if (calculateIsScanTooOld(effectiveDate, configScanValidityDays)) {
                       return (
                         <div className="flex flex-col mr-6 lg:mr-8 bg-red-900/40 px-6 py-2 rounded-lg border-2 border-red-500/50 justify-center">
                           <p className="text-xl font-bold text-red-500">
@@ -2040,12 +1754,12 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex w-full justify-start border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-10">
+                <div className="flex w-full justify-start border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-10 overflow-x-auto whitespace-nowrap scrollbar-hide">
                   {(["SAST", "SCA", "Review"] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setActiveTab(tab)}
-                      className={`grow-0 basis-1/3 px-2 py-3 text-[11px] font-black uppercase tracking-[0.1em] transition-all relative flex flex-col justify-center items-center gap-1 ${
+                      className={`grow-0 basis-1/3 px-6 py-3 text-[11px] font-black uppercase tracking-[0.1em] transition-all relative flex flex-col justify-center items-center gap-1 ${
                         activeTab === tab
                           ? "text-blue-400 bg-blue-500/5"
                           : "text-slate-500 hover:text-slate-300"
@@ -2128,6 +1842,7 @@ export default function App() {
                       sastSummary={sastSummary}
                       configNoSca={configNoSca}
                       configScanValidityDays={configScanValidityDays}
+                      scaSafeVersionEnabled={scaSafeVersionEnabled}
                       aggregatedData={aggregatedData}
                     />
                   ) : (
@@ -2234,28 +1949,28 @@ export default function App() {
 
         {/* Settings Modal */}
         <AnimatePresence>
-          {isSettingsOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {isSettingsOpen && fullConfig && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 pointer-events-none">
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setIsSettingsOpen(false)}
-                className="absolute inset-0 bg-black/60"
+                className="absolute inset-0 bg-black/20 pointer-events-auto"
               />
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="relative w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+                className="relative w-full max-w-5xl bg-slate-900/40 backdrop-blur-md border border-slate-700/50 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] pointer-events-auto"
               >
                 <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
                   <div>
-                    <h2 className="text-xl font-bold tracking-tight">
-                      AI Analysis Configuration
+                    <h2 className="text-xl font-black uppercase tracking-tight text-white flex items-center gap-3">
+                      <Settings className="text-blue-500" size={24} /> System Configuration
                     </h2>
-                    <p className="text-xs text-slate-500 font-mono mt-1 uppercase tracking-widest">
-                      Global System Instructions
+                    <p className="text-[10px] text-slate-500 font-mono mt-1 uppercase tracking-widest">
+                      Grouped System Control Center
                     </p>
                   </div>
                   <button
@@ -2266,56 +1981,518 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="p-6 space-y-8 overflow-y-auto">
-                  <section className="space-y-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
-                        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
-                          SAST Prompt Engine
-                        </h3>
-                      </div>
-                      <div 
-                        className="flex items-center gap-2 cursor-pointer group/toggle" 
-                        onClick={() => setHideProcessedFindings(!hideProcessedFindings)}
-                      >
-                        <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold group-hover/toggle:text-slate-400 transition-colors">
-                          Hide Processed Mitigation
-                        </span>
-                        <div className={`w-8 h-4 rounded-full relative transition-colors ${hideProcessedFindings ? 'bg-blue-600' : 'bg-slate-700'}`}>
-                          <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${hideProcessedFindings ? 'left-[18px]' : 'left-0.5'}`} />
-                        </div>
-                      </div>
-                    </div>
-                    <textarea
-                      value={sastSystemPrompt}
-                      onChange={(e) => setSastSystemPrompt(e.target.value)}
-                      className="w-full h-48 bg-black/40 border border-slate-800 rounded-xl p-4 text-sm font-mono text-slate-300 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 outline-none transition-all resize-none"
-                      placeholder="Enter 200-300 lines of prompt context here..."
-                    />
-                    <p className="text-[10px] text-slate-500 italic">
-                      Used for Static Application Security Testing analysis.
-                    </p>
-                  </section>
+                <div className="flex gap-2 p-3 border-b border-slate-800 bg-slate-900/30 overflow-x-auto scrollbar-hide">
+                  {["SAST&SCA Prompts", "System", "AiEngine", "SecondaryAudit", "Compliance", "Exclusions"].filter(tab => {
+                    if (tab === "SecondaryAudit") {
+                      return fullConfig["System"]?.secondaryAuditEnabled;
+                    }
+                    return true;
+                  }).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setSettingsTab(tab)}
+                      className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all whitespace-nowrap border shrink-0 ${
+                        settingsTab === tab 
+                          ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-900/40' 
+                          : 'bg-slate-800/50 text-slate-500 border-slate-800 hover:border-slate-600 hover:text-slate-300'
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
 
-                  <section className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
-                        SCA Prompt Engine
-                      </h3>
-                    </div>
-                    <textarea
-                      value={scaSystemPrompt}
-                      onChange={(e) => setScaSystemPrompt(e.target.value)}
-                      className="w-full h-48 bg-black/40 border border-slate-800 rounded-xl p-4 text-sm font-mono text-slate-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/50 outline-none transition-all resize-none"
-                      placeholder="Enter software composition instructions..."
-                    />
-                    <p className="text-[10px] text-slate-500 italic">
-                      Used for Third-party library and CVE vulnerability
-                      assessment.
-                    </p>
-                  </section>
+                <div className="p-8 space-y-8 overflow-y-auto h-[600px] custom-scrollbar bg-slate-950/20">
+                  <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    {/* SAST&SCA Prompts Tab */}
+                    {settingsTab === "SAST&SCA Prompts" && fullConfig["SAST&SCA Prompts"] && (
+                      <div className="space-y-8">
+                        <section className="space-y-3">
+                          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" /> SAST Prompt Engine
+                          </h3>
+                          <textarea
+                            value={fullConfig["SAST&SCA Prompts"].sastPrompt || ""}
+                            onChange={(e) => setFullConfig({
+                              ...fullConfig,
+                              "SAST&SCA Prompts": { ...fullConfig["SAST&SCA Prompts"], sastPrompt: e.target.value }
+                            })}
+                            className="w-full h-48 bento-input font-mono text-xs leading-relaxed"
+                          />
+                        </section>
+                        <section className="space-y-3">
+                          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> SCA Prompt Engine
+                          </h3>
+                          <textarea
+                            value={fullConfig["SAST&SCA Prompts"].scaPrompt || ""}
+                            onChange={(e) => setFullConfig({
+                              ...fullConfig,
+                              "SAST&SCA Prompts": { ...fullConfig["SAST&SCA Prompts"], scaPrompt: e.target.value }
+                            })}
+                            className="w-full h-48 bento-input font-mono text-xs leading-relaxed"
+                          />
+                        </section>
+                      </div>
+                    )}
+
+                    {/* System Tab */}
+                    {settingsTab === "System" && fullConfig["System"] && (
+                      <div className="space-y-8">
+                        <div className="flex items-center justify-between p-4 bg-slate-900 border border-slate-800 rounded-xl shadow-inner-sm">
+                          <div className="space-y-1">
+                            <h4 className="text-sm font-bold uppercase tracking-wider text-slate-200">Hide Processed Mitigation</h4>
+                            <p className="text-[10px] text-slate-500 font-mono">Automatically filter findings with statuses.</p>
+                          </div>
+                          <button 
+                            className="flex items-center"
+                            onClick={() => setHideProcessedFindings(!hideProcessedFindings)}
+                          >
+                            <div className={`w-10 h-5 rounded-full relative transition-colors ${hideProcessedFindings ? 'bg-blue-600' : 'bg-slate-700'}`}>
+                              <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${hideProcessedFindings ? 'left-6' : 'left-1'}`} />
+                            </div>
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <section className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Scan Validity (Days)</label>
+                            <input 
+                              type="number"
+                              value={fullConfig["System"].scanValidityDays || 0}
+                              onChange={(e) => setFullConfig({
+                                ...fullConfig,
+                                "System": { ...fullConfig["System"], scanValidityDays: parseInt(e.target.value) || 0 }
+                              })}
+                              className="w-full bento-input py-3 px-4 text-sm"
+                            />
+                          </section>
+                          <section className="space-y-2">
+                            <label className={`text-[10px] font-black uppercase tracking-widest ${!fullConfig["System"].saveJsonHistory ? 'text-slate-600' : 'text-slate-500'}`}>History Limit</label>
+                            <input 
+                              type="number"
+                              disabled={!fullConfig["System"].saveJsonHistory}
+                              value={fullConfig["System"].historyLimit || 0}
+                              onChange={(e) => setFullConfig({
+                                ...fullConfig,
+                                "System": { ...fullConfig["System"], historyLimit: parseInt(e.target.value) || 0 }
+                              })}
+                              className={`w-full bento-input py-3 px-4 text-sm ${!fullConfig["System"].saveJsonHistory ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
+                            />
+                          </section>
+                          <section className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Mitigation API Type</label>
+                            <select 
+                              value={fullConfig["System"].mitigationApiType || "REST"}
+                              onChange={(e) => setFullConfig({
+                                ...fullConfig,
+                                "System": { ...fullConfig["System"], mitigationApiType: e.target.value }
+                              })}
+                              className="w-full bento-input py-3 px-4 text-sm"
+                            >
+                              <option value="REST">REST</option>
+                              <option value="XML">XML</option>
+                              <option value="Veracode">Veracode</option>
+                            </select>
+                          </section>
+                        </div>
+
+                        <section className="space-y-3">
+                          <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Mitigation Proposal Status</label>
+                          <div className="flex gap-4">
+                            {[true, false, 'debug'].map((val) => (
+                              <label key={val.toString()} className="flex items-center gap-2 cursor-pointer bg-slate-900 p-3 rounded-xl border border-slate-800 hover:border-slate-600 transition-all">
+                                <input 
+                                  type="radio" 
+                                  name="proposal_status" 
+                                  checked={fullConfig["System"].mitigationProposalEnabled === val}
+                                  onChange={() => setFullConfig({
+                                    ...fullConfig,
+                                    "System": { ...fullConfig["System"], mitigationProposalEnabled: val }
+                                  })}
+                                  className="w-4 h-4 text-blue-500 bg-slate-950 border-slate-700"
+                                />
+                                <span className="text-xs font-bold text-slate-300 uppercase">{val.toString()}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </section>
+
+                        <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                          {[
+                            { key: 'saveXmlLogs', label: 'Save XML Logs' },
+                            { key: 'saveJsonHistory', label: 'Save JSON History' },
+                            { key: 'secondaryAuditEnabled', label: 'Secondary Audit' }
+                          ].map(opt => (
+                            <label key={opt.key} className="flex flex-col gap-2 p-4 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-800/50 transition-all cursor-pointer">
+                              <span className="text-[9px] font-bold text-slate-500 uppercase">{opt.label}</span>
+                              <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-black text-slate-300">{fullConfig["System"][opt.key] ? 'ENABLED' : 'DISABLED'}</span>
+                                <input 
+                                  type="checkbox"
+                                  checked={!!fullConfig["System"][opt.key]}
+                                  onChange={(e) => {
+                                    const next = { ...fullConfig };
+                                    next["System"][opt.key] = e.target.checked;
+                                    // If secondaryAudit is disabled and we are on that tab, switch back
+                                    if (opt.key === 'secondaryAuditEnabled' && !e.target.checked && settingsTab === 'SecondaryAudit') {
+                                      setSettingsTab('System');
+                                    }
+                                    setFullConfig(next);
+                                  }}
+                                  className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-blue-500"
+                                />
+                              </div>
+                            </label>
+                          ))}
+                        </section>
+
+                        <section className="space-y-4 border-t border-slate-800/50 pt-6">
+                           <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className={`w-1.5 h-1.5 rounded-full ${fullConfig["System"].safeSCAVERSION?.scaSafeVersionEnabled ? 'bg-blue-500' : 'bg-slate-500'}`} />
+                                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Safe SCA Version Config</h3>
+                              </div>
+                              <button 
+                                onClick={() => {
+                                  const next = { ...fullConfig };
+                                  if (!next["System"].safeSCAVERSION) next["System"].safeSCAVERSION = { scaSafeVersionEnabled: false };
+                                  next["System"].safeSCAVERSION.scaSafeVersionEnabled = !next["System"].safeSCAVERSION.scaSafeVersionEnabled;
+                                  setFullConfig(next);
+                                }}
+                                className={`px-4 py-1 text-[9px] font-black uppercase rounded-lg border transition-all ${
+                                  fullConfig["System"].safeSCAVERSION?.scaSafeVersionEnabled 
+                                    ? 'bg-blue-600/10 border-blue-500/30 text-blue-400' 
+                                    : 'bg-slate-800 border-slate-700 text-slate-500'
+                                }`}
+                              >
+                                {fullConfig["System"].safeSCAVERSION?.scaSafeVersionEnabled ? 'ON' : 'OFF'}
+                              </button>
+                           </div>
+
+                           {fullConfig["System"].safeSCAVERSION?.scaSafeVersionEnabled && (
+                             <div className="space-y-4 animate-in slide-in-from-top-2 duration-300">
+                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Stale Fix Message</label>
+                                    <textarea 
+                                      value={fullConfig["System"].safeSCAVERSION.scaStaleFixMessage || ""}
+                                      onChange={(e) => {
+                                        const next = JSON.parse(JSON.stringify(fullConfig));
+                                        next["System"].safeSCAVERSION.scaStaleFixMessage = e.target.value;
+                                        setFullConfig(next);
+                                      }}
+                                      className="w-full bento-input p-4 text-sm h-24 resize-none"
+                                    />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">No Fix Message</label>
+                                    <textarea 
+                                      value={fullConfig["System"].safeSCAVERSION.scaNoFixMessage || ""}
+                                      onChange={(e) => {
+                                        const next = JSON.parse(JSON.stringify(fullConfig));
+                                        next["System"].safeSCAVERSION.scaNoFixMessage = e.target.value;
+                                        setFullConfig(next);
+                                      }}
+                                      className="w-full bento-input p-4 text-sm h-24 resize-none"
+                                    />
+                                  </div>
+                               </div>
+                               <label className="flex items-center gap-3 p-3 bg-slate-900 border border-slate-800 rounded-xl cursor-pointer hover:bg-slate-800/50 transition-all">
+                                  <input 
+                                    type="checkbox"
+                                    checked={!!fullConfig["System"].safeSCAVERSION.saveScaLog}
+                                    onChange={(e) => {
+                                      const next = JSON.parse(JSON.stringify(fullConfig));
+                                      next["System"].safeSCAVERSION.saveScaLog = e.target.checked;
+                                      setFullConfig(next);
+                                    }}
+                                    className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-blue-500"
+                                  />
+                                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Save SCA Logs</span>
+                               </label>
+                             </div>
+                           )}
+                        </section>
+                      </div>
+                    )}
+
+                    {/* AiEngine Tab */}
+                    {settingsTab === "AiEngine" && fullConfig["AiEngine"] && (
+                      <div className="space-y-6">
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                             <section className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">AI Engines (one per line)</label>
+                                <textarea 
+                                    value={(fullConfig["AiEngine"].aiEngines || []).join('\n')}
+                                    onChange={(e) => setFullConfig({
+                                        ...fullConfig,
+                                        "AiEngine": { ...fullConfig["AiEngine"], aiEngines: e.target.value.split('\n').map(s => s.trim()).filter(Boolean) }
+                                    })}
+                                    className="w-full h-32 bento-input font-mono text-sm leading-normal p-4"
+                                />
+                             </section>
+                             <section className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Application Engine Models</label>
+                                <textarea 
+                                    value={(fullConfig["AiEngine"].engineModels || []).join('\n')}
+                                    onChange={(e) => setFullConfig({
+                                        ...fullConfig,
+                                        "AiEngine": { ...fullConfig["AiEngine"], engineModels: e.target.value.split('\n').map(s => s.trim()).filter(Boolean) }
+                                    })}
+                                    className="w-full h-32 bento-input font-mono text-sm leading-normal p-4"
+                                />
+                             </section>
+                         </div>
+
+                         <section className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Shared Service Endpoint</label>
+                            <input 
+                                type="text"
+                                value={fullConfig["AiEngine"].sharedServiceEndpoint || ""}
+                                onChange={(e) => setFullConfig({
+                                    ...fullConfig,
+                                    "AiEngine": { ...fullConfig["AiEngine"], sharedServiceEndpoint: e.target.value }
+                                })}
+                                className="w-full bento-input py-3 px-4 text-sm font-mono"
+                                placeholder="https://..."
+                            />
+                         </section>
+
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <section className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Shared Service Role</label>
+                                <input 
+                                    type="text"
+                                    value={fullConfig["AiEngine"].sharedServiceRole || ""}
+                                    onChange={(e) => setFullConfig({
+                                        ...fullConfig,
+                                        "AiEngine": { ...fullConfig["AiEngine"], sharedServiceRole: e.target.value }
+                                    })}
+                                    className="w-full bento-input py-3 px-4 text-sm"
+                                    placeholder="user"
+                                />
+                            </section>
+                            <section className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Shared Service Max Tokens</label>
+                                <input 
+                                    type="number"
+                                    value={fullConfig["AiEngine"].sharedServiceMaxTokens || 2048}
+                                    onChange={(e) => setFullConfig({
+                                        ...fullConfig,
+                                        "AiEngine": { ...fullConfig["AiEngine"], sharedServiceMaxTokens: parseInt(e.target.value) || 2048 }
+                                    })}
+                                    className="w-full bento-input py-3 px-4 text-sm"
+                                />
+                            </section>
+                         </div>
+                      </div>
+                    )}
+
+                    {/* SecondaryAudit Tab */}
+                    {settingsTab === "SecondaryAudit" && fullConfig["SecondaryAudit"] && (
+                      <div className="space-y-6">
+                        <section className="space-y-3">
+                          <label className="text-sm font-bold uppercase tracking-wider text-slate-300">Auditor System Prompt</label>
+                          <textarea
+                            value={fullConfig["SecondaryAudit"].auditorPrompt || ""}
+                            onChange={(e) => setFullConfig({
+                              ...fullConfig,
+                              "SecondaryAudit": { ...fullConfig["SecondaryAudit"], auditorPrompt: e.target.value }
+                            })}
+                            className="w-full h-48 bento-input font-mono text-xs leading-relaxed"
+                          />
+                        </section>
+                        <section className="space-y-3">
+                          <label className="text-sm font-bold uppercase tracking-wider text-slate-300">Conflict Fallback Text</label>
+                          <textarea
+                            value={fullConfig["SecondaryAudit"].fallbackText || ""}
+                            onChange={(e) => setFullConfig({
+                              ...fullConfig,
+                              "SecondaryAudit": { ...fullConfig["SecondaryAudit"], fallbackText: e.target.value }
+                            })}
+                            className="w-full h-24 bento-input font-mono text-xs leading-relaxed"
+                          />
+                        </section>
+                      </div>
+                    )}
+
+                    {/* Exclusions Tab */}
+                    {settingsTab === "Exclusions" && fullConfig["Exclusions"] && (
+                        <div className="space-y-6">
+                             <section className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Ignored Modules (CSV Area)</label>
+                                <textarea 
+                                    value={(fullConfig["Exclusions"].ignoredModules || []).join(', ')}
+                                    onChange={(e) => setFullConfig({
+                                        ...fullConfig,
+                                        "Exclusions": { ...fullConfig["Exclusions"], ignoredModules: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }
+                                    })}
+                                    className="w-full h-32 bento-input font-mono text-sm leading-normal p-4"
+                                />
+                             </section>
+                             <section className="space-y-3">
+                                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Included Modules (CSV Area)</label>
+                                <textarea 
+                                    value={(fullConfig["Exclusions"].includedModules || []).join(', ')}
+                                    onChange={(e) => setFullConfig({
+                                        ...fullConfig,
+                                        "Exclusions": { ...fullConfig["Exclusions"], includedModules: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }
+                                    })}
+                                    className="w-full h-32 bento-input font-mono text-sm leading-normal p-4"
+                                />
+                             </section>
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <section className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Ignored Ecosystems (CSV)</label>
+                                    <input 
+                                        type="text"
+                                        value={(fullConfig["Exclusions"].ignoredEcosystems || []).join(', ')}
+                                        onChange={(e) => setFullConfig({
+                                            ...fullConfig,
+                                            "Exclusions": { ...fullConfig["Exclusions"], ignoredEcosystems: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }
+                                        })}
+                                        className="w-full bento-input py-3 px-4 text-sm font-mono"
+                                    />
+                                </section>
+                                <section className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">No SCA Architectures (CSV)</label>
+                                    <input 
+                                        type="text"
+                                        value={(fullConfig["Exclusions"].noScaArchitectures || []).join(', ')}
+                                        onChange={(e) => setFullConfig({
+                                            ...fullConfig,
+                                            "Exclusions": { ...fullConfig["Exclusions"], noScaArchitectures: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }
+                                        })}
+                                        className="w-full bento-input py-3 px-4 text-sm font-mono"
+                                    />
+                                </section>
+                             </div>
+                        </div>
+                    )}
+
+                    {/* Compliance Tab */}
+                    {settingsTab === "Compliance" && fullConfig["Compliance"] && (
+                        <div className="space-y-10">
+                            {/* Tier Mappings Matrix */}
+                            <section className="space-y-4">
+                                <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+                                    <div className="p-2 bg-blue-600/10 rounded-lg">
+                                        <div className="w-4 h-4 text-blue-500">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m11 17 2 2 4-4"/><path d="m3 17 2 2 4-4"/><path d="m11 7 2 2 4-4"/><path d="m3 7 2 2 4-4"/></svg>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-200">Tier Mappings Matrix</h3>
+                                        <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest mt-0.5">Asset classification mapping by context & confidentiality</p>
+                                    </div>
+                                </div>
+
+                                <div className="overflow-x-auto border border-slate-800/50 rounded-2xl bg-slate-900/20">
+                                    <table className="w-full min-w-[600px] text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-900/50 border-b border-slate-800/50">
+                                                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Mapping Category</th>
+                                                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Confidentiality Level</th>
+                                                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Value Dropdown Selection</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-800/30">
+                                            {(() => {
+                                                const rows: React.ReactNode[] = [];
+                                                Object.entries(fullConfig["Compliance"].tierMappings || {}).forEach(([category, mappings]: [string, any]) => {
+                                                    Object.entries(mappings).forEach(([confidentiality, currentTier]) => {
+                                                        rows.push(
+                                                            <tr key={`${category}-${confidentiality}`} className="hover:bg-slate-800/10 transition-colors">
+                                                                <td className="px-6 py-2 text-xs font-black text-slate-200 uppercase tracking-widest">{category}</td>
+                                                                <td className="px-6 py-2 text-xs font-bold text-slate-300">{confidentiality}</td>
+                                                                <td className="px-6 py-2">
+                                                                    <div className="flex">
+                                                                        <select 
+                                                                            value={currentTier as string}
+                                                                            onChange={(e) => {
+                                                                                const newConfig = JSON.parse(JSON.stringify(fullConfig));
+                                                                                newConfig["Compliance"].tierMappings[category][confidentiality] = e.target.value;
+                                                                                setFullConfig(newConfig);
+                                                                            }}
+                                                                            className="bg-[#1a1c23] border border-slate-700/50 rounded-lg text-xs font-black text-blue-400 py-1.5 px-4 outline-none hover:border-blue-500/50 transition-all cursor-pointer min-w-[140px]"
+                                                                        >
+                                                                            {fullConfig["Compliance"].tierDropDown.map((t: string) => (
+                                                                                <option key={t} value={t}>[ {t} ]</option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    });
+                                                });
+                                                return rows;
+                                            })()}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </section>
+
+                            {/* Grace Periods Matrix */}
+                            <section className="space-y-4">
+                                <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+                                    <div className="p-2 bg-emerald-600/10 rounded-lg">
+                                        <div className="w-4 h-4 text-emerald-500">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-200">Grace Periods SLA Matrix</h3>
+                                        <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest mt-0.5">Remediation timelines by Asset Tier & Severity</p>
+                                    </div>
+                                </div>
+
+                                <div className="overflow-x-auto border border-slate-800/50 rounded-2xl bg-slate-900/20">
+                                    <table className="w-full min-w-[700px] text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-900/50 border-b border-slate-800/50">
+                                                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 border-r border-slate-800/50">Asset Tier</th>
+                                                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 text-center">Very High</th>
+                                                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-amber-500 text-center">High</th>
+                                                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-orange-500 text-center">Medium</th>
+                                                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Low</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-800/30">
+                                            {(fullConfig["Compliance"].tierDropDown || []).map((tier: string) => (
+                                                <tr key={tier} className="hover:bg-slate-800/10 transition-colors">
+                                                    <td className="px-6 py-2 text-xs font-black text-slate-300 uppercase tracking-widest bg-slate-900/30 border-r border-slate-800/50">
+                                                        {tier}
+                                                    </td>
+                                                    {["VeryHigh", "High", "Medium", "Low"].map((sev) => (
+                                                        <td key={sev} className="px-4 py-1.5">
+                                                            <div className="flex justify-center">
+                                                                <input 
+                                                                    type="number"
+                                                                    value={fullConfig["Compliance"].gracePeriods[tier]?.[sev] ?? 0}
+                                                                    onChange={(e) => {
+                                                                        const newConfig = JSON.parse(JSON.stringify(fullConfig));
+                                                                        if (!newConfig["Compliance"].gracePeriods[tier]) {
+                                                                            newConfig["Compliance"].gracePeriods[tier] = {};
+                                                                        }
+                                                                        newConfig["Compliance"].gracePeriods[tier][sev] = parseInt(e.target.value) || 0;
+                                                                        setFullConfig(newConfig);
+                                                                    }}
+                                                                    className="w-20 bento-input !px-2 text-center py-1 text-[11px] font-bold"
+                                                                />
+                                                            </div>
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </section>
+                        </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="p-6 border-t border-slate-800 bg-slate-900/50 flex justify-end gap-3">
@@ -2330,13 +2507,10 @@ export default function App() {
                   </button>
                   <button
                     onClick={savePrompts}
-                    disabled={
-                      sastSystemPrompt === initialSastPrompt &&
-                      scaSystemPrompt === initialScaPrompt
-                    }
+                    disabled={JSON.stringify(fullConfig) === JSON.stringify(initialFullConfig)}
                     className="px-8 py-2 bg-white text-black text-sm font-black rounded-xl hover:bg-slate-200 transition-all active:scale-95 shadow-[0_0_15px_rgba(255,255,255,0.1)] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    SAVE CONFIGURATION
+                    SAVE MASTER CONFIG
                   </button>
                 </div>
               </motion.div>
@@ -2625,46 +2799,59 @@ export default function App() {
                 </h2>
               </div>
               <div className="p-6">
-                <p className="text-sm text-slate-300 mb-4">
-                  You are about to submit mitigation proposals for the following {batchModalConfig.selectedItems.reduce((acc, item) => acc + item.records.length, 0)} records:
-                </p>
-                <div className="space-y-2 mb-6 max-h-[40vh] overflow-auto">
-                  {Object.values(
-                    batchModalConfig.selectedItems.reduce((acc, item) => {
-                      const displayKey = item.type === "SCA" && item.identifier ? item.identifier : `CWE-${item.cweId}`;
-                      let gSev = item.severity;
-                      if (gSev === "VeryHigh") gSev = "Very High";
-                      if (gSev === "Information") gSev = "Info";
-
-                      const key = `${displayKey}__${gSev}`;
-                      if (!acc[key]) {
-                        acc[key] = { displayKey, count: 0, severity: gSev };
-                      }
-                      acc[key].count += item.records.length;
-                      return acc;
-                    }, {} as Record<string, { displayKey: string; count: number; severity: string }>)
-                  ).map(({ displayKey, count, severity }) => (
-                    <div key={`${displayKey}__${severity}`} className="flex justify-between items-center p-3 bg-slate-900 border border-slate-800 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-xs font-black text-slate-400 uppercase">{displayKey}</span>
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[9px] font-black uppercase tracking-widest leading-none shrink-0 ${
-                          severity === 'Very High' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
-                          severity === 'High' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
-                          severity === 'Medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
-                          severity === 'Low' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
-                          'bg-slate-800 text-slate-500 border-slate-700'
-                        }`}>
-                          {severity}
-                        </span>
-                      </div>
-                      <span className="text-xs font-black text-blue-400 bg-blue-500/10 px-2 py-1 rounded shrink-0">{count} {count === 1 ? 'record' : 'records'}</span>
+                {isSubmitting ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-4">
+                    <RefreshCcw size={40} className="animate-spin text-blue-500" />
+                    <div className="text-center">
+                      <p className="text-sm font-black uppercase tracking-widest text-white mb-2">Processing mitigation proposals</p>
+                      <p className="text-xs text-slate-500 font-mono">Synchronizing with Veracode backend. This may take several moments...</p>
                     </div>
-                  ))}
-                </div>
-                <div className="flex justify-end gap-3">
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-slate-300 mb-4">
+                      You are about to submit mitigation proposals for the following {batchModalConfig.selectedItems.reduce((acc, item) => acc + item.records.length, 0)} records:
+                    </p>
+                    <div className="space-y-2 mb-6 max-h-[40vh] overflow-auto">
+                      {Object.values(
+                        batchModalConfig.selectedItems.reduce((acc, item) => {
+                          const displayKey = item.type === "SCA" && item.identifier ? item.identifier : `CWE-${item.cweId}`;
+                          let gSev = item.severity;
+                          if (gSev === "VeryHigh") gSev = "Very High";
+                          if (gSev === "Information") gSev = "Info";
+
+                          const key = `${displayKey}__${gSev}`;
+                          if (!acc[key]) {
+                            acc[key] = { displayKey, count: 0, severity: gSev };
+                          }
+                          acc[key].count += item.records.length;
+                          return acc;
+                        }, {} as Record<string, { displayKey: string; count: number; severity: string }>)
+                      ).map(({ displayKey, count, severity }) => (
+                        <div key={`${displayKey}__${severity}`} className="flex justify-between items-center p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-xs font-black text-slate-400 uppercase">{displayKey}</span>
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[9px] font-black uppercase tracking-widest leading-none shrink-0 ${
+                              severity === 'Very High' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
+                              severity === 'High' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                              severity === 'Medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
+                              severity === 'Low' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                              'bg-slate-800 text-slate-500 border-slate-700'
+                            }`}>
+                              {severity}
+                            </span>
+                          </div>
+                          <span className="text-xs font-black text-blue-400 bg-blue-500/10 px-2 py-1 rounded shrink-0">{count} {count === 1 ? 'record' : 'records'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+                <div className="flex justify-end gap-3 px-0 pb-0">
                   <button
                     onClick={() => setBatchModalConfig(null)}
-                    className="px-6 py-2.5 bg-slate-800 text-slate-300 text-xs font-black uppercase tracking-widest rounded-lg hover:bg-slate-700 transition"
+                    disabled={isSubmitting}
+                    className="px-6 py-2.5 bg-slate-800 text-slate-300 text-xs font-black uppercase tracking-widest rounded-lg hover:bg-slate-700 transition disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -2674,7 +2861,7 @@ export default function App() {
                     className={`px-6 py-2.5 text-xs font-black uppercase tracking-widest rounded-lg transition ${batchModalConfig.actionType === "approved" ? "bg-emerald-600 hover:bg-emerald-500 text-white" : "bg-red-600 hover:bg-red-500 text-white"} disabled:opacity-50 flex items-center gap-2`}
                   >
                     {isSubmitting ? <RefreshCcw size={14} className="animate-spin" /> : null}
-                    Submit {batchModalConfig.actionType === "approved" ? "Approval" : "Rejection"}
+                    {isSubmitting ? "Submitting..." : `Submit ${batchModalConfig.actionType === "approved" ? "Approval" : "Rejection"}`}
                   </button>
                 </div>
               </div>
@@ -2685,7 +2872,7 @@ export default function App() {
 
         <AnimatePresence>
           {successMessage && (
-            <div className="fixed inset-0 z-[160] flex items-center justify-center p-6 bg-transparent pointer-events-none">
+            <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-transparent pointer-events-none">
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -2725,7 +2912,7 @@ export default function App() {
 
         <AnimatePresence>
           {backendError && (
-            <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-transparent pointer-events-none">
+            <div className="fixed inset-0 z-[310] flex items-center justify-center p-6 bg-transparent pointer-events-none">
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}

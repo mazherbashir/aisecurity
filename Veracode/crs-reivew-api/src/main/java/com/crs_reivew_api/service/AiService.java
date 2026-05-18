@@ -75,6 +75,75 @@ public class AiService {
         throw new IllegalArgumentException("Unsupported AI engine: " + engine);
     }
 
+    public AiResult callAuditorService(String model, String prompt) throws Exception {
+        String url = veracodeConfig.getSharedAuditorEndpoint();
+        String key = veracodeConfig.getSharedServiceKey();
+
+        if (url == null || url.isEmpty()) {
+            throw new RuntimeException("Shared Auditor Service endpoint is not configured");
+        }
+        java.net.URI uri = URI.create(url);
+        logger.info("Shared Auditor Service Debug - URL: '{}', Host: '{}', Path: '{}'", url, uri.getHost(), uri.getPath());
+        if (uri.getHost() == null) {
+            throw new RuntimeException("Invalid Shared Auditor Service URL: Host is null. URL was: " + url);
+        }
+
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("model", model);
+        payload.putArray("messages")
+               .addObject()
+               .put("role", veracodeConfig.getSharedAuditorRole())
+               .put("content", prompt);
+        payload.put("max_tokens", veracodeConfig.getSharedAuditorMaxTokens());
+        payload.put("stream", false);
+
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(payload.toString()));
+        
+        if (key != null && !key.isEmpty()) {
+            builder.header("Authorization", "Bearer " + key);
+        }
+
+        HttpRequest request = builder.build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() != 200) {
+            logger.error("Shared Auditor AI Service error ({}): {}", response.statusCode(), response.body());
+            throw new RuntimeException("Shared Auditor AI Service error (" + response.statusCode() + "): " + response.body());
+        }
+
+        JsonNode root = objectMapper.readTree(response.body());
+        JsonNode contentNode = root.path("choices").path(0).path("message").path("content");
+        String text = contentNode.isMissingNode() ? response.body() : contentNode.asText();
+
+        int inTokens = root.path("usage").path("prompt_tokens").asInt(0);
+        int outTokens = root.path("usage").path("completion_tokens").asInt(0);
+
+        return new AiResult(text, inTokens, outTokens);
+    }
+
+    public void saveAuditFailureLog(String originalRequestData, String phase1Output, String auditorResponse) {
+        try {
+            String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date());
+            java.nio.file.Path logDir = java.nio.file.Paths.get("veracode", "logs");
+            java.nio.file.Files.createDirectories(logDir);
+            
+            ObjectNode logPayload = objectMapper.createObjectNode();
+            logPayload.put("timestamp", timestamp);
+            logPayload.put("originalRequestData", originalRequestData);
+            logPayload.put("phase1Output", phase1Output);
+            logPayload.put("auditorResponse", auditorResponse);
+            
+            String fileName = String.format("audit_fail_%s.json", timestamp);
+            java.nio.file.Files.writeString(logDir.resolve(fileName), objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(logPayload));
+            logger.info("Saved detailed auditor mismatch log to: {}", logDir.resolve(fileName).toAbsolutePath());
+        } catch (Exception e) {
+            logger.error("Warning: Could not save auditor failure log: {}", e.getMessage());
+        }
+    }
+
     private AiResult callSharedService(String model, String prompt) throws Exception {
         String url = veracodeConfig.getSharedServiceEndpoint();
         String key = veracodeConfig.getSharedServiceKey();

@@ -47,10 +47,55 @@ public class AiController {
 
             logger.info("Analyzing with engine: {}, type: {}", engine, type);
             AiService.AiResult result = aiService.callAi(engine, fullPrompt);
+
+            int totalInTokens = result.inTokens;
+            int totalOutTokens = result.outTokens;
+            String finalResultText = result.text;
+
+            if (veracodeConfig.isSecondaryAuditEnabled()) {
+                logger.info("Executing Phase 2: Secondary Audit Verification using model: {}", veracodeConfig.getAuditorModelName());
+                try {
+                    String auditorPromptSystem = veracodeConfig.getAuditorPrompt();
+                    String auditorFullPrompt = auditorPromptSystem + "\n\n" +
+                                               "[Original Request Data]:\n" + fullPrompt + "\n\n" +
+                                               "[Phase 1 Output]:\n" + result.text;
+
+                    AiService.AiResult auditResult = aiService.callAuditorService(veracodeConfig.getAuditorModelName(), auditorFullPrompt);
+                    totalInTokens += auditResult.inTokens;
+                    totalOutTokens += auditResult.outTokens;
+
+                    boolean agrees = true;
+                    String verdictText = auditResult.text.toLowerCase();
+                    int verdictIndex = verdictText.indexOf("validation verdict");
+                    if (verdictIndex != -1) {
+                        int endOfLine = auditResult.text.indexOf("\n", verdictIndex);
+                        String verdictLine = (endOfLine == -1) ? 
+                            auditResult.text.substring(verdictIndex) : 
+                            auditResult.text.substring(verdictIndex, endOfLine);
+                        
+                        if (verdictLine.toLowerCase().contains("disagree")) {
+                            agrees = false;
+                        }
+                    }
+
+                    if (!agrees) {
+                        logger.warn("AUDIT CONTRADICTION DETECTED: Secondary Auditor disagreed with Phase 1 Verdict.");
+                        finalResultText = veracodeConfig.getAuditorDisagreeFallbackText();
+                        aiService.saveAuditFailureLog(fullPrompt, result.text, auditResult.text);
+                        response.put("auditVerdict", "Disagree");
+                    } else {
+                        logger.info("Secondary Auditor agreed with Phase 1 Verdict.");
+                        response.put("auditVerdict", "Agree");
+                    }
+                } catch (Exception auditEx) {
+                    logger.error("Secondary Audit failed, continuing with primary AI result. Error: {}", auditEx.getMessage(), auditEx);
+                }
+            }
+
             response.put("status", "success");
-            response.put("result", result.text);
-            response.put("in", result.inTokens);
-            response.put("out", result.outTokens);
+            response.put("result", finalResultText);
+            response.put("in", totalInTokens);
+            response.put("out", totalOutTokens);
             response.put("engine", engine);
         } catch (Exception e) {
             logger.error("AI analysis error: {}", e.getMessage(), e);

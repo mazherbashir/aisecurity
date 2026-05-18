@@ -22,8 +22,8 @@ public class VeracodeReportDTO {
     public List<String> selectedModules = new ArrayList<>();
     public List<String> architectures = new ArrayList<>();
     public String scaEcosystems;
+    public boolean scaSafeVersionEnabled;
     public List<String> packagingAnomalies = new ArrayList<>();
-    public BuildInfo buildInfo;
 
     public static class ScanOverviewDTO {
         public String applicationName;
@@ -77,11 +77,13 @@ public class VeracodeReportDTO {
         public String cve_summary;
         public List<String> userComments;
         public String remediation_due_date;
+        public String fixedVersion;
     }
 
     public static class ScaDetailDTO {
         public String packageName;
         public String version;
+        public String safeVersion;
         public String firstFoundDate;
         public String remediation_due_date;
         public String severityCounts; // e.g., "VeryHigh: 1 Medium: 2"

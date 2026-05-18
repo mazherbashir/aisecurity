@@ -48,6 +48,18 @@ public class VeracodeConfig {
     private List<String> engineModels = new ArrayList<>();
     private String mitigationApiType = "XML";
     private String mitigationProposalEnabled = "true";
+    private String githubToken;
+    private boolean scaSafeVersionEnabled = true;
+    private String scaNoFixMessage = "No safe version published in GHSA. Check manually.";
+    private String scaStaleFixMessage = "No safe version found. Fix applies to a different major version. Check manually.";
+    private boolean saveScaLog = false;
+    private boolean secondaryAuditEnabled = false;
+    private String auditorModelName = "gpt-4o-mini";
+    private String sharedAuditorEndpoint;
+    private int sharedAuditorMaxTokens = 1000;
+    private String sharedAuditorRole = "user";
+    private String auditorDisagreeFallbackText = "Proposal Rejected please perform a Manual Review as The Evaluator and Auditor model has contradiction!";
+    private String auditorPrompt;
     private Key key = new Key();
 
     @PostConstruct
@@ -65,12 +77,67 @@ public class VeracodeConfig {
                 this.azureEndpoint = getProp(props, "azureEndpoint", this.azureEndpoint);
                 this.azureDeployment = getProp(props, "azureDeployment", this.azureDeployment);
                 this.sharedServiceKey = getProp(props, "sharedServiceKey", this.sharedServiceKey);
-                logger.info("Successfully loaded AI configuration from {}", credentialsFile.getAbsolutePath());
+                this.githubToken = getProp(props, "githubToken", this.githubToken);
+                
+                // CRITICAL: Load Veracode API Keys
+                this.key.setId(getProp(props, "id", this.key.getId()));
+                this.key.setSecret(getProp(props, "secret", this.key.getSecret()));
+                
+                logger.info("Successfully loaded AI, GitHub, and Veracode credentials from {}", credentialsFile.getAbsolutePath());
             } catch (IOException e) {
                 logger.error("Failed to load credentials file: {}", e.getMessage());
             }
         } else {
             logger.warn("Credentials file not found at {}. AI keys will be read from environment or application.properties if available.", credentialsFile.getAbsolutePath());
+        }
+        
+        // Manually parse application.properties to populate gracePeriods and tierMappings if they are empty
+        File appPropsFile = new File("src/main/resources/application.properties");
+        if (appPropsFile.exists()) {
+            Properties appProps = new Properties();
+            try (FileInputStream fis = new FileInputStream(appPropsFile)) {
+                appProps.load(fis);
+                
+                // Populate tierMappings
+                if (this.tierMappings == null || this.tierMappings.isEmpty()) {
+                    this.tierMappings = new HashMap<>();
+                    for (String keyName : appProps.stringPropertyNames()) {
+                        if (keyName.startsWith("veracode.api.tier-mappings.")) {
+                            String suffix = keyName.substring("veracode.api.tier-mappings.".length());
+                            int lastDot = suffix.lastIndexOf('.');
+                            if (lastDot > 0) {
+                                String group = suffix.substring(0, lastDot);
+                                String subGroup = suffix.substring(lastDot + 1);
+                                String value = appProps.getProperty(keyName);
+                                this.tierMappings.computeIfAbsent(group, k -> new HashMap<>()).put(subGroup, value);
+                            }
+                        }
+                    }
+                }
+                
+                // Populate gracePeriods
+                if (this.gracePeriods == null || this.gracePeriods.isEmpty()) {
+                    this.gracePeriods = new HashMap<>();
+                    for (String keyName : appProps.stringPropertyNames()) {
+                        if (keyName.startsWith("veracode.api.grace-periods.")) {
+                            String suffix = keyName.substring("veracode.api.grace-periods.".length());
+                            int lastDot = suffix.lastIndexOf('.');
+                            if (lastDot > 0) {
+                                String tier = suffix.substring(0, lastDot);
+                                String severity = suffix.substring(lastDot + 1);
+                                try {
+                                    Integer value = Integer.parseInt(appProps.getProperty(keyName));
+                                    this.gracePeriods.computeIfAbsent(tier, k -> new HashMap<>()).put(severity, value);
+                                } catch (NumberFormatException e) {
+                                    // ignore
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                logger.error("Failed to manually load application.properties: {}", e.getMessage());
+            }
         }
     }
 
@@ -312,6 +379,105 @@ public class VeracodeConfig {
 
     public void setArchitectureMappings(Map<String, String> architectureMappings) {
         this.architectureMappings = architectureMappings;
+    }
+
+    public String getGithubToken() {
+        return githubToken;
+    }
+    
+    public void setGithubToken(String githubToken) {
+        this.githubToken = githubToken;
+    }
+
+    public boolean isScaSafeVersionEnabled() {
+        return scaSafeVersionEnabled;
+    }
+
+    public void setScaSafeVersionEnabled(boolean scaSafeVersionEnabled) {
+        this.scaSafeVersionEnabled = scaSafeVersionEnabled;
+    }
+
+    public String getScaNoFixMessage() {
+        return scaNoFixMessage;
+    }
+
+    public void setScaNoFixMessage(String scaNoFixMessage) {
+        this.scaNoFixMessage = scaNoFixMessage;
+    }
+
+    public String getScaStaleFixMessage() {
+        return scaStaleFixMessage;
+    }
+
+    public void setScaStaleFixMessage(String scaStaleFixMessage) {
+        this.scaStaleFixMessage = scaStaleFixMessage;
+    }
+
+    public boolean isSaveScaLog() {
+        return saveScaLog;
+    }
+
+    public void setSaveScaLog(boolean saveScaLog) {
+        this.saveScaLog = saveScaLog;
+    }
+
+    public boolean isSecondaryAuditEnabled() {
+        return secondaryAuditEnabled;
+    }
+
+    public void setSecondaryAuditEnabled(boolean secondaryAuditEnabled) {
+        this.secondaryAuditEnabled = secondaryAuditEnabled;
+    }
+
+    public String getAuditorModelName() {
+        return auditorModelName;
+    }
+
+    public void setAuditorModelName(String auditorModelName) {
+        this.auditorModelName = auditorModelName;
+    }
+
+    public String getSharedAuditorEndpoint() {
+        return sharedAuditorEndpoint;
+    }
+
+    public void setSharedAuditorEndpoint(String sharedAuditorEndpoint) {
+        this.sharedAuditorEndpoint = sharedAuditorEndpoint;
+    }
+
+    public int getSharedAuditorMaxTokens() {
+        return sharedAuditorMaxTokens;
+    }
+
+    public void setSharedAuditorMaxTokens(int sharedAuditorMaxTokens) {
+        this.sharedAuditorMaxTokens = sharedAuditorMaxTokens;
+    }
+
+    public String getSharedAuditorRole() {
+        return sharedAuditorRole;
+    }
+
+    public void setSharedAuditorRole(String sharedAuditorRole) {
+        this.sharedAuditorRole = sharedAuditorRole;
+    }
+
+    public String getAuditorDisagreeFallbackText() {
+        return auditorDisagreeFallbackText;
+    }
+
+    public void setAuditorDisagreeFallbackText(String auditorDisagreeFallbackText) {
+        this.auditorDisagreeFallbackText = auditorDisagreeFallbackText;
+    }
+
+    public String getAuditorPrompt() {
+        if (auditorPrompt == null || auditorPrompt.isEmpty()) {
+            return "You are a Senior Security QA Auditor acting as a secondary verification layer. Your job is to strictly review the output generated by a primary evaluation model against the original input data.\n\nYou will be provided with two sets of data:\n1. [Original Request Data]: The raw vulnerability JSON payload.\n2. [Phase 1 Output]: The text response generated by the primary model.\n\nYour task is to independently verify the quality, accuracy, and constraint compliance of the Phase 1 Output.\n\n### CRITERIA FOR EVALUATION\n1. Accuracy Check: Did Phase 1 correctly interpret the vulnerability description and user comments? (e.g., If the user comments proved the value is a non-secret UI lookup GUID, did Phase 1 correctly identify it as a false positive?)\n2. Constraint Compliance Check: Did Phase 1 strictly adhere to its formatting boundaries?\n   - Does it start exactly with \"Proposal Approved\" or \"Proposal Rejected\"?\n   - Is it written as exactly ONE paragraph?\n   - Is it under 120 words and free of bullet points or headings?\n\n### OUTPUT FORMAT\nYou must output your audit evaluation strictly using the following Markdown template. Do not add conversational intro text or metadata.\n\n### Second Look Assessment\n- **Validation Verdict:** [Agree / Disagree with Phase 1 Verdict]\n- **Rule Compliance:** [Pass / Fail - state if formatting limits were met]\n- **Critique:** [2-3 sentences explaining your reasoning regarding the technical accuracy and compliance of Phase 1]";
+        }
+        return auditorPrompt;
+    }
+
+    public void setAuditorPrompt(String auditorPrompt) {
+        this.auditorPrompt = auditorPrompt;
     }
 
     public static class Key {
