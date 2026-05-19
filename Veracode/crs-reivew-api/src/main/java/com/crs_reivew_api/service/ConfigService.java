@@ -112,6 +112,22 @@ public class ConfigService {
                     veracodeConfig.setAuditorDisagreeFallbackText(payload.getSecondaryAudit().getFallbackText());
                     updates.put("veracode.api.auditor-disagree-fallback-text", payload.getSecondaryAudit().getFallbackText());
                 }
+                if (payload.getSecondaryAudit().getAuditorModel() != null) {
+                    veracodeConfig.setAuditorModelName(payload.getSecondaryAudit().getAuditorModel());
+                    updates.put("veracode.api.auditor-model-name", payload.getSecondaryAudit().getAuditorModel());
+                }
+                if (payload.getSecondaryAudit().getSharedAuditorEndpoint() != null) {
+                    veracodeConfig.setSharedAuditorEndpoint(payload.getSecondaryAudit().getSharedAuditorEndpoint());
+                    updates.put("veracode.api.shared-auditor-endpoint", payload.getSecondaryAudit().getSharedAuditorEndpoint());
+                }
+                if (payload.getSecondaryAudit().getSharedAuditorMaxTokens() != null) {
+                    veracodeConfig.setSharedAuditorMaxTokens(payload.getSecondaryAudit().getSharedAuditorMaxTokens());
+                    updates.put("veracode.api.shared-auditor-max-tokens", String.valueOf(payload.getSecondaryAudit().getSharedAuditorMaxTokens()));
+                }
+                if (payload.getSecondaryAudit().getSharedAuditorRole() != null) {
+                    veracodeConfig.setSharedAuditorRole(payload.getSecondaryAudit().getSharedAuditorRole());
+                    updates.put("veracode.api.shared-auditor-role", payload.getSecondaryAudit().getSharedAuditorRole());
+                }
             }
             if (payload.getAiEngine() != null) {
                 if (payload.getAiEngine().getAiEngines() != null) {
@@ -121,6 +137,102 @@ public class ConfigService {
                 if (payload.getAiEngine().getEngineModels() != null) {
                     veracodeConfig.setEngineModels(payload.getAiEngine().getEngineModels());
                     updates.put("veracode.api.engine-models", String.join(",", payload.getAiEngine().getEngineModels()));
+                }
+                if (payload.getAiEngine().getSharedServiceEndpoint() != null) {
+                    veracodeConfig.setSharedServiceEndpoint(payload.getAiEngine().getSharedServiceEndpoint());
+                    updates.put("veracode.api.shared-service-endpoint", payload.getAiEngine().getSharedServiceEndpoint());
+                }
+                if (payload.getAiEngine().getSharedServiceRole() != null) {
+                    veracodeConfig.setSharedServiceRole(payload.getAiEngine().getSharedServiceRole());
+                    updates.put("veracode.api.shared-service-role", payload.getAiEngine().getSharedServiceRole());
+                }
+                if (payload.getAiEngine().getSharedServiceMaxTokens() != null) {
+                    veracodeConfig.setSharedServiceMaxTokens(payload.getAiEngine().getSharedServiceMaxTokens());
+                    updates.put("veracode.api.shared-service-max-tokens", String.valueOf(payload.getAiEngine().getSharedServiceMaxTokens()));
+                }
+            }
+            if (payload.getSystem() != null) {
+                if (payload.getSystem().getScanValidityDays() != null) {
+                    veracodeConfig.setScanValidityDays(payload.getSystem().getScanValidityDays());
+                    updates.put("veracode.api.scan-validity-days", String.valueOf(payload.getSystem().getScanValidityDays()));
+                }
+                if (payload.getSystem().getMitigationProposalEnabled() != null) {
+                    veracodeConfig.setMitigationProposalEnabled(String.valueOf(payload.getSystem().getMitigationProposalEnabled()));
+                    updates.put("veracode.api.mitigation-proposal-enabled", String.valueOf(payload.getSystem().getMitigationProposalEnabled()));
+                }
+                if (payload.getSystem().getMitigationApiType() != null) {
+                    veracodeConfig.setMitigationApiType(payload.getSystem().getMitigationApiType());
+                    updates.put("veracode.api.mitigation-api-type", payload.getSystem().getMitigationApiType());
+                }
+                if (payload.getSystem().getSaveXmlLogs() != null) {
+                    veracodeConfig.setSaveXmlLogs(payload.getSystem().getSaveXmlLogs());
+                    updates.put("veracode.api.save-xml-logs", String.valueOf(payload.getSystem().getSaveXmlLogs()));
+                }
+                if (payload.getSystem().getSaveJsonHistory() != null) {
+                    veracodeConfig.setSaveJsonHistory(payload.getSystem().getSaveJsonHistory());
+                    updates.put("veracode.api.save-json-history", String.valueOf(payload.getSystem().getSaveJsonHistory()));
+                }
+                if (payload.getSystem().getHistoryLimit() != null) {
+                    veracodeConfig.setHistoryLimit(payload.getSystem().getHistoryLimit());
+                    updates.put("veracode.api.history-limit", String.valueOf(payload.getSystem().getHistoryLimit()));
+                }
+                if (payload.getSystem().getSecondaryAuditEnabled() != null) {
+                    veracodeConfig.setSecondaryAuditEnabled(payload.getSystem().getSecondaryAuditEnabled());
+                    updates.put("veracode.api.secondary-audit-enabled", String.valueOf(payload.getSystem().getSecondaryAuditEnabled()));
+                }
+                if (payload.getSystem().getSafeScaVersion() != null) {
+                    if (payload.getSystem().getSafeScaVersion().getScaSafeVersionEnabled() != null) {
+                        veracodeConfig.setScaSafeVersionEnabled(payload.getSystem().getSafeScaVersion().getScaSafeVersionEnabled());
+                        updates.put("veracode.api.scaSafeVersionEnabled", String.valueOf(payload.getSystem().getSafeScaVersion().getScaSafeVersionEnabled()));
+                    }
+                    if (payload.getSystem().getSafeScaVersion().getScaStaleFixMessage() != null) {
+                        veracodeConfig.setScaStaleFixMessage(payload.getSystem().getSafeScaVersion().getScaStaleFixMessage());
+                        updates.put("veracode.api.sca-stale-fix-message", payload.getSystem().getSafeScaVersion().getScaStaleFixMessage());
+                    }
+                    if (payload.getSystem().getSafeScaVersion().getScaNoFixMessage() != null) {
+                        veracodeConfig.setScaNoFixMessage(payload.getSystem().getSafeScaVersion().getScaNoFixMessage());
+                        updates.put("veracode.api.sca-no-fix-message", payload.getSystem().getSafeScaVersion().getScaNoFixMessage());
+                    }
+                    if (payload.getSystem().getSafeScaVersion().getSaveScaLog() != null) {
+                        veracodeConfig.setSaveScaLog(payload.getSystem().getSafeScaVersion().getSaveScaLog());
+                        updates.put("veracode.api.save-sca-log", String.valueOf(payload.getSystem().getSafeScaVersion().getSaveScaLog()));
+                    }
+                }
+            }
+            if (payload.getExclusions() != null) {
+                if (payload.getExclusions().getIgnoredModules() != null) {
+                    veracodeConfig.setIgnoreModules(payload.getExclusions().getIgnoredModules());
+                    updates.put("veracode.api.ignore-modules", String.join(",", payload.getExclusions().getIgnoredModules()));
+                }
+                if (payload.getExclusions().getIncludedModules() != null) {
+                    veracodeConfig.setIncludeModules(payload.getExclusions().getIncludedModules());
+                    updates.put("veracode.api.include-modules", String.join(",", payload.getExclusions().getIncludedModules()));
+                }
+                if (payload.getExclusions().getIgnoredEcosystems() != null) {
+                    veracodeConfig.setIgnoreEcosystems(payload.getExclusions().getIgnoredEcosystems());
+                    updates.put("veracode.api.ignore-ecosystems", String.join(",", payload.getExclusions().getIgnoredEcosystems()));
+                }
+                if (payload.getExclusions().getNoScaArchitectures() != null) {
+                    veracodeConfig.setNoSca(payload.getExclusions().getNoScaArchitectures());
+                    updates.put("veracode.api.no-sca", String.join(",", payload.getExclusions().getNoScaArchitectures()));
+                }
+            }
+            if (payload.getCompliance() != null) {
+                if (payload.getCompliance().getTierMappings() != null) {
+                    veracodeConfig.setTierMappings(payload.getCompliance().getTierMappings());
+                    for (java.util.Map.Entry<String, java.util.Map<String, String>> exposureEntry : payload.getCompliance().getTierMappings().entrySet()) {
+                        for (java.util.Map.Entry<String, String> classEntry : exposureEntry.getValue().entrySet()) {
+                            updates.put("veracode.api.tier-mappings." + exposureEntry.getKey() + "." + classEntry.getKey(), classEntry.getValue());
+                        }
+                    }
+                }
+                if (payload.getCompliance().getGracePeriods() != null) {
+                    veracodeConfig.setGracePeriods(payload.getCompliance().getGracePeriods());
+                    for (java.util.Map.Entry<String, java.util.Map<String, Integer>> tierEntry : payload.getCompliance().getGracePeriods().entrySet()) {
+                        for (java.util.Map.Entry<String, Integer> sevEntry : tierEntry.getValue().entrySet()) {
+                            updates.put("veracode.api.grace-periods." + tierEntry.getKey() + "." + sevEntry.getKey(), String.valueOf(sevEntry.getValue()));
+                        }
+                    }
                 }
             }
         }

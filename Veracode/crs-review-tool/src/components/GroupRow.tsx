@@ -50,43 +50,52 @@ export const GroupRow: React.FC<GroupRowProps> = ({
           disabled={!!group.status}
         />
       </td>
-      <td className="p-4 align-top">
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col">
-            <span className="text-lg font-black text-blue-400 font-mono leading-none">
-              {group.records.length.toString().padStart(2, '0')}
-            </span>
-            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter mt-1">Findings</span>
+      <td colSpan={2} className="p-4 align-top">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-start">
+            {/* QTY SECTION - Aligned with QTY header (w-20) */}
+            <div className="flex flex-col w-20 shrink-0">
+              <span className="text-lg font-black text-blue-400 font-mono leading-none">
+                {group.records.length.toString().padStart(2, '0')}
+              </span>
+              <span className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter mt-1">Findings</span>
+            </div>
+
+            {/* IDENTIFIER SECTION - Aligned with IDENTIFIER header (w-40) */}
+            <div className="flex flex-col items-start gap-1 flex-1 min-w-[160px]">
+              {group.type === 'SCA' && group.identifier ? (
+                <span className="text-sm font-black text-blue-400 break-all">{group.identifier}</span>
+              ) : (
+                <a 
+                  href={`${CWE_BASE_URL}${group.cweId}.html`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-black text-blue-400 hover:text-blue-300 transition-colors shrink-0"
+                >
+                  CWE-{group.cweId}
+                </a>
+              )}
+              <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[9px] font-black uppercase tracking-widest leading-none shrink-0 ${
+                group.severity === 'Very High' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
+                group.severity === 'High' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                group.severity === 'Medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
+                group.severity === 'Low' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                'bg-slate-800 text-slate-500 border-slate-700'
+              }`}>
+                {group.severity}
+              </span>
+            </div>
           </div>
-        </div>
-      </td>
-      <td className="p-4 align-top">
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-col items-start gap-1">
-            {group.type === 'SCA' && group.identifier ? (
-              <span className="text-sm font-black text-blue-400 break-all">{group.identifier}</span>
-            ) : (
-              <a 
-                href={`${CWE_BASE_URL}${group.cweId}.html`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm font-black text-blue-400 hover:text-blue-300 transition-colors shrink-0"
-              >
-                CWE-{group.cweId}
-              </a>
-            )}
-            <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[9px] font-black uppercase tracking-widest leading-none shrink-0 ${
-              group.severity === 'Very High' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
-              group.severity === 'High' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
-              group.severity === 'Medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
-              group.severity === 'Low' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
-              'bg-slate-800 text-slate-500 border-slate-700'
-            }`}>
-              {group.severity}
-            </span>
-          </div>
+          
+          {/* Filename box spanning both columns */}
+          {group.type === 'SCA' && group.records[0]?.fileName && (
+            <div className="text-[10px] text-slate-400 font-mono break-all leading-tight bg-slate-900/50 p-2 rounded border border-slate-800/50 max-w-full">
+              {group.records[0].fileName}
+            </div>
+          )}
+
           {group.type === 'SAST' && group.records && group.records.length > 0 && (
-            <div className="mt-1 text-[9px] text-slate-500 font-mono flex gap-1">
+            <div className="text-[9px] text-slate-500 font-mono flex gap-1">
               <span className="text-slate-600 font-black">ID:</span>
               <span className="text-slate-400">
                 {group.records.slice(0, 3).map((r: any) => r.issue_id || r.id).join(", ")}

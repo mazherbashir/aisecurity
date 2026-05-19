@@ -153,7 +153,8 @@ function aggregateFindings(
     if (severity === "Info") severity = "Information";
 
     const location = finding.location || "Unknown Location";
-    const description = `${title} | ${severity} | ${location}`;
+    const fileName = finding.fileName || "";
+    const description = `${title} | ${severity} | ${fileName || location}`;
 
     // For SCA rely on title or id for identifier 
     let identifier: string | undefined = undefined;
@@ -164,8 +165,10 @@ function aggregateFindings(
         : (finding.id && finding.id !== "N/A" && finding.id !== "0" && !finding.id.startsWith("sca-") ? finding.id : `CWE-${cweId}`);
     }
 
-    // Create a stable group ID
-    const groupId = `${type}-${identifier || cweId}-${comments}`.substring(0, 500);
+    // Create a stable group ID - include fileName for SCA to keep files separate
+    const groupId = (type === "SCA" && fileName)
+      ? `${type}-${identifier || cweId}-${fileName}-${comments}`.substring(0, 500)
+      : `${type}-${identifier || cweId}-${comments}`.substring(0, 500);
 
     if (!groups[groupId]) {
       groups[groupId] = {
@@ -788,7 +791,25 @@ export default function App() {
 
       if (data && data.sastSummary) setBackendSastSummary(data.sastSummary);
       if (data && data.scaSummary) setBackendScaSummary(data.scaSummary);
-      if (data && data.scaDetails) setScaDetails(data.scaDetails);
+      
+      // Enhance scaDetails with fileName from findingsWithCommentsSCA if available
+      if (data && data.scaDetails) {
+        let enhanced = data.scaDetails;
+        const findings = data.findingsWithCommentsSCA || [];
+        if (findings.length > 0) {
+          enhanced = data.scaDetails.map((detail: any) => {
+            const match = findings.find((f: any) => 
+               (f.location === detail.packageName || f.packageName === detail.packageName) &&
+               f.fileName
+            );
+            return {
+              ...detail,
+              fileName: match ? match.fileName : detail.fileName
+            };
+          });
+        }
+        setScaDetails(enhanced);
+      }
       if (data && data.sastMitigationProposal)
         setSastMitigationProposal(data.sastMitigationProposal);
       if (data && data.scaMitigationProposal)

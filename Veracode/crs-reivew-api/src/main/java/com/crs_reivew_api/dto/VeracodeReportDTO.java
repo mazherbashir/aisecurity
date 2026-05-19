@@ -73,6 +73,7 @@ public class VeracodeReportDTO {
         public String title;
         public String severity; // High, Medium, etc.
         public String location;
+        public String fileName;
         public String description;
         public String cve_summary;
         public List<String> userComments;

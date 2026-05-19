@@ -15,6 +15,7 @@ export interface SastFinding {
   severity: string;
   location: string;
   userComments: string[];
+  fileName?: string;
   description?: string;
 }
 
@@ -26,6 +27,7 @@ export interface ScaFinding {
   severity: string;
   location: string;
   userComments: string[];
+  fileName?: string;
   cve_summary?: string;
 }
 

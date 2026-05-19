@@ -1214,6 +1214,7 @@ public class VeracodeService {
                     fDto.title = vuln.getCveId();
                     fDto.severity = getSeverityName(sev);
                     fDto.location = comp.getLibrary();
+                    fDto.fileName = comp.getFileName();
                     fDto.cve_summary = vuln.getSummary();
                     fDto.userComments = scaComments;
                     fDto.remediation_due_date = calculateDueDate(vuln.getFirstFoundDate(), dto.overview.tier, fDto.severity);
@@ -1327,6 +1328,18 @@ public class VeracodeService {
                 dto.scaDetails.add(detail);
             }
         }
+        
+        if (veracodeConfig.getNoSca() != null && dto.architectures != null) {
+            for (String noScaArch : veracodeConfig.getNoSca()) {
+                for (String arch : dto.architectures) {
+                    if (noScaArch.equalsIgnoreCase(arch)) {
+                        ecosystems.add(noScaArch);
+                        break;
+                    }
+                }
+            }
+        }
+        
         dto.scaEcosystems = ecosystems.toString();
         verifyPackaging(new java.util.HashSet<>(dto.architectures), ecosystems, dto);
     }
