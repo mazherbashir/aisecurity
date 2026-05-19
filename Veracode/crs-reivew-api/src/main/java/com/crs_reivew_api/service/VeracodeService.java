@@ -1271,7 +1271,7 @@ public class VeracodeService {
 
             if (!componentVulns.isEmpty()) {
                 var detail = new VeracodeReportDTO.ScaDetailDTO();
-                detail.packageName = library;
+                detail.packageName = (comp.getFileName() != null && !comp.getFileName().isEmpty()) ? comp.getFileName() : library;
                 detail.version = comp.getVersion();
                 
                 // Get the safe version from GitHub/OSV fallback or XML

@@ -327,7 +327,7 @@ Code Review Services recommends upgrading the third-party component with a vulne
 
           return `
       <tr>
-          <td>${detail.fileName || detail.packageName}</td>
+          <td>${detail.packageName}</td>
           <td>${detail.version}</td>
           ${safeVersionHtml}
           <td>${severityHtml}</td>

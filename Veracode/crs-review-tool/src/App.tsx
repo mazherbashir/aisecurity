@@ -571,6 +571,17 @@ export default function App() {
       setFullConfig(normalizedData);
       setInitialFullConfig(JSON.parse(JSON.stringify(normalizedData)));
       
+      // Update local states that derive from config (excluding prompt/engine selections which should remain independent)
+      if (normalizedData["System"]) {
+        setConfigScanValidityDays(normalizedData["System"].scanValidityDays || 90);
+        if (normalizedData["System"].safeSCAVERSION) {
+          setScaSafeVersionEnabled(normalizedData["System"].safeSCAVERSION.scaSafeVersionEnabled);
+        }
+      }
+      if (normalizedData["Exclusions"] && Array.isArray(normalizedData["Exclusions"].noScaArchitectures)) {
+        setConfigNoSca(normalizedData["Exclusions"].noScaArchitectures);
+      }
+
       // Ensure current settingsTab exists in the normalized config
       if (!normalizedData[settingsTab]) {
         setSettingsTab("SAST&SCA Prompts");
@@ -627,6 +638,7 @@ export default function App() {
         if (Array.isArray(data.history)) setConfigHistory(data.history);
         if (Array.isArray(data.engines)) setConfigEngines(data.engines);
         if (data.scanValidityDays) setConfigScanValidityDays(data.scanValidityDays);
+        if (Array.isArray(data.noSca)) setConfigNoSca(data.noSca);
       })
       .catch((err) => console.error("Failed to fetch initial config info:", err));
       
