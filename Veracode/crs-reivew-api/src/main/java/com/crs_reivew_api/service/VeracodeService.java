@@ -796,6 +796,17 @@ public class VeracodeService {
             e.printStackTrace();
         }
 
+        // Ensure no duplicates in selected and unselected modules
+        dto.selectedModules = dto.selectedModules.stream()
+            .distinct()
+            .collect(Collectors.toList());
+
+        // Ensure unselected modules don't contain anything from selected modules, and no duplicates
+        dto.unselectedModules = dto.unselectedModules.stream()
+            .distinct()
+            .filter(m -> !dto.selectedModules.contains(m))
+            .collect(Collectors.toList());
+
         // Mapping is now handled by generateDetailedBreakdown
         saveJsonToLog(dto.overview.applicationName, dto);
         return dto;
