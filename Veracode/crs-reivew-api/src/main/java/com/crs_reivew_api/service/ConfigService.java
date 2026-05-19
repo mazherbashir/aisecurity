@@ -17,12 +17,20 @@ public class ConfigService {
     private VeracodeConfig veracodeConfig;
 
     private String getConfigFilePath() {
-        // First check if the local development path exists
+        // If there's an external config file in the current working directory, prioritize it!
+        // This handles cases where the user runs the jar directly and has an external properties file.
+        java.io.File externalFile = new java.io.File("application.properties");
+        if (externalFile.exists()) {
+            return "application.properties";
+        }
+
+        // Next, check if the local development path exists
         java.io.File devFile = new java.io.File("src/main/resources/application.properties");
         if (devFile.exists()) {
             return "src/main/resources/application.properties";
         }
-        // Otherwise, write to the external application.properties in the current working directory
+        
+        // Otherwise, fallback to the external application.properties
         return "application.properties";
     }
 
@@ -81,16 +89,43 @@ public class ConfigService {
         return prompts;
     }
 
-    public void updatePrompts(String sastPrompt, String scaPrompt) throws Exception {
-        updatePrompts(sastPrompt, scaPrompt, null, null);
-    }
+    public void updateConfig(GroupedSystemConfigDTO payload) throws Exception {
+        java.util.Map<String, String> updates = new java.util.HashMap<>();
+        
+        if (payload != null) {
+            if (payload.getSastAndScaPrompts() != null) {
+                if (payload.getSastAndScaPrompts().getSastPrompt() != null) {
+                    veracodeConfig.setSastPrompt(payload.getSastAndScaPrompts().getSastPrompt());
+                    updates.put("veracode.api.sastPrompt", payload.getSastAndScaPrompts().getSastPrompt());
+                }
+                if (payload.getSastAndScaPrompts().getScaPrompt() != null) {
+                    veracodeConfig.setScaPrompt(payload.getSastAndScaPrompts().getScaPrompt());
+                    updates.put("veracode.api.scaPrompt", payload.getSastAndScaPrompts().getScaPrompt());
+                }
+            }
+            if (payload.getSecondaryAudit() != null) {
+                if (payload.getSecondaryAudit().getAuditorPrompt() != null) {
+                    veracodeConfig.setAuditorPrompt(payload.getSecondaryAudit().getAuditorPrompt());
+                    updates.put("veracode.api.auditorPrompt", payload.getSecondaryAudit().getAuditorPrompt());
+                }
+                if (payload.getSecondaryAudit().getFallbackText() != null) {
+                    veracodeConfig.setAuditorDisagreeFallbackText(payload.getSecondaryAudit().getFallbackText());
+                    updates.put("veracode.api.auditor-disagree-fallback-text", payload.getSecondaryAudit().getFallbackText());
+                }
+            }
+            if (payload.getAiEngine() != null) {
+                if (payload.getAiEngine().getAiEngines() != null) {
+                    veracodeConfig.setAiEngines(payload.getAiEngine().getAiEngines());
+                    updates.put("veracode.api.ai-engines", String.join(",", payload.getAiEngine().getAiEngines()));
+                }
+                if (payload.getAiEngine().getEngineModels() != null) {
+                    veracodeConfig.setEngineModels(payload.getAiEngine().getEngineModels());
+                    updates.put("veracode.api.engine-models", String.join(",", payload.getAiEngine().getEngineModels()));
+                }
+            }
+        }
 
-    public void updatePrompts(String sastPrompt, String scaPrompt, String auditorPrompt, String fallbackText) throws Exception {
-        // Update in-memory config
-        if (sastPrompt != null) veracodeConfig.setSastPrompt(sastPrompt);
-        if (scaPrompt != null) veracodeConfig.setScaPrompt(scaPrompt);
-        if (auditorPrompt != null) veracodeConfig.setAuditorPrompt(auditorPrompt);
-        if (fallbackText != null) veracodeConfig.setAuditorDisagreeFallbackText(fallbackText);
+        if (updates.isEmpty()) return;
 
         // Persist to file while preserving all comments, grouping, and line formatting!
         File file = new File(getConfigFilePath());
@@ -99,12 +134,6 @@ public class ConfigService {
         }
 
         java.util.List<String> lines = java.nio.file.Files.readAllLines(file.toPath(), java.nio.charset.StandardCharsets.UTF_8);
-        
-        java.util.Map<String, String> updates = new java.util.HashMap<>();
-        if (sastPrompt != null) updates.put("veracode.api.sastPrompt", sastPrompt);
-        if (scaPrompt != null) updates.put("veracode.api.scaPrompt", scaPrompt);
-        if (auditorPrompt != null) updates.put("veracode.api.auditorPrompt", auditorPrompt);
-        if (fallbackText != null) updates.put("veracode.api.auditor-disagree-fallback-text", fallbackText);
 
         java.util.Set<String> processedKeys = new java.util.HashSet<>();
 

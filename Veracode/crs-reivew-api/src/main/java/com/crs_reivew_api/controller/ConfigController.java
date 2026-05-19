@@ -51,24 +51,10 @@ public class ConfigController {
     @PostMapping("/prompts")
     public String updatePrompts(@RequestBody com.crs_reivew_api.dto.GroupedSystemConfigDTO payload) {
         try {
-            String sastPrompt = null;
-            String scaPrompt = null;
-            if (payload != null && payload.getSastAndScaPrompts() != null) {
-                sastPrompt = payload.getSastAndScaPrompts().getSastPrompt();
-                scaPrompt = payload.getSastAndScaPrompts().getScaPrompt();
-            }
-            
-            String auditorPrompt = null;
-            String fallbackText = null;
-            if (payload != null && payload.getSecondaryAudit() != null) {
-                auditorPrompt = payload.getSecondaryAudit().getAuditorPrompt();
-                fallbackText = payload.getSecondaryAudit().getFallbackText();
-            }
-            
-            configService.updatePrompts(sastPrompt, scaPrompt, auditorPrompt, fallbackText);
-            return "Prompts updated successfully";
+            configService.updateConfig(payload);
+            return "Configuration updated successfully";
         } catch (Exception e) {
-            return "Error updating prompts: " + e.getMessage();
+            return "Error updating configuration: " + e.getMessage();
         }
     }
 }
