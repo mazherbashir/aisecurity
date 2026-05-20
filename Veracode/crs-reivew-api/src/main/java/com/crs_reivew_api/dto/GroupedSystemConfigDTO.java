@@ -57,7 +57,7 @@ public class GroupedSystemConfigDTO {
 
     public static class SystemSettings {
         private Integer scanValidityDays;
-        private Boolean mitigationProposalEnabled;
+        private String mitigationProposalEnabled;
         private String mitigationApiType;
         private Boolean saveXmlLogs;
         private Boolean saveJsonHistory;
@@ -70,8 +70,8 @@ public class GroupedSystemConfigDTO {
         public Integer getScanValidityDays() { return scanValidityDays; }
         public void setScanValidityDays(Integer scanValidityDays) { this.scanValidityDays = scanValidityDays; }
 
-        public Boolean getMitigationProposalEnabled() { return mitigationProposalEnabled; }
-        public void setMitigationProposalEnabled(Boolean mitigationProposalEnabled) { this.mitigationProposalEnabled = mitigationProposalEnabled; }
+        public String getMitigationProposalEnabled() { return mitigationProposalEnabled; }
+        public void setMitigationProposalEnabled(String mitigationProposalEnabled) { this.mitigationProposalEnabled = mitigationProposalEnabled; }
 
         public String getMitigationApiType() { return mitigationApiType; }
         public void setMitigationApiType(String mitigationApiType) { this.mitigationApiType = mitigationApiType; }

@@ -157,8 +157,8 @@ public class ConfigService {
                     updates.put("veracode.api.scan-validity-days", String.valueOf(payload.getSystem().getScanValidityDays()));
                 }
                 if (payload.getSystem().getMitigationProposalEnabled() != null) {
-                    veracodeConfig.setMitigationProposalEnabled(String.valueOf(payload.getSystem().getMitigationProposalEnabled()));
-                    updates.put("veracode.api.mitigation-proposal-enabled", String.valueOf(payload.getSystem().getMitigationProposalEnabled()));
+                    veracodeConfig.setMitigationProposalEnabled(payload.getSystem().getMitigationProposalEnabled());
+                    updates.put("veracode.api.mitigation-proposal-enabled", payload.getSystem().getMitigationProposalEnabled());
                 }
                 if (payload.getSystem().getMitigationApiType() != null) {
                     veracodeConfig.setMitigationApiType(payload.getSystem().getMitigationApiType());
@@ -300,7 +300,7 @@ public class ConfigService {
         // Group 1: System Settings
         java.util.Map<String, Object> system = new java.util.HashMap<>();
         system.put("scanValidityDays", veracodeConfig.getScanValidityDays());
-        system.put("mitigationProposalEnabled", "true".equalsIgnoreCase(veracodeConfig.getMitigationProposalEnabled()));
+        system.put("mitigationProposalEnabled", veracodeConfig.getMitigationProposalEnabled());
         system.put("mitigationApiType", veracodeConfig.getMitigationApiType());
         system.put("saveXmlLogs", veracodeConfig.isSaveXmlLogs());
         system.put("saveJsonHistory", veracodeConfig.isSaveJsonHistory());
@@ -368,7 +368,7 @@ public class ConfigService {
         // System Settings
         GroupedSystemConfigDTO.SystemSettings system = new GroupedSystemConfigDTO.SystemSettings();
         system.setScanValidityDays(veracodeConfig.getScanValidityDays());
-        system.setMitigationProposalEnabled("true".equalsIgnoreCase(veracodeConfig.getMitigationProposalEnabled()));
+        system.setMitigationProposalEnabled(veracodeConfig.getMitigationProposalEnabled());
         system.setMitigationApiType(veracodeConfig.getMitigationApiType());
         system.setSaveXmlLogs(veracodeConfig.isSaveXmlLogs());
         system.setSaveJsonHistory(veracodeConfig.isSaveJsonHistory());

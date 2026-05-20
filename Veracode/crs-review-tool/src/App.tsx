@@ -2130,11 +2130,15 @@ export default function App() {
                                 <input 
                                   type="radio" 
                                   name="proposal_status" 
-                                  checked={fullConfig["System"].mitigationProposalEnabled === val}
-                                  onChange={() => setFullConfig({
-                                    ...fullConfig,
-                                    "System": { ...fullConfig["System"], mitigationProposalEnabled: val }
-                                  })}
+                                  checked={String(fullConfig["System"].mitigationProposalEnabled) === String(val)}
+                                  onChange={() => {
+                                    const current = fullConfig["System"].mitigationProposalEnabled;
+                                    const newVal = typeof current === 'string' ? String(val) : val;
+                                    setFullConfig({
+                                      ...fullConfig,
+                                      "System": { ...fullConfig["System"], mitigationProposalEnabled: newVal }
+                                    });
+                                  }}
                                   className="w-4 h-4 text-blue-500 bg-slate-950 border-slate-700"
                                 />
                                 <span className="text-xs font-bold text-slate-300 uppercase">{val.toString()}</span>
