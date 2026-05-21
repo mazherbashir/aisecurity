@@ -6,6 +6,7 @@ export interface AppConfig {
     getFinalReport: string;
     veracodeMitigation: string;
     aiAnalyze: string;
+    heartbeat: string;
   };
 }
 
@@ -16,7 +17,8 @@ let config: AppConfig = {
     configPrompts: '/api/config/prompts',
     getFinalReport: '/api/getfinalreport',
     veracodeMitigation: '/api/veracode/mitigation',
-    aiAnalyze: '/api/ai'
+    aiAnalyze: '/api/ai',
+    heartbeat: '/api/heartbeat'
   }
 };
 

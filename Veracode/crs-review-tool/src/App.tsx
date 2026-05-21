@@ -493,6 +493,7 @@ export default function App() {
   const [configScanValidityDays, setConfigScanValidityDays] =
     useState<number>(90);
   const [scaSafeVersionEnabled, setScaSafeVersionEnabled] = useState(false);
+  const [isServerOnline, setIsServerOnline] = useState(false);
 
   const fetchPrompts = async () => {
     try {
@@ -586,8 +587,10 @@ export default function App() {
       if (!normalizedData[settingsTab]) {
         setSettingsTab("SAST&SCA Prompts");
       }
+      setIsServerOnline(true);
     } catch (err) {
       console.error("Failed to fetch config", err);
+      setIsServerOnline(false);
     }
   };
 
@@ -632,18 +635,47 @@ export default function App() {
 
   // Restore accidentally removed config fetching logic or ensure it's handled via fetchPrompts
   useEffect(() => {
-    fetch(getEndpoint('configInfo'))
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data.history)) setConfigHistory(data.history);
-        if (Array.isArray(data.engines)) setConfigEngines(data.engines);
-        if (data.scanValidityDays) setConfigScanValidityDays(data.scanValidityDays);
-        if (Array.isArray(data.noSca)) setConfigNoSca(data.noSca);
-      })
-      .catch((err) => console.error("Failed to fetch initial config info:", err));
-      
-    // Initial prompt fetch
+    const checkServerHealth = () => {
+      fetch(getEndpoint('heartbeat'))
+        .then((res) => {
+          if (res.ok) {
+            return res.json();
+          }
+          throw new Error('Not OK');
+        })
+        .then((data) => {
+          setIsServerOnline(data.isServerOnline === true || data.isServerOnline === 'true');
+        })
+        .catch((err) => {
+          console.error("Heartbeat check failed:", err);
+          setIsServerOnline(false);
+        });
+    };
+
+    const fetchConfigInfo = () => {
+      fetch(getEndpoint('configInfo'))
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data.history)) setConfigHistory(data.history);
+          if (Array.isArray(data.engines)) setConfigEngines(data.engines);
+          if (data.scanValidityDays) setConfigScanValidityDays(data.scanValidityDays);
+          if (Array.isArray(data.noSca)) setConfigNoSca(data.noSca);
+        })
+        .catch((err) => {
+          console.error("Failed to fetch initial config info:", err);
+        });
+    };
+
+    checkServerHealth();
+    fetchConfigInfo();
     fetchPrompts();
+
+    // Check health every 10 seconds
+    const interval = setInterval(() => {
+      checkServerHealth();
+    }, 10000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Dynamic Summaries
@@ -1370,9 +1402,15 @@ export default function App() {
               </button>
               <div className="flex flex-col items-end">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
-                  <span className="text-[10px] font-mono text-slate-400 tracking-wider">
-                    SYSTEM_READY
+                  <div className={`w-2 h-2 rounded-full animate-pulse ${
+                    isServerOnline 
+                      ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" 
+                      : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"
+                  }`} />
+                  <span className={`text-[10px] font-mono tracking-wider ${
+                    isServerOnline ? "text-slate-400" : "text-red-400"
+                  }`}>
+                    {isServerOnline ? "SYSTEM_READY" : "SYSTEM_OFFLINE"}
                   </span>
                 </div>
               </div>
@@ -1790,7 +1828,7 @@ export default function App() {
                           : "text-slate-500 hover:text-slate-300"
                       }`}
                     >
-                      <span>{tab === "Review" ? "Review Comments" : `${tab} Findings`}</span>
+                      <span>{tab === "Review" ? "Review Comments" : `${tab} Mitigation Proposals`}</span>
                       
                       {tab === "SAST" && sastMitigationProposal && sastMitigationProposal.Total > 0 && (
                         <div className="flex items-center gap-2 text-[8px] tracking-normal font-bold">
