@@ -1237,18 +1237,28 @@ public class VeracodeService {
                 var scaComments = new java.util.ArrayList<String>();
 
                 if (vuln.getMitigationList() != null && vuln.getMitigationList().getMitigations() != null) {
-                    for (var mit : vuln.getMitigationList().getMitigations()) {
-                        String action = mit.getAction();
-                        if ("Mitigate by Design".equalsIgnoreCase(action) || 
-                            "Mitigate By Environment".equalsIgnoreCase(action) || 
-                            "Potential False Positive".equalsIgnoreCase(action)) {
-                            hasProposedAction = true;
-                            String comment = mit.getDescription();
-                            if (comment == null || comment.isEmpty()) {
-                                comment = mit.getComment();
-                            }
-                            if (comment != null && !comment.isEmpty()) {
-                                scaComments.add(comment);
+                    var mitigationsList = vuln.getMitigationList().getMitigations();
+                    if (!mitigationsList.isEmpty()) {
+                        String latestAction = mitigationsList.get(0).getAction();
+                        if (!"Reject Mitigation".equalsIgnoreCase(latestAction) && 
+                            !"Rejected Mitigation".equalsIgnoreCase(latestAction) && 
+                            !"Rejected".equalsIgnoreCase(latestAction) && 
+                            !"Rollback Mitigation".equalsIgnoreCase(latestAction)) {
+                            
+                            for (var mit : mitigationsList) {
+                                String action = mit.getAction();
+                                if ("Mitigate by Design".equalsIgnoreCase(action) || 
+                                    "Mitigate By Environment".equalsIgnoreCase(action) || 
+                                    "Potential False Positive".equalsIgnoreCase(action)) {
+                                    hasProposedAction = true;
+                                    String comment = mit.getDescription();
+                                    if (comment == null || comment.isEmpty()) {
+                                        comment = mit.getComment();
+                                    }
+                                    if (comment != null && !comment.isEmpty()) {
+                                        scaComments.add(comment);
+                                    }
+                                }
                             }
                         }
                     }
