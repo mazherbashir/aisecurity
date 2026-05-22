@@ -1099,7 +1099,9 @@ public class VeracodeService {
                             if ("proposed".equalsIgnoreCase(mitigationStatus)) {
                                 List<String> comments = new ArrayList<>();
                                 if (flaw.getMitigationList() != null && flaw.getMitigationList().getMitigations() != null) {
-                                    for (ScaMitigation mit : flaw.getMitigationList().getMitigations()) {
+                                    var mitigations = flaw.getMitigationList().getMitigations();
+                                    if (!mitigations.isEmpty()) {
+                                        var mit = mitigations.get(mitigations.size() - 1);
                                         String comment = mit.getDescription();
                                         if (comment == null || comment.isEmpty()) {
                                             comment = mit.getComment();
@@ -1257,6 +1259,7 @@ public class VeracodeService {
                                     }
                                     if (comment != null && !comment.isEmpty()) {
                                         scaComments.add(comment);
+                                        break; // Only select the latest/newest proposal comment!
                                     }
                                 }
                             }
