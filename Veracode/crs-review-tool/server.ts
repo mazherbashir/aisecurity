@@ -233,6 +233,32 @@ async function startServer() {
     }
   });
 
+  // Heartbeat Route
+  app.get("/api/heartbeat", async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    if (useMocks) {
+      return res.json({ isServerOnline: true });
+    }
+
+    try {
+      const response = await fetch('http://127.0.0.1:8081/api/heartbeat', {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, private'
+        }
+      });
+      if (!response.ok) {
+        return res.json({ isServerOnline: false });
+      }
+      const data = await response.json();
+      return res.json({
+        isServerOnline: data.isServerOnline === true || data.isServerOnline === 'true'
+      });
+    } catch (error) {
+      // If the backend at 8081 is down/offline, we handle gracefully and return isServerOnline: false
+      return res.json({ isServerOnline: false });
+    }
+  });
+
   // AI API Route
   app.post("/api/ai", async (req, res) => {
     if (!useMocks) {
