@@ -220,24 +220,214 @@ export function generateReviewSummary(input: SummaryInput) {
 
   let scaSection = "";
   const hasAnyProcessedSCA = (aggregatedData.sca || []).some(g => !!g.status);
+
+  const { remainingScaVulnerabilities, remainingVulnerablePackages, remainingBreakdown } = (() => {
+    const totalVulnerabilities = backendScaSummary?.vulnerabilities || 0;
+    const totalVulnerablePackages = backendScaSummary?.totalVulnerablePackages || 0;
+
+    const parsedOriginalBreakdown: Record<string, number> = { "Very High": 0, High: 0, Medium: 0, Low: 0 };
+    if (backendScaSummary?.breakdown) {
+      Object.entries(backendScaSummary.breakdown).forEach(([sev, val]: [string, any]) => {
+        let normSev = sev;
+        if (sev === "VeryHigh") normSev = "Very High";
+        if (parsedOriginalBreakdown[normSev] !== undefined) {
+          parsedOriginalBreakdown[normSev] = typeof val === "number" ? val : (val?.total || 0);
+        }
+      });
+    }
+
+    if (totalVulnerabilities === 0) {
+      return {
+        remainingScaVulnerabilities: 0,
+        remainingVulnerablePackages: 0,
+        remainingBreakdown: parsedOriginalBreakdown,
+      };
+    }
+
+    let unapprovedCvesInAll = 0;
+    let unapprovedPkgsInAll = 0;
+    const dynamicBreakdown: Record<string, number> = { "Very High": 0, High: 0, Medium: 0, Low: 0 };
+
+    if (scaDetails && scaDetails.length > 0) {
+      scaDetails.forEach((detail: any) => {
+        const pkgName = (detail.packageName || "").trim().toLowerCase();
+        const cvesInDetail = (detail.cveList || "")
+          .split(",")
+          .map((c: string) => c.trim().toLowerCase())
+          .filter(Boolean);
+
+        let unapprovedCvesInPkg = 0;
+
+        // Parse severityCounts for this package: e.g. "High: 1, Low: 2"
+        const parsedCounts: Record<string, number> = { "Very High": 0, High: 0, Medium: 0, Low: 0 };
+        const sevCounts = (detail.severityCounts || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+        sevCounts.forEach((sc: string) => {
+          const parts = sc.split(":");
+          if (parts.length === 2) {
+            let sName = parts[0].trim();
+            if (sName === "VeryHigh") sName = "Very High";
+            const count = parseInt(parts[1].trim(), 10) || 0;
+            if (parsedCounts[sName] !== undefined) {
+              parsedCounts[sName] = count;
+            }
+          }
+        });
+
+        if (cvesInDetail.length === 0) {
+          // If no explicitly listed CVEs in cveList are present, represent severityCounts as separate items
+          Object.entries(parsedCounts).forEach(([severity, count]) => {
+            for (let i = 0; i < count; i++) {
+              let isApproved = false;
+              if (aggregatedData?.sca) {
+                isApproved = aggregatedData.sca.some((g: any) => {
+                  if (g.status !== "approved") return false;
+                  const matchesPkg = g.records && g.records.some((r: any) => {
+                    const rPkg = (r.packageName || r.location || r.fileName || "").toLowerCase().trim();
+                    return rPkg.includes(pkgName) || pkgName.includes(rPkg);
+                  });
+                  return matchesPkg && g.severity === severity;
+                });
+              }
+              if (!isApproved) {
+                unapprovedCvesInPkg++;
+                if (dynamicBreakdown[severity] !== undefined) {
+                  dynamicBreakdown[severity]++;
+                }
+              }
+            }
+          });
+        } else {
+          // Process each cve in cveList
+          cvesInDetail.forEach((cve) => {
+            let isApproved = false;
+            if (aggregatedData?.sca) {
+              isApproved = aggregatedData.sca.some((g: any) => {
+                if (g.status !== "approved") return false;
+
+                return g.records && g.records.some((r: any) => {
+                  const rPkg = (r.packageName || r.location || r.fileName || "").toLowerCase().trim();
+                  const rCveList = (r.cveList || r.title || r.id || "").toLowerCase();
+
+                  const pkgMatch = rPkg.includes(pkgName) || pkgName.includes(rPkg);
+                  const cveMatch =
+                    rCveList.includes(cve) ||
+                    cve.includes(rCveList) ||
+                    (g.identifier && g.identifier.toLowerCase().includes(cve));
+
+                  return pkgMatch && cveMatch;
+                });
+              });
+            }
+
+            if (!isApproved) {
+              unapprovedCvesInPkg++;
+              
+              let cveSeverity = "Medium";
+              let foundInGroup = false;
+              if (aggregatedData?.sca) {
+                for (const g of aggregatedData.sca) {
+                  const match = g.records && g.records.find((r: any) => {
+                    const rCveList = (r.cveList || r.title || r.id || "").toLowerCase();
+                    return rCveList.includes(cve) || cve.includes(rCveList);
+                  });
+                  if (match) {
+                    let sName = match.severity || "Medium";
+                    if (sName === "VeryHigh") sName = "Very High";
+                    cveSeverity = sName;
+                    foundInGroup = true;
+                    break;
+                  }
+                }
+              }
+
+              if (!foundInGroup) {
+                for (const sev of ["Very High", "High", "Medium", "Low"]) {
+                  if (parsedCounts[sev] > 0) {
+                    cveSeverity = sev;
+                    parsedCounts[sev]--;
+                    break;
+                  }
+                }
+              }
+
+              if (dynamicBreakdown[cveSeverity] !== undefined) {
+                dynamicBreakdown[cveSeverity]++;
+              }
+            }
+          });
+        }
+
+        if (unapprovedCvesInPkg > 0) {
+          unapprovedPkgsInAll++;
+          unapprovedCvesInAll += unapprovedCvesInPkg;
+        }
+      });
+
+      return {
+        remainingScaVulnerabilities: unapprovedCvesInAll,
+        remainingVulnerablePackages: unapprovedPkgsInAll,
+        remainingBreakdown: dynamicBreakdown,
+      };
+    } else {
+      // Fallback if scaDetails is empty/unavailable
+      const fbBreakdown = { ...parsedOriginalBreakdown };
+      let approvedCount = 0;
+      const approvedPackages = new Set<string>();
+      const unapprovedPackages = new Set<string>();
+
+      if (aggregatedData?.sca) {
+        aggregatedData.sca.forEach((g: any) => {
+          const isGrpApproved = g.status === "approved";
+          g.records?.forEach((r: any) => {
+            const pkg = (r.packageName || r.location || r.fileName || "unknown").toLowerCase().trim();
+            if (isGrpApproved) {
+              approvedCount++;
+              const sev = r.severity;
+              if (fbBreakdown[sev] > 0) {
+                fbBreakdown[sev]--;
+              }
+              approvedPackages.add(pkg);
+            } else {
+              unapprovedPackages.add(pkg);
+            }
+          });
+        });
+      }
+
+      const remVulns = Math.max(0, totalVulnerabilities - approvedCount);
+      let remPkgs = totalVulnerablePackages;
+      if (unapprovedPackages.size > 0 || approvedPackages.size > 0) {
+        remPkgs = unapprovedPackages.size;
+      }
+
+      return {
+        remainingScaVulnerabilities: remVulns,
+        remainingVulnerablePackages: remPkgs,
+        remainingBreakdown: fbBreakdown,
+      };
+    }
+  })();
+
+  const isAllScaApproved = remainingScaVulnerabilities === 0;
+
   if (backendScaSummary && (backendScaSummary.vulnerabilities > 0 || hasAnyProcessedSCA)) {
     const breakdown = backendScaSummary.breakdown || {};
     const severities = [
       {
         name: "Very High",
-        count: breakdown["Very High"]?.total || 0,
+        count: remainingBreakdown["Very High"] || 0,
         class: "veryhigh",
       },
-      { name: "High", count: breakdown["High"]?.total || 0, class: "high" },
+      { name: "High", count: remainingBreakdown["High"] || 0, class: "high" },
       {
         name: "Medium",
-        count: breakdown["Medium"]?.total || 0,
+        count: remainingBreakdown["Medium"] || 0,
         class: "medium",
       },
-      { name: "Low", count: breakdown["Low"]?.total || 0, class: "low" },
+      { name: "Low", count: remainingBreakdown["Low"] || 0, class: "low" },
     ];
     const activeSeverities = severities.filter((s) => s.count > 0);
-    const vulnerablePackages = backendScaSummary.totalVulnerablePackages || 0;
+    const vulnerablePackages = remainingVulnerablePackages;
     const totalPackages = backendScaSummary.totalPackages || 0;
 
     let vulnerabilitySentencePart = "";
@@ -447,14 +637,40 @@ Code Review Services recommends upgrading the third-party component with a vulne
       .join("");
 
     if (scaTableRows !== "") {
-      scaSection = `
+      if (isAllScaApproved) {
+        scaSection = `
+<h3 class="heading bg-green">Third-party Components</h3><br/>
+A review of the third-party components in the Software Composition Analysis was performed. There are no identified vulnerabilities in the Software Composition Analysis of the third-party components.<br/>
+<h4>Third-Party Component Summary</h4>
+<ul>
+    <li>Components: ${totalPackages}</li>
+    <li>Vulnerable Components: 0</li>
+    <li>Vulnerabilities: 0<ul>
+    </ul></li>
+</ul>
+<br/>
+${(() => {
+  let header = StaticContent.scaDetailHeader;
+  if (scaSafeVersionEnabled) {
+    header = header.replace(
+      "<th><b>Current Version</b></th>",
+      "<th><b>Current Version</b></th><th><b>Recommended Version(s)</b></th>",
+    );
+  }
+  return header;
+})()}
+${scaTableRows}
+</table>
+`;
+      } else {
+        scaSection = `
 <h3 class="heading bg-red">Third-party Components</h3><br/>
 A review of the third-party components in the Software Composition Analysis was performed. There are ${vulnerabilitySentencePart} severity vulnerabilities that affect ${vulnerablePackages} third-party components.<br/>
 <h4>Third-Party Component Summary</h4>
 <ul>
     <li>Components: ${totalPackages}</li>
     <li>Vulnerable Components: ${vulnerablePackages}</li>
-    <li>Vulnerabilities: ${backendScaSummary.vulnerabilities}<ul>
+    <li>Vulnerabilities: ${remainingScaVulnerabilities}<ul>
 ${listItems}
     </ul></li>
 </ul>
@@ -473,6 +689,7 @@ ${(() => {
 ${scaTableRows}
 </table>
 `;
+      }
     }
   }
 

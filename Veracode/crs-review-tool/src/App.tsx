@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from "react";
+import snippetsData from "./data/snippets.json";
 import {
   Shield,
   Search,
@@ -471,6 +472,42 @@ function ReviewTabContent({
   const [rawHtml, setRawHtml] = useState(formattedHeader);
   const [copied, setCopied] = useState(false);
 
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  const handleInsertSnippet = (snippetHtml: string) => {
+    if (isEditMode && textareaRef.current) {
+      const textarea = textareaRef.current;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+      const beforeStr = text.substring(0, start);
+      const afterStr = text.substring(end, text.length);
+      const newText = beforeStr + snippetHtml + afterStr;
+      
+      setRawHtml(newText);
+      setOverrideHtml(newText);
+      
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + snippetHtml.length, start + snippetHtml.length);
+      }, 0);
+    } else {
+      const footerSig = StaticContent.footerMsg.trim();
+      let newText = rawHtml;
+      
+      if (rawHtml.includes(StaticContent.footerMsg)) {
+        newText = rawHtml.replace(StaticContent.footerMsg, snippetHtml + StaticContent.footerMsg);
+      } else if (rawHtml.includes(footerSig)) {
+        newText = rawHtml.replace(footerSig, snippetHtml + footerSig);
+      } else {
+        newText = rawHtml + "\n" + snippetHtml;
+      }
+      
+      setRawHtml(newText);
+      setOverrideHtml(newText);
+    }
+  };
+
   useEffect(() => {
     if (overrideHtml !== null) {
       setRawHtml(overrideHtml);
@@ -553,6 +590,31 @@ function ReviewTabContent({
             </span>
           </button>
 
+          {/* HTML Snippet Insertion Dropdown */}
+          <div className="flex items-center gap-1.5 bg-slate-900/60 pl-2.5 pr-1.5 py-1 rounded-md border border-slate-800">
+            <span className="text-[9px] font-black uppercase text-slate-500 whitespace-nowrap tracking-wider">
+              Snippets:
+            </span>
+            <select
+              className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-[10px] text-slate-300 focus:outline-none focus:border-blue-500 cursor-pointer max-w-[150px] font-medium"
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val) {
+                  handleInsertSnippet(val);
+                  e.target.value = ""; // Reset after selection
+                }
+              }}
+              defaultValue=""
+            >
+              <option value="" disabled className="text-slate-500 bg-slate-950 font-sans">-- Select Key --</option>
+              {Object.entries(snippetsData).map(([key, value]) => (
+                <option key={key} value={value} className="text-slate-300 bg-slate-950 font-sans text-xs">
+                  {key}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <button
             onClick={() => setIsMaximized(!isMaximized)}
             className="text-slate-500 hover:text-white transition-all"
@@ -576,6 +638,7 @@ function ReviewTabContent({
 
       {isEditMode ? (
         <textarea
+          ref={textareaRef}
           className="w-full flex-1 p-4 bg-slate-950 text-slate-200 font-mono text-[11px] rounded-lg border border-slate-800 resize-none font-mono"
           value={rawHtml}
           onChange={(e) => {
@@ -1237,7 +1300,13 @@ export default function App() {
     const IS_PRODUCTION =
       import.meta.env.PROD || import.meta.env.VITE_ENVIRONMENT === "production";
 
-    let baseSummary = mockScaSummary;
+    let baseSummary = {
+      vulnerabilities: 0,
+      breakdown: { "Very High": 0, High: 0, Medium: 0, Low: 0 },
+      totalPackages: 0,
+      totalVulnerablePackages: 0,
+    };
+
     if (resultsLoaded && backendScaSummary) {
       baseSummary = {
         vulnerabilities:
@@ -1264,12 +1333,171 @@ export default function App() {
       };
     }
 
-    return {
-      ...baseSummary,
-      vulnerabilities: baseSummary.vulnerabilities,
-      breakdown: baseSummary.breakdown,
-    };
-  }, [resultsLoaded, backendScaSummary]);
+    if (scaDetails && scaDetails.length > 0) {
+      let dynamicVulnerabilities = 0;
+      const dynamicBreakdown: Record<string, number> = { "Very High": 0, High: 0, Medium: 0, Low: 0 };
+      let dynamicVulnerablePackages = 0;
+
+      scaDetails.forEach((detail: any) => {
+        const pkgName = (detail.packageName || "").trim().toLowerCase();
+        const cvesInDetail = (detail.cveList || "")
+          .split(",")
+          .map((c: string) => c.trim().toLowerCase())
+          .filter(Boolean);
+
+        let unapprovedCvesInPkg = 0;
+
+        // Parse severityCounts for this package: e.g. "High: 1, Low: 2"
+        const parsedCounts: Record<string, number> = { "Very High": 0, High: 0, Medium: 0, Low: 0 };
+        const sevCounts = (detail.severityCounts || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+        sevCounts.forEach((sc: string) => {
+          const parts = sc.split(":");
+          if (parts.length === 2) {
+            let sName = parts[0].trim();
+            if (sName === "VeryHigh") sName = "Very High";
+            const count = parseInt(parts[1].trim(), 10) || 0;
+            if (parsedCounts[sName] !== undefined) {
+              parsedCounts[sName] = count;
+            }
+          }
+        });
+
+        if (cvesInDetail.length === 0) {
+          // If no explicitly listed CVEs in cveList are present, represent severityCounts as separate items
+          Object.entries(parsedCounts).forEach(([severity, count]) => {
+            for (let i = 0; i < count; i++) {
+              let isApproved = false;
+              if (aggregatedData?.sca) {
+                isApproved = aggregatedData.sca.some((g: any) => {
+                  if (g.status !== "approved") return false;
+                  const matchesPkg = g.records && g.records.some((r: any) => {
+                    const rPkg = (r.packageName || r.location || r.fileName || "").toLowerCase().trim();
+                    return rPkg.includes(pkgName) || pkgName.includes(rPkg);
+                  });
+                  return matchesPkg && g.severity === severity;
+                });
+              }
+              if (!isApproved) {
+                unapprovedCvesInPkg++;
+                if (dynamicBreakdown[severity] !== undefined) {
+                  dynamicBreakdown[severity]++;
+                }
+              }
+            }
+          });
+        } else {
+          // Process each cve in cveList
+          cvesInDetail.forEach((cve) => {
+            let isApproved = false;
+            if (aggregatedData?.sca) {
+              isApproved = aggregatedData.sca.some((g: any) => {
+                if (g.status !== "approved") return false;
+
+                return g.records && g.records.some((r: any) => {
+                  const rPkg = (r.packageName || r.location || r.fileName || "").toLowerCase().trim();
+                  const rCveList = (r.cveList || r.title || r.id || "").toLowerCase();
+
+                  const pkgMatch = rPkg.includes(pkgName) || pkgName.includes(rPkg);
+                  const cveMatch =
+                    rCveList.includes(cve) ||
+                    cve.includes(rCveList) ||
+                    (g.identifier && g.identifier.toLowerCase().includes(cve));
+
+                  return pkgMatch && cveMatch;
+                });
+              });
+            }
+
+            if (!isApproved) {
+              unapprovedCvesInPkg++;
+              
+              let cveSeverity = "Medium";
+              let foundInGroup = false;
+              if (aggregatedData?.sca) {
+                for (const g of aggregatedData.sca) {
+                  const match = g.records && g.records.find((r: any) => {
+                    const rCveList = (r.cveList || r.title || r.id || "").toLowerCase();
+                    return rCveList.includes(cve) || cve.includes(rCveList);
+                  });
+                  if (match) {
+                    let sName = match.severity || "Medium";
+                    if (sName === "VeryHigh") sName = "Very High";
+                    cveSeverity = sName;
+                    foundInGroup = true;
+                    break;
+                  }
+                }
+              }
+
+              if (!foundInGroup) {
+                for (const sev of ["Very High", "High", "Medium", "Low"]) {
+                  if (parsedCounts[sev] > 0) {
+                    cveSeverity = sev;
+                    parsedCounts[sev]--;
+                    break;
+                  }
+                }
+              }
+
+              if (dynamicBreakdown[cveSeverity] !== undefined) {
+                dynamicBreakdown[cveSeverity]++;
+              }
+            }
+          });
+        }
+
+        if (unapprovedCvesInPkg > 0) {
+          dynamicVulnerablePackages++;
+          dynamicVulnerabilities += unapprovedCvesInPkg;
+        }
+      });
+
+      return {
+        ...baseSummary,
+        vulnerabilities: dynamicVulnerabilities,
+        breakdown: dynamicBreakdown,
+        totalVulnerablePackages: dynamicVulnerablePackages,
+      };
+    } else {
+      // Fallback if scaDetails is empty/unavailable
+      const dynamicBreakdown = { ...baseSummary.breakdown };
+      let approvedCount = 0;
+      const approvedPackages = new Set<string>();
+      const unapprovedPackages = new Set<string>();
+
+      if (aggregatedData?.sca) {
+        aggregatedData.sca.forEach((g: any) => {
+          const isGrpApproved = g.status === "approved";
+          g.records?.forEach((r: any) => {
+            const pkg = (r.packageName || r.location || r.fileName || "unknown").toLowerCase().trim();
+            if (isGrpApproved) {
+              approvedCount++;
+              const sev = r.severity;
+              if (dynamicBreakdown[sev] > 0) {
+                dynamicBreakdown[sev]--;
+              }
+              approvedPackages.add(pkg);
+            } else {
+              unapprovedPackages.add(pkg);
+            }
+          });
+        });
+      }
+
+      const dynamicVulnerabilities = Math.max(0, baseSummary.vulnerabilities - approvedCount);
+      let dynamicVulnerablePackages = baseSummary.totalVulnerablePackages;
+      if (unapprovedPackages.size > 0 || approvedPackages.size > 0) {
+        dynamicVulnerablePackages = unapprovedPackages.size;
+      }
+
+      return {
+        ...baseSummary,
+        vulnerabilities: dynamicVulnerabilities,
+        breakdown: dynamicBreakdown,
+        totalVulnerablePackages: dynamicVulnerablePackages,
+      };
+    }
+  }, [resultsLoaded, backendScaSummary, aggregatedData, scaDetails]);
 
   const processImportedData = (data: any) => {
     console.log("CRITICAL: processImportedData called with:", data);
