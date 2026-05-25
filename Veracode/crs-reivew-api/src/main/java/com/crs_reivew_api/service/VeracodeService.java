@@ -28,26 +28,27 @@ public class VeracodeService {
     private VeracodeConfig veracodeConfig;
 
     public String getAppId(String appName) {
-        if (appName != null) appName = appName.trim();
+        if (appName != null)
+            appName = appName.trim();
         try {
             Map<String, String> appMap = getApplicationsMap(false);
-            
+
             if (appMap.containsKey(appName)) {
                 return appMap.get(appName);
             }
-            
+
             // Cache miss! Let's force a refresh to get the latest list from Veracode
             debugLog("DEBUG: Cache miss for '" + appName + "', forcing fresh API update...");
             appMap = getApplicationsMap(true);
-            
+
             if (appMap.containsKey(appName)) {
                 return appMap.get(appName);
             }
-            
+
             // Still not found? Perform fuzzy matching on the updated list
             List<String> suggestions = findBestMatches(appName, appMap.keySet());
             throw new VeracodeException("Application '" + appName + "' not found.", "INVALID_APP", suggestions);
-            
+
         } catch (VeracodeException ve) {
             throw ve;
         } catch (Exception e) {
@@ -74,7 +75,9 @@ public class VeracodeService {
         if (!shouldRefresh) {
             try {
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                return mapper.readValue(cachePath.toFile(), new com.fasterxml.jackson.core.type.TypeReference<Map<String, String>>() {});
+                return mapper.readValue(cachePath.toFile(),
+                        new com.fasterxml.jackson.core.type.TypeReference<Map<String, String>>() {
+                        });
             } catch (Exception e) {
                 debugLog("DEBUG: Error reading application cache, refreshing: " + e.getMessage());
             }
@@ -85,11 +88,11 @@ public class VeracodeService {
             UploadAPIWrapper uploadWrapper = new UploadAPIWrapper();
             setupCredentials(uploadWrapper);
             String xml = uploadWrapper.getAppList();
-            
+
             if (xml == null || xml.contains("<error>")) {
                 throw new VeracodeException("Veracode API returned an error: " + xml, "SYSTEM_ERROR");
             }
-            
+
             saveXmlToLog("app_list", "all", xml);
 
             Map<String, String> appMap = new HashMap<>();
@@ -109,53 +112,57 @@ public class VeracodeService {
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
             mapper.enable(com.fasterxml.jackson.databind.SerializationFeature.INDENT_OUTPUT);
             mapper.writeValue(cachePath.toFile(), appMap);
-            
+
             return appMap;
         } catch (Exception e) {
-            if (e instanceof VeracodeException) throw e;
+            if (e instanceof VeracodeException)
+                throw e;
             throw new VeracodeException("Veracode API is currently unavailable: " + e.getMessage(), "SYSTEM_ERROR");
         }
     }
 
     private List<String> findBestMatches(String input, Set<String> names) {
         String lowerInput = input.toLowerCase();
-        
+
         return names.stream()
-            .map(name -> {
-                int score = calculateSimilarityScore(lowerInput, name.toLowerCase());
-                return new AbstractMap.SimpleEntry<>(name, score);
-            })
-            .filter(entry -> entry.getValue() > 0)
-            .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
-            .limit(5)
-            .map(Map.Entry::getKey)
-            .collect(Collectors.toList());
+                .map(name -> {
+                    int score = calculateSimilarityScore(lowerInput, name.toLowerCase());
+                    return new AbstractMap.SimpleEntry<>(name, score);
+                })
+                .filter(entry -> entry.getValue() > 0)
+                .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
+                .limit(5)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
     }
 
     private int calculateSimilarityScore(String input, String target) {
-        if (input.equals(target)) return 1000;
-        
+        if (input.equals(target))
+            return 1000;
+
         // Priority 1: One starts with the other
         if (target.startsWith(input) || input.startsWith(target)) {
             return 800 + Math.min(input.length(), target.length());
         }
-        
+
         // Priority 2: One contains the other
         if (target.contains(input) || input.contains(target)) {
             return 600 + Math.min(input.length(), target.length());
         }
-        
+
         // Priority 3: Shared prefix length
         int commonPrefix = 0;
         for (int i = 0; i < Math.min(input.length(), target.length()); i++) {
-            if (input.charAt(i) == target.charAt(i)) commonPrefix++;
-            else break;
+            if (input.charAt(i) == target.charAt(i))
+                commonPrefix++;
+            else
+                break;
         }
-        
+
         if (commonPrefix >= 5) {
             return 400 + commonPrefix;
         }
-        
+
         return 0;
     }
 
@@ -184,18 +191,20 @@ public class VeracodeService {
             ResultsAPIWrapper resultsWrapper = new ResultsAPIWrapper();
             setupCredentials(resultsWrapper);
             String xml = resultsWrapper.detailedReport(buildId);
-            
+
             if (xml != null && xml.contains("<error>")) {
                 if (xml.contains("No report available")) {
-                    throw new RuntimeException("Veracode Error: No report available. There may be a scan in progress. Please check Veracode or try again later.");
+                    throw new RuntimeException(
+                            "Veracode Error: No report available. There may be a scan in progress. Please check Veracode or try again later.");
                 }
                 throw new RuntimeException("Veracode API Error: " + xml);
             }
-            
+
             // Save to log file for analysis
             saveXmlToLog("detailed_report", buildId, xml);
 
-            debugLog("[" + java.time.LocalDateTime.now() + "] Detailed Report Snippet: " + (xml.length() > 500 ? xml.substring(0, 500) : xml));
+            debugLog("[" + java.time.LocalDateTime.now() + "] Detailed Report Snippet: "
+                    + (xml.length() > 500 ? xml.substring(0, 500) : xml));
             JAXBContext context = JAXBContext.newInstance(VeracodeReport.class);
             Unmarshaller unmarshaller = context.createUnmarshaller();
             return (VeracodeReport) unmarshaller.unmarshal(new StringReader(xml));
@@ -207,12 +216,13 @@ public class VeracodeService {
     }
 
     private void saveXmlToLog(String prefix, String id, String xml) {
-        if (!veracodeConfig.isSaveXmlLogs()) return;
+        if (!veracodeConfig.isSaveXmlLogs())
+            return;
         try {
             String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
             java.nio.file.Path logDir = java.nio.file.Paths.get("veracode", "logs");
             java.nio.file.Files.createDirectories(logDir);
-            
+
             String fileName = String.format("%s_%s_%s.xml", prefix, id, timestamp);
             java.nio.file.Files.writeString(logDir.resolve(fileName), xml);
             debugLog("DEBUG: Saved XML log to: " + logDir.resolve(fileName));
@@ -227,7 +237,8 @@ public class VeracodeService {
         }
     }
 
-    public String updateMitigation(String buildId, String appId, String flawIdList, String action, String comment, String cveId, String type) {
+    public String updateMitigation(String buildId, String appId, String flawIdList, String action, String comment,
+            String cveId, String type) {
         // Map UI actions to Veracode expected actions
         String mappedAction = action;
         if (action != null) {
@@ -240,9 +251,10 @@ public class VeracodeService {
         }
 
         String mode = veracodeConfig.getMitigationProposalEnabled();
-        
+
         if ("false".equalsIgnoreCase(mode)) {
-            throw new RuntimeException("Mitigation Configuration is disabled. Please enabled it if you want to send the equest to Veracode");
+            throw new RuntimeException(
+                    "Mitigation Configuration is disabled. Please enabled it if you want to send the equest to Veracode");
         }
 
         if ("debug".equalsIgnoreCase(mode)) {
@@ -278,23 +290,23 @@ public class VeracodeService {
 
             MitigationAPIWrapper mitigationWrapper = new MitigationAPIWrapper();
             setupCredentials(mitigationWrapper);
-            
+
             String xml = mitigationWrapper.updateMitigationInfo(buildId, flawIdList, mappedAction, comment);
-            
+
             debugInfo.append("====== VERACODE API RESPONSE ======\n");
             debugInfo.append(xml).append("\n");
             debugInfo.append("===================================\n");
-            
+
             System.out.println("====== VERACODE API RESPONSE ======");
             System.out.println(xml);
             System.out.println("===================================");
-            
+
             saveDebugLog(debugInfo.toString());
-            
+
             if (xml.contains("<error>")) {
                 throw new RuntimeException("Veracode API Error: " + xml);
             }
-            
+
             return xml;
         } catch (Exception e) {
             debugInfo.append("====== VERACODE API EXCEPTION ======\n");
@@ -303,13 +315,13 @@ public class VeracodeService {
                 debugInfo.append("\t").append(element.toString()).append("\n");
             }
             debugInfo.append("====================================\n");
-            
+
             System.err.println("====== VERACODE API EXCEPTION ======");
             e.printStackTrace();
             System.err.println("====================================");
-            
+
             saveDebugLog(debugInfo.toString());
-            
+
             throw new RuntimeException("Failed to update mitigation: " + e.getMessage(), e);
         }
     }
@@ -341,9 +353,10 @@ public class VeracodeService {
         }
 
         if (id == null || id.isEmpty() || secret == null || secret.isEmpty()) {
-            throw new RuntimeException("CRITICAL: Veracode credentials not found. Please ensure 'veracode_api_key_id' and 'veracode_api_key_secret' are set in application.properties or your local ~/.veracode/credentials file.");
+            throw new RuntimeException(
+                    "CRITICAL: Veracode credentials not found. Please ensure 'veracode_api_key_id' and 'veracode_api_key_secret' are set in application.properties or your local ~/.veracode/credentials file.");
         }
-        return new String[]{id, secret};
+        return new String[] { id, secret };
     }
 
     private void setupCredentials(com.veracode.apiwrapper.AbstractAPIWrapper wrapper) {
@@ -364,7 +377,8 @@ public class VeracodeService {
         }
     }
 
-    private String submitRestMitigation(String buildId, String appId, String flawIdList, String action, String comment, String cveIdUI, String typeUI, StringBuilder debugInfo) throws Exception {
+    private String submitRestMitigation(String buildId, String appId, String flawIdList, String action, String comment,
+            String cveIdUI, String typeUI, StringBuilder debugInfo) throws Exception {
         String[] creds = getCredentials();
         String id = creds[0];
         String secret = creds[1];
@@ -374,12 +388,12 @@ public class VeracodeService {
         if (appId == null || appId.isEmpty()) {
             ResultsAPIWrapper resultsWrapper = new ResultsAPIWrapper();
             setupCredentials(resultsWrapper);
-            
+
             String buildXml = resultsWrapper.detailedReport(buildId);
             if (buildXml == null || buildXml.contains("<error>")) {
                 throw new RuntimeException("Failed to get detailed report for build " + buildId + ": " + buildXml);
             }
-            
+
             try {
                 DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
                 DocumentBuilder builder = factory.newDocumentBuilder();
@@ -388,21 +402,22 @@ public class VeracodeService {
                 if (nodes.getLength() > 0) {
                     appId = nodes.item(0).getAttributes().getNamedItem("app_id").getNodeValue();
                 }
-            } catch(Exception e) {
+            } catch (Exception e) {
                 throw new RuntimeException("Error parsing detailed report XML", e);
             }
         }
-        
+
         if (appId == null || appId.isEmpty()) {
             throw new RuntimeException("Could not resolve legacy app_id for build " + buildId);
         }
-        
+
         // Step 2: Get Application GUID
         String appGuid = getApplicationGuid(appId);
         String cveId = cveIdUI;
         boolean isSca = "SCA".equalsIgnoreCase(typeUI);
 
-        // If flawIdList is a CVE, resolve it dynamically to Veracode's internal component ID!
+        // If flawIdList is a CVE, resolve it dynamically to Veracode's internal
+        // component ID!
         if (flawIdList != null && flawIdList.toUpperCase().startsWith("CVE-")) {
             cveId = flawIdList.toUpperCase();
             flawIdList = resolveScaCveToFindingId(appGuid, flawIdList);
@@ -410,22 +425,25 @@ public class VeracodeService {
         } else if (isSca) {
             // We already have cveId and component_id from the UI, no reverse lookup needed!
         }
-        
+
         // Step 3: Post Annotation
         String urlStr;
         if (isSca) {
-            urlStr = "https://api.veracode.com/v3/applications/" + appGuid + "/sca_annotations";
+            urlStr = "https://api.veracode.com/srcclr/v3/applications/" + appGuid + "/sca_annotations";
         } else {
             urlStr = "https://api.veracode.com/appsec/v2/applications/" + appGuid + "/annotations";
         }
         java.net.URL annUrl = new java.net.URL(urlStr);
-        String annAuth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, annUrl, "POST");
-        
+        String annAuth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret,
+                annUrl, "POST");
+
         // Use REST API action string mapping:
-        // SCA (v3) requires "APPROVE" or "REJECT". SAST (v2) requires "ACCEPTED" or "REJECTED".
+        // SCA (v3) requires "APPROVE" or "REJECT". SAST (v2) requires "ACCEPTED" or
+        // "REJECTED".
         String restAction;
         if (isSca) {
-            if (action.equalsIgnoreCase("accepted") || action.equalsIgnoreCase("accept") || action.equalsIgnoreCase("approve")) {
+            if (action.equalsIgnoreCase("accepted") || action.equalsIgnoreCase("accept")
+                    || action.equalsIgnoreCase("approve")) {
                 restAction = "APPROVE";
             } else if (action.equalsIgnoreCase("rejected") || action.equalsIgnoreCase("reject")) {
                 restAction = "REJECT";
@@ -435,15 +453,15 @@ public class VeracodeService {
         } else {
             restAction = action.toUpperCase();
         }
-        
+
         com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         com.fasterxml.jackson.databind.node.ObjectNode payload = mapper.createObjectNode();
-        
+
         if (isSca) {
             payload.put("annotation_type", "VULNERABILITY");
             payload.put("action", restAction);
             payload.put("comment", comment);
-            
+
             com.fasterxml.jackson.databind.node.ArrayNode annotationsArray = mapper.createArrayNode();
             com.fasterxml.jackson.databind.node.ObjectNode annotationObj = mapper.createObjectNode();
             annotationObj.put("component_id", flawIdList);
@@ -457,35 +475,38 @@ public class VeracodeService {
             payload.put("comment", comment);
             payload.put("action", restAction);
         }
-        
+
         debugInfo.append("====== REST API EXECUTION ======\n");
         debugInfo.append("Target URL: ").append(annUrl.toString()).append("\n");
         debugInfo.append("HTTP Method: POST\n");
         debugInfo.append("Headers: Authorization (HMAC Signed), Content-Type (application/json)\n");
         debugInfo.append("JSON Payload:\n").append(payload.toString()).append("\n");
-        
+
         java.net.http.HttpRequest annReq = java.net.http.HttpRequest.newBuilder()
-            .uri(java.net.URI.create(annUrl.toString()))
-            .header("Authorization", annAuth)
-            .header("Content-Type", "application/json")
-            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload.toString()))
-            .build();
-            
+                .uri(java.net.URI.create(annUrl.toString()))
+                .header("Authorization", annAuth)
+                .header("Content-Type", "application/json")
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload.toString()))
+                .build();
+
         System.out.println("DEBUG: Sending JSON payload to Veracode (" + annUrl.toString() + "):");
         System.out.println(payload.toString());
-            
-        java.net.http.HttpResponse<String> annRes = client.send(annReq, java.net.http.HttpResponse.BodyHandlers.ofString());
-        
+
+        java.net.http.HttpResponse<String> annRes = client.send(annReq,
+                java.net.http.HttpResponse.BodyHandlers.ofString());
+
         debugInfo.append("Response Status Code: ").append(annRes.statusCode()).append("\n");
         debugInfo.append("Response Body: ").append(annRes.body()).append("\n");
         debugInfo.append("================================\n");
-        
+
         if (annRes.statusCode() < 200 || annRes.statusCode() >= 300) {
             String errorMsg = annRes.body();
             try {
                 com.fasterxml.jackson.databind.JsonNode errNode = mapper.readTree(errorMsg);
-                if (errNode.has("_embedded") && errNode.get("_embedded").has("api_errors") && errNode.get("_embedded").get("api_errors").isArray()) {
-                    errorMsg = "Veracode API Error: " + errNode.get("_embedded").get("api_errors").get(0).get("detail").asText();
+                if (errNode.has("_embedded") && errNode.get("_embedded").has("api_errors")
+                        && errNode.get("_embedded").get("api_errors").isArray()) {
+                    errorMsg = "Veracode API Error: "
+                            + errNode.get("_embedded").get("api_errors").get(0).get("detail").asText();
                 } else if (errNode.has("message") || errNode.has("http_status") || errNode.has("http_code")) {
                     StringBuilder sb = new StringBuilder("Veracode API Error: ");
                     if (errNode.has("http_code")) {
@@ -505,13 +526,14 @@ public class VeracodeService {
             }
             throw new RuntimeException(errorMsg);
         }
-        
+
         debugLog("DEBUG: REST Mitigation Success: " + annRes.body());
         return annRes.body();
     }
 
     private void saveDebugLog(String content) {
-        if (!veracodeConfig.isSaveXmlLogs()) return;
+        if (!veracodeConfig.isSaveXmlLogs())
+            return;
         try {
             String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
             java.nio.file.Path logDir = java.nio.file.Paths.get("veracode", "logs");
@@ -531,26 +553,28 @@ public class VeracodeService {
         java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
 
         java.net.URL appsUrl = new java.net.URL("https://api.veracode.com/appsec/v1/applications?legacy_id=" + appId);
-        String appsAuth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, appsUrl, "GET");
-        
+        String appsAuth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret,
+                appsUrl, "GET");
+
         java.net.http.HttpRequest appsReq = java.net.http.HttpRequest.newBuilder()
-            .uri(java.net.URI.create(appsUrl.toString()))
-            .header("Authorization", appsAuth)
-            .GET()
-            .build();
-            
-        java.net.http.HttpResponse<String> appsRes = client.send(appsReq, java.net.http.HttpResponse.BodyHandlers.ofString());
+                .uri(java.net.URI.create(appsUrl.toString()))
+                .header("Authorization", appsAuth)
+                .GET()
+                .build();
+
+        java.net.http.HttpResponse<String> appsRes = client.send(appsReq,
+                java.net.http.HttpResponse.BodyHandlers.ofString());
         if (appsRes.statusCode() != 200) {
             throw new RuntimeException("Failed to get application GUID: " + appsRes.body());
         }
-        
+
         com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         com.fasterxml.jackson.databind.JsonNode appsRoot = mapper.readTree(appsRes.body());
         com.fasterxml.jackson.databind.JsonNode appsArr = appsRoot.path("_embedded").path("applications");
         if (appsArr.isArray() && appsArr.size() > 0) {
             return appsArr.get(0).path("guid").asText();
         }
-        
+
         throw new RuntimeException("Application GUID not found in API response for legacy ID " + appId);
     }
 
@@ -558,7 +582,8 @@ public class VeracodeService {
         String token = veracodeConfig.getGithubToken();
         if (token == null || token.isEmpty()) {
             if (veracodeConfig.isScaSafeVersionEnabled()) {
-                System.out.println("WARNING: SCA Safe Version is ENABLED but veracode.api.githubToken is NOT configured. Skipping remediation lookups.");
+                System.out.println(
+                        "WARNING: SCA Safe Version is ENABLED but veracode.api.githubToken is NOT configured. Skipping remediation lookups.");
             }
             return null;
         }
@@ -566,7 +591,7 @@ public class VeracodeService {
         try {
             java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            
+
             // Map to GitHub Ecosystems
             String ghEcosystem = switch (ecosystem.toLowerCase()) {
                 case "maven" -> "MAVEN";
@@ -580,36 +605,42 @@ public class VeracodeService {
                 default -> null;
             };
 
-            if (ghEcosystem == null) return null;
+            if (ghEcosystem == null)
+                return null;
 
-            String query = "query { securityVulnerabilities(first: 1, package: \"" + packageName + "\", ecosystem: " + ghEcosystem + ") { " +
-                           "nodes { firstPatchedVersion { identifier } } } }";
-            
+            String query = "query { securityVulnerabilities(first: 1, package: \"" + packageName + "\", ecosystem: "
+                    + ghEcosystem + ") { " +
+                    "nodes { firstPatchedVersion { identifier } } } }";
+
             com.fasterxml.jackson.databind.node.ObjectNode root = mapper.createObjectNode();
             root.put("query", query);
 
             java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-                .uri(java.net.URI.create("https://api.github.com/graphql"))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + token)
-                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(root)))
-                .build();
+                    .uri(java.net.URI.create("https://api.github.com/graphql"))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + token)
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(root)))
+                    .build();
 
-            java.net.http.HttpResponse<String> response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
-            
+            java.net.http.HttpResponse<String> response = client.send(request,
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
+
             // Save raw GitHub response for verification (Granular control)
             if (veracodeConfig.isSaveScaLog()) {
                 try {
                     java.nio.file.Path logDir = java.nio.file.Paths.get("veracode", "logs");
                     java.nio.file.Files.createDirectories(logDir);
                     String safeName = packageName.replaceAll("[^a-zA-Z0-9]", "_");
-                    java.nio.file.Files.writeString(logDir.resolve("github_response_" + safeName + ".json"), response.body());
-                } catch (Exception e) {}
+                    java.nio.file.Files.writeString(logDir.resolve("github_response_" + safeName + ".json"),
+                            response.body());
+                } catch (Exception e) {
+                }
             }
 
             if (response.statusCode() == 200) {
                 com.fasterxml.jackson.databind.JsonNode resRoot = mapper.readTree(response.body());
-                com.fasterxml.jackson.databind.JsonNode nodes = resRoot.path("data").path("securityVulnerabilities").path("nodes");
+                com.fasterxml.jackson.databind.JsonNode nodes = resRoot.path("data").path("securityVulnerabilities")
+                        .path("nodes");
                 if (nodes.isArray() && nodes.size() > 0) {
                     String fixed = nodes.get(0).path("firstPatchedVersion").path("identifier").asText();
                     if (fixed != null && !fixed.isEmpty() && !fixed.equals("null")) {
@@ -625,23 +656,24 @@ public class VeracodeService {
         return null;
     }
 
+    public VeracodeReportDTO getFinalReport(String applicationName, String appId, String buildId,
+            boolean includeBuildInfo) {
+        if (applicationName != null)
+            applicationName = applicationName.trim();
 
-    public VeracodeReportDTO getFinalReport(String applicationName, String appId, String buildId, boolean includeBuildInfo) {
-        if (applicationName != null) applicationName = applicationName.trim();
-        
         // Load from history if filename is provided
         if (applicationName != null && applicationName.toLowerCase().endsWith(".json")) {
             debugLog("DEBUG: Loading report from history file: " + applicationName);
             return loadHistoryFile(applicationName);
         }
-        
+
         String effectiveAppId = (appId != null && !appId.isEmpty()) ? appId : getAppId(applicationName);
         String effectiveBuildId = (buildId != null && !buildId.isEmpty()) ? buildId : getLatestBuildId(effectiveAppId);
-        
+
         VeracodeReport report = getDetailedReportObject(effectiveBuildId);
-        
+
         VeracodeReportDTO dto = new VeracodeReportDTO();
-        
+
         // Initialize Mitigation Breakdowns
         dto.mitigationBreakdownSAST.put("Total", 0);
         dto.mitigationBreakdownSAST.put("High", 0);
@@ -654,7 +686,7 @@ public class VeracodeService {
         dto.mitigationBreakdownSCA.put("High", 0);
         dto.mitigationBreakdownSCA.put("Medium", 0);
         dto.mitigationBreakdownSCA.put("Low", 0);
-        
+
         // Map Overview
         dto.overview.applicationName = report.getAppName();
         dto.overview.appId = report.getAppId();
@@ -663,7 +695,7 @@ public class VeracodeService {
         dto.overview.analysisId = report.getAnalysisId();
         dto.overview.scanName = report.getScanName();
         dto.overview.generationDate = report.getGenerationDate();
-        
+
         String rawPolicyName = report.getPolicyName();
         if (rawPolicyName != null && rawPolicyName.startsWith("PwC_DC")) {
             // Strip 'PwC_DC' and any numbers immediately following it
@@ -671,11 +703,11 @@ public class VeracodeService {
         } else {
             dto.overview.policyName = rawPolicyName;
         }
-        
+
         dto.overview.policyComplianceStatus = report.getPolicyComplianceStatus();
         dto.overview.sandboxId = report.getSandboxId();
         dto.overview.tier = calculateTier(report.getPolicyName());
-        
+
         if (dto.overview.tier != null && !"N/A".equals(dto.overview.tier)) {
             var gracePeriods = veracodeConfig.getGracePeriods();
             if (gracePeriods.containsKey(dto.overview.tier)) {
@@ -707,13 +739,13 @@ public class VeracodeService {
         // Find Modules using robust DOM parsing (bypasses JAXB namespace issues)
         try {
             // 1. Get Selected Modules and Architectures from Detailed Report XML
-                String detailedXml = getRawDetailedReport(effectiveBuildId);
-                populateModulesAndArchitectures(detailedXml, dto);
-                
-                // NEW: Populate breakdown and findings using the same XML
-                generateDetailedBreakdown(detailedXml, report, dto);
-                
-                debugLog("DEBUG: DOM processed detailed report for breakdown and modules.");
+            String detailedXml = getRawDetailedReport(effectiveBuildId);
+            populateModulesAndArchitectures(detailedXml, dto);
+
+            // NEW: Populate breakdown and findings using the same XML
+            generateDetailedBreakdown(detailedXml, report, dto);
+
+            debugLog("DEBUG: DOM processed detailed report for breakdown and modules.");
 
             // 2. Get Unselected Modules from Prescan Results XML (KEEP FILTERS HERE)
             PrescanResults prescan = getPreScanResults(effectiveAppId, effectiveBuildId);
@@ -721,11 +753,34 @@ public class VeracodeService {
                 debugLog("DEBUG: Processing " + prescan.getModules().size() + " modules from prescan.");
                 int prescanPythonCount = 0;
                 int prescanJsCount = 0;
-                
+
+                // Track all skipped dependencies in a pre-pass to prevent adding them later as
+                // non-dependencies
+                Set<String> skippedDependencies = new HashSet<>();
                 for (PrescanModule m : prescan.getModules()) {
                     String moduleName = m.getName();
                     String finalFileName = m.getFileName();
-                    if (moduleName == null) continue;
+                    if (moduleName == null)
+                        continue;
+
+                    boolean isDep = m.isDependency() && !moduleName.toLowerCase().endsWith(".zip")
+                            && !moduleName.toLowerCase().endsWith(".jar") &&
+                            (finalFileName == null || (!finalFileName.toLowerCase().endsWith(".zip")
+                                    && !finalFileName.toLowerCase().endsWith(".jar")));
+
+                    if (isDep) {
+                        skippedDependencies.add(moduleName.toLowerCase());
+                        if (finalFileName != null) {
+                            skippedDependencies.add(finalFileName.toLowerCase());
+                        }
+                    }
+                }
+
+                for (PrescanModule m : prescan.getModules()) {
+                    String moduleName = m.getName();
+                    String finalFileName = m.getFileName();
+                    if (moduleName == null)
+                        continue;
 
                     // Handle Generic Modules separately via balancing logic later
                     if (moduleName.equalsIgnoreCase("Python Files")) {
@@ -736,68 +791,83 @@ public class VeracodeService {
                         prescanJsCount++;
                         continue;
                     }
-                    
-                    // Filter: Skip if explicitly a dependency (unless it's a jar/zip) or has fatal errors
+
+                    // Filter: Skip if explicitly a dependency (unless it's a jar/zip), has fatal
+                    // errors,
+                    // or if it was marked as a dependency elsewhere in the upload.
                     if (m.hasFatalErrors()) {
                         debugLog("DEBUG: Skipping unselected module (Fatal Errors): " + moduleName);
                         continue;
                     }
-                    if (m.isDependency() && !moduleName.toLowerCase().endsWith(".zip") && !moduleName.toLowerCase().endsWith(".jar") &&
-                        (finalFileName == null || (!finalFileName.toLowerCase().endsWith(".zip") && !finalFileName.toLowerCase().endsWith(".jar")))) {
+
+                    boolean isDependencyOrSkipped = (m.isDependency() && !moduleName.toLowerCase().endsWith(".zip")
+                            && !moduleName.toLowerCase().endsWith(".jar") &&
+                            (finalFileName == null || (!finalFileName.toLowerCase().endsWith(".zip")
+                                    && !finalFileName.toLowerCase().endsWith(".jar"))))
+                            || skippedDependencies.contains(moduleName.toLowerCase())
+                            || (finalFileName != null && skippedDependencies.contains(finalFileName.toLowerCase()));
+
+                    if (isDependencyOrSkipped) {
                         debugLog("DEBUG: Skipping unselected module (Dependency): " + moduleName);
                         continue;
                     }
 
                     // CHECK: Is this specific module already selected?
                     boolean isAlreadySelected = dto.selectedModules.stream()
-                        .anyMatch(selected -> {
-                            String selLower = selected.toLowerCase();
-                            String modLower = moduleName.toLowerCase();
-                            String fileLower = (finalFileName != null) ? finalFileName.toLowerCase() : null;
+                            .anyMatch(selected -> {
+                                String selLower = selected.toLowerCase();
+                                String modLower = moduleName.toLowerCase();
+                                String fileLower = (finalFileName != null) ? finalFileName.toLowerCase() : null;
 
-                            boolean nameMatch = selLower.equals(modLower);
-                            boolean fileMatch = (fileLower != null && selLower.equals(fileLower));
-                            boolean nameInside = selLower.contains(modLower);
-                            boolean fileInside = (fileLower != null && selLower.contains(fileLower));
-                            
-                            // Handles "Go files within 936599.zip" matching "936599.zip"
-                            boolean selectedInsideName = modLower.contains(selLower);
-                            boolean selectedInsideFile = (fileLower != null && fileLower.contains(selLower));
+                                boolean nameMatch = selLower.equals(modLower);
+                                boolean fileMatch = (fileLower != null && selLower.equals(fileLower));
+                                boolean nameInside = selLower.contains(modLower);
+                                boolean fileInside = (fileLower != null && selLower.contains(fileLower));
 
-                            return nameMatch || fileMatch || nameInside || fileInside || selectedInsideName || selectedInsideFile;
-                        });
+                                // Handles "Go files within 936599.zip" matching "936599.zip"
+                                boolean selectedInsideName = modLower.contains(selLower);
+                                boolean selectedInsideFile = (fileLower != null && fileLower.contains(selLower));
+
+                                return nameMatch || fileMatch || nameInside || fileInside || selectedInsideName
+                                        || selectedInsideFile;
+                            });
 
                     if (isAlreadySelected) {
                         debugLog("DEBUG: Skipping unselected module (Already Selected): " + moduleName);
                         continue;
                     }
 
-                    String displayName = (finalFileName != null && !finalFileName.isEmpty()) ? finalFileName : moduleName;
-                    
-                    boolean isExplicitInclude = veracodeConfig.getIncludeModules() != null && veracodeConfig.getIncludeModules().stream()
-                        .anyMatch(inc -> displayName.toLowerCase().contains(inc.toLowerCase()));
+                    String displayName = (finalFileName != null && !finalFileName.isEmpty()) ? finalFileName
+                            : moduleName;
+
+                    boolean isExplicitInclude = veracodeConfig.getIncludeModules() != null
+                            && veracodeConfig.getIncludeModules().stream()
+                                    .anyMatch(inc -> displayName.toLowerCase().contains(inc.toLowerCase()));
 
                     boolean hasSelectedMatch = dto.selectedModules.stream()
-                        .anyMatch(selected -> {
-                            String s = selected.toLowerCase();
-                            String d = displayName.toLowerCase();
-                            // Exact prefix/suffix match
-                            if (d.startsWith(s) || d.endsWith(s)) return true;
-                            
-                            // Fuzzy prefix match: check if both start with the same 6 characters
-                            if (s.length() >= 6 && d.length() >= 6) {
-                                String sPrefix = s.substring(0, 6);
-                                String dPrefix = d.substring(0, 6);
-                                if (sPrefix.equals(dPrefix)) return true;
-                            }
-                            return false;
-                        });
+                            .anyMatch(selected -> {
+                                String s = selected.toLowerCase();
+                                String d = displayName.toLowerCase();
+                                // Exact prefix/suffix match
+                                if (d.startsWith(s) || d.endsWith(s))
+                                    return true;
 
-                    // Rule: Include only if explicitly in include-modules OR if prefix/suffix matches a selected module
+                                // Fuzzy prefix match: check if both start with the same 6 characters
+                                if (s.length() >= 6 && d.length() >= 6) {
+                                    String sPrefix = s.substring(0, 6);
+                                    String dPrefix = d.substring(0, 6);
+                                    if (sPrefix.equals(dPrefix))
+                                        return true;
+                                }
+                                return false;
+                            });
+
+                    // Rule: Include only if explicitly in include-modules OR if prefix/suffix
+                    // matches a selected module
                     if (isExplicitInclude || hasSelectedMatch) {
                         boolean isIgnored = veracodeConfig.getIgnoreModules().stream()
-                            .anyMatch(ignore -> displayName.toLowerCase().contains(ignore.toLowerCase()));
-                        
+                                .anyMatch(ignore -> displayName.toLowerCase().contains(ignore.toLowerCase()));
+
                         if (!isIgnored) {
                             if (!dto.unselectedModules.contains(displayName)) {
                                 dto.unselectedModules.add(displayName);
@@ -812,27 +882,31 @@ public class VeracodeService {
 
                 // Apply Balancing Logic for Python
                 long selectedPythonCount = dto.selectedModules.stream()
-                    .filter(s -> s.toLowerCase().startsWith("python files within") || s.toLowerCase().startsWith("python files"))
-                    .count();
-                int missingPython = prescanPythonCount - (int)selectedPythonCount;
+                        .filter(s -> s.toLowerCase().startsWith("python files within")
+                                || s.toLowerCase().startsWith("python files"))
+                        .count();
+                int missingPython = prescanPythonCount - (int) selectedPythonCount;
                 for (int i = 0; i < missingPython; i++) {
                     if (!dto.unselectedModules.contains("Python Files")) {
                         dto.unselectedModules.add("Python Files");
                     }
                 }
-                if (missingPython > 0) debugLog("DEBUG: Added " + missingPython + " unselected Python Files via balancing logic.");
+                if (missingPython > 0)
+                    debugLog("DEBUG: Added " + missingPython + " unselected Python Files via balancing logic.");
 
                 // Apply Balancing Logic for JS
                 long selectedJsCount = dto.selectedModules.stream()
-                    .filter(s -> s.toLowerCase().startsWith("js files within") || s.toLowerCase().startsWith("javascript files within"))
-                    .count();
-                int missingJs = prescanJsCount - (int)selectedJsCount;
+                        .filter(s -> s.toLowerCase().startsWith("js files within")
+                                || s.toLowerCase().startsWith("javascript files within"))
+                        .count();
+                int missingJs = prescanJsCount - (int) selectedJsCount;
                 for (int i = 0; i < missingJs; i++) {
                     if (!dto.unselectedModules.contains("JS Files")) {
                         dto.unselectedModules.add("JS Files");
                     }
                 }
-                if (missingJs > 0) debugLog("DEBUG: Added " + missingJs + " unselected JS Files via balancing logic.");
+                if (missingJs > 0)
+                    debugLog("DEBUG: Added " + missingJs + " unselected JS Files via balancing logic.");
             }
         } catch (Exception e) {
             System.err.println("Warning: Could not perform gap analysis: " + e.getMessage());
@@ -841,14 +915,15 @@ public class VeracodeService {
 
         // Ensure no duplicates in selected and unselected modules
         dto.selectedModules = dto.selectedModules.stream()
-            .distinct()
-            .collect(Collectors.toList());
+                .distinct()
+                .collect(Collectors.toList());
 
-        // Ensure unselected modules don't contain anything from selected modules, and no duplicates
+        // Ensure unselected modules don't contain anything from selected modules, and
+        // no duplicates
         dto.unselectedModules = dto.unselectedModules.stream()
-            .distinct()
-            .filter(m -> !dto.selectedModules.contains(m))
-            .collect(Collectors.toList());
+                .distinct()
+                .filter(m -> !dto.selectedModules.contains(m))
+                .collect(Collectors.toList());
 
         // Mapping is now handled by generateDetailedBreakdown
         saveJsonToLog(dto.overview.applicationName, dto);
@@ -856,17 +931,18 @@ public class VeracodeService {
     }
 
     private void saveJsonToLog(String appName, Object dto) {
-        if (!veracodeConfig.isSaveJsonHistory()) return;
+        if (!veracodeConfig.isSaveJsonHistory())
+            return;
         try {
             String sanitizedAppName = appName != null ? appName.replaceAll("[^a-zA-Z0-9]", "_") : "Unknown";
-            
+
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
             mapper.enable(com.fasterxml.jackson.databind.SerializationFeature.INDENT_OUTPUT);
             String json = mapper.writeValueAsString(dto);
-            
+
             java.nio.file.Path historyDir = java.nio.file.Paths.get("veracode", "history");
             java.nio.file.Files.createDirectories(historyDir);
-            
+
             String fileName;
             java.nio.file.Path baseFile = historyDir.resolve(sanitizedAppName + ".json");
             if (!java.nio.file.Files.exists(baseFile)) {
@@ -875,7 +951,7 @@ public class VeracodeService {
                 int runningNumber = getNextRunningNumber(historyDir, sanitizedAppName);
                 fileName = String.format("%s_%02d.json", sanitizedAppName, runningNumber);
             }
-            
+
             java.nio.file.Path targetFile = historyDir.resolve(fileName);
             java.nio.file.Files.writeString(targetFile, json);
             debugLog("DEBUG: Saved JSON history to: " + targetFile);
@@ -888,11 +964,11 @@ public class VeracodeService {
         try {
             java.nio.file.Path historyDir = java.nio.file.Paths.get("veracode", "history");
             java.nio.file.Path targetFile = historyDir.resolve(fileName);
-            
+
             if (!java.nio.file.Files.exists(targetFile)) {
                 throw new RuntimeException("History file not found: " + targetFile);
             }
-            
+
             String json = java.nio.file.Files.readString(targetFile);
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
             return mapper.readValue(json, VeracodeReportDTO.class);
@@ -903,19 +979,22 @@ public class VeracodeService {
 
     private int getNextRunningNumber(java.nio.file.Path dir, String sanitizedAppName) {
         try {
-            if (!java.nio.file.Files.exists(dir)) return 1;
+            if (!java.nio.file.Files.exists(dir))
+                return 1;
             try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(dir)) {
                 return stream
-                    .map(p -> p.getFileName().toString())
-                    .filter(name -> name.startsWith(sanitizedAppName + "_") && name.endsWith(".json"))
-                    .map(name -> {
-                        try {
-                            String numPart = name.substring(sanitizedAppName.length() + 1, name.lastIndexOf("."));
-                            return Integer.parseInt(numPart);
-                        } catch (Exception e) { return 0; }
-                    })
-                    .max(Integer::compare)
-                    .orElse(0) + 1;
+                        .map(p -> p.getFileName().toString())
+                        .filter(name -> name.startsWith(sanitizedAppName + "_") && name.endsWith(".json"))
+                        .map(name -> {
+                            try {
+                                String numPart = name.substring(sanitizedAppName.length() + 1, name.lastIndexOf("."));
+                                return Integer.parseInt(numPart);
+                            } catch (Exception e) {
+                                return 0;
+                            }
+                        })
+                        .max(Integer::compare)
+                        .orElse(0) + 1;
             }
         } catch (Exception e) {
             return 1;
@@ -924,8 +1003,8 @@ public class VeracodeService {
 
     private String formatBreakdown(Map<Integer, Integer> map) {
         return String.format("Very High: %d, High: %d, Medium: %d, Low: %d, Very Low: %d, Info: %d",
-            map.getOrDefault(5, 0), map.getOrDefault(4, 0), map.getOrDefault(3, 0),
-            map.getOrDefault(2, 0), map.getOrDefault(1, 0), map.getOrDefault(0, 0));
+                map.getOrDefault(5, 0), map.getOrDefault(4, 0), map.getOrDefault(3, 0),
+                map.getOrDefault(2, 0), map.getOrDefault(1, 0), map.getOrDefault(0, 0));
     }
 
     public BuildInfo getBuildInfo(String buildId) {
@@ -958,7 +1037,8 @@ public class VeracodeService {
             setupCredentials(uploadWrapper);
             String xml = uploadWrapper.getPreScanResults(appId, buildId);
             saveXmlToLog("prescan_results", buildId, xml);
-            debugLog("[" + java.time.LocalDateTime.now() + "] Raw Prescan Results: " + (xml.length() > 500 ? xml.substring(0, 500) : xml));
+            debugLog("[" + java.time.LocalDateTime.now() + "] Raw Prescan Results: "
+                    + (xml.length() > 500 ? xml.substring(0, 500) : xml));
 
             if (xml.contains("<error>")) {
                 System.err.println("Veracode API Error in Prescan: " + xml);
@@ -980,7 +1060,8 @@ public class VeracodeService {
             String xml = resultsWrapper.detailedReport(buildId);
             if (xml != null && xml.contains("<error>")) {
                 if (xml.contains("No report available")) {
-                    throw new RuntimeException("Veracode Error: No report available. There may be a scan in progress. Please check Veracode or try again later.");
+                    throw new RuntimeException(
+                            "Veracode Error: No report available. There may be a scan in progress. Please check Veracode or try again later.");
                 }
                 throw new RuntimeException("Veracode API Error: " + xml);
             }
@@ -996,7 +1077,7 @@ public class VeracodeService {
             factory.setNamespaceAware(true);
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(new InputSource(new StringReader(xml)));
-            
+
             Set<String> archSet = new HashSet<>();
             var staticAnalysisNodes = doc.getElementsByTagNameNS("*", "static-analysis");
             if (staticAnalysisNodes.getLength() > 0) {
@@ -1013,16 +1094,19 @@ public class VeracodeService {
                                 var nameAttr = attrs.getNamedItem("name");
                                 var archAttr = attrs.getNamedItem("architecture");
                                 var fileNameAttr = attrs.getNamedItem("file_name");
-                                
+
                                 String moduleName = (nameAttr != null) ? nameAttr.getNodeValue() : "";
                                 String fileName = (fileNameAttr != null) ? fileNameAttr.getNodeValue() : "";
-                                
+
                                 boolean isIgnored = veracodeConfig.getIgnoreModules().stream()
-                                    .anyMatch(ignore -> (!moduleName.isEmpty() && moduleName.toLowerCase().contains(ignore.toLowerCase())) ||
-                                                        (!fileName.isEmpty() && fileName.toLowerCase().contains(ignore.toLowerCase())));
-                                
+                                        .anyMatch(ignore -> (!moduleName.isEmpty()
+                                                && moduleName.toLowerCase().contains(ignore.toLowerCase())) ||
+                                                (!fileName.isEmpty()
+                                                        && fileName.toLowerCase().contains(ignore.toLowerCase())));
+
                                 if (isIgnored) {
-                                    debugLog("DEBUG: Skipping architecture/selection for ignored module: " + (moduleName.isEmpty() ? fileName : moduleName));
+                                    debugLog("DEBUG: Skipping architecture/selection for ignored module: "
+                                            + (moduleName.isEmpty() ? fileName : moduleName));
                                     continue;
                                 }
 
@@ -1053,37 +1137,52 @@ public class VeracodeService {
         return tempDto.selectedModules;
     }
 
-    public String getSastResult(String applicationName) { return "Use /getfinalreport for full data"; }
-    public String getBuildId(String appId) { return "Legacy - use /getfinalreport"; }
-    public String getDetailedReport(String buildId) { return "Legacy - use /getfinalreport"; }
+    public String getSastResult(String applicationName) {
+        return "Use /getfinalreport for full data";
+    }
+
+    public String getBuildId(String appId) {
+        return "Legacy - use /getfinalreport";
+    }
+
+    public String getDetailedReport(String buildId) {
+        return "Legacy - use /getfinalreport";
+    }
 
     private void generateDetailedBreakdown(String xml, VeracodeReport report, VeracodeReportDTO dto) {
         try {
-            if (report == null || report.getSeverities() == null) return;
+            if (report == null || report.getSeverities() == null)
+                return;
 
             // Map to hold counts: Severity -> CWE -> List of Flaws
-            var severityMap = new java.util.TreeMap<Integer, java.util.Map<String, java.util.List<Flaw>>>(java.util.Collections.reverseOrder());
+            var severityMap = new java.util.TreeMap<Integer, java.util.Map<String, java.util.List<Flaw>>>(
+                    java.util.Collections.reverseOrder());
             int totalSast = 0;
             List<VeracodeReportDTO.FindingDTO> findings = new java.util.ArrayList<>();
 
             for (Severity severity : report.getSeverities()) {
                 int sev = severity.getLevel();
-                if (severity.getCategories() == null) continue;
+                if (severity.getCategories() == null)
+                    continue;
 
                 for (Category category : severity.getCategories()) {
-                    if (category.getCwes() == null) continue;
+                    if (category.getCwes() == null)
+                        continue;
 
                     for (Cwe cweObj : category.getCwes()) {
-                        if (cweObj.getStaticFlaws() == null || cweObj.getStaticFlaws().getFlaws() == null) continue;
+                        if (cweObj.getStaticFlaws() == null || cweObj.getStaticFlaws().getFlaws() == null)
+                            continue;
 
                         for (Flaw flaw : cweObj.getStaticFlaws().getFlaws()) {
                             String mitigationStatus = flaw.getMitigationStatus();
                             String remediationStatus = flaw.getRemediationStatus();
 
-                            if (mitigationStatus != null) mitigationStatus = mitigationStatus.trim();
-                            
+                            if (mitigationStatus != null)
+                                mitigationStatus = mitigationStatus.trim();
+
                             // Logic: Exclude "accepted" or "Fixed" from breakdown and total
-                            if ("accepted".equalsIgnoreCase(mitigationStatus) || "Fixed".equalsIgnoreCase(remediationStatus)) {
+                            if ("accepted".equalsIgnoreCase(mitigationStatus)
+                                    || "Fixed".equalsIgnoreCase(remediationStatus)) {
                                 continue;
                             }
 
@@ -1095,10 +1194,12 @@ public class VeracodeService {
                             severityMap.get(sev).get(cwe).add(flaw);
                             totalSast++;
 
-                            // Logic for findingsWithComments: Report ONLY mitigation_status="proposed" with actual comments
+                            // Logic for findingsWithComments: Report ONLY mitigation_status="proposed" with
+                            // actual comments
                             if ("proposed".equalsIgnoreCase(mitigationStatus)) {
                                 List<String> comments = new ArrayList<>();
-                                if (flaw.getMitigationList() != null && flaw.getMitigationList().getMitigations() != null) {
+                                if (flaw.getMitigationList() != null
+                                        && flaw.getMitigationList().getMitigations() != null) {
                                     var mitigations = flaw.getMitigationList().getMitigations();
                                     if (!mitigations.isEmpty()) {
                                         var mit = mitigations.get(mitigations.size() - 1);
@@ -1122,7 +1223,8 @@ public class VeracodeService {
                                     fDto.location = flaw.getSourceFile() + ":" + flaw.getLine();
                                     fDto.description = flaw.getDescription();
                                     fDto.userComments = comments;
-                                    fDto.remediation_due_date = calculateDueDate(flaw.getDateFirstOccurrence(), dto.overview.tier, fDto.severity);
+                                    fDto.remediation_due_date = calculateDueDate(flaw.getDateFirstOccurrence(),
+                                            dto.overview.tier, fDto.severity);
                                     findings.add(fDto);
                                 }
                             }
@@ -1130,44 +1232,47 @@ public class VeracodeService {
                     }
                 }
             }
-            
+
             dto.sastSummary.vulnerabilities = totalSast;
             dto.findingsWithCommentsSAST.addAll(findings);
-            
+
             // Format Breakdown String
             severityMap.forEach((sev, cweMap) -> {
                 String sevName = getSeverityName(sev);
                 var sevBreakdown = new VeracodeReportDTO.SeverityBreakdownDTO();
                 sevBreakdown.total = cweMap.values().stream().mapToInt(java.util.List::size).sum();
-                
+
                 cweMap.forEach((cwe, list) -> {
                     // Find oldest date
                     String oldestDate = list.stream()
-                        .map(Flaw::getDateFirstOccurrence)
-                        .filter(d -> d != null && !d.isEmpty())
-                        .min(String::compareTo)
-                        .orElse("");
-                    
+                            .map(Flaw::getDateFirstOccurrence)
+                            .filter(d -> d != null && !d.isEmpty())
+                            .min(String::compareTo)
+                            .orElse("");
+
                     var finding = new VeracodeReportDTO.CweFindingDTO();
                     finding.cwe = cwe;
                     finding.count = list.size();
                     finding.date_first_occurrence = oldestDate;
-                    finding.remediation_due_date = calculateDueDate(oldestDate, dto.overview.tier, getSeverityName(sev));
+                    finding.remediation_due_date = calculateDueDate(oldestDate, dto.overview.tier,
+                            getSeverityName(sev));
                     sevBreakdown.findings.add(finding);
                 });
                 dto.sastSummary.breakdown.put(sevName, sevBreakdown);
             });
-            
+
             // Map SCA remediation data using GitHub GraphQL (Conditional)
             java.util.Map<String, String> pkgToFixedVersion = new java.util.HashMap<>();
             dto.scaSafeVersionEnabled = veracodeConfig.isScaSafeVersionEnabled();
-            
-            if (dto.scaSafeVersionEnabled && report.getSca() != null && report.getSca().getVulnerableComponents() != null) {
+
+            if (dto.scaSafeVersionEnabled && report.getSca() != null
+                    && report.getSca().getVulnerableComponents() != null) {
                 try {
                     for (var comp : report.getSca().getVulnerableComponents().getComponents()) {
                         // Only query for components that have active vulnerabilities
                         boolean hasActiveVulns = false;
-                        if (comp.getVulnerabilityList() != null && comp.getVulnerabilityList().getVulnerabilities() != null) {
+                        if (comp.getVulnerabilityList() != null
+                                && comp.getVulnerabilityList().getVulnerabilities() != null) {
                             for (var v : comp.getVulnerabilityList().getVulnerabilities()) {
                                 if (!isScaVulnerabilityMitigated(v) && v.getFixedVersion() == null) {
                                     hasActiveVulns = true;
@@ -1175,7 +1280,7 @@ public class VeracodeService {
                                 }
                             }
                         }
-                        
+
                         if (hasActiveVulns) {
                             String name = comp.getLibrary();
                             String libId = comp.getLibraryId();
@@ -1197,37 +1302,41 @@ public class VeracodeService {
             java.util.Map<String, String> scaCveToFindingId = fetchScaFindingIdsAndLog(dto.overview.appId);
             updateScaSummaryFromReport(report, dto, pkgToFixedVersion, scaCveToFindingId);
             populateScaDetailSectionFromReport(report, dto, pkgToFixedVersion);
-            
+
             // Finalize Mitigation Breakdowns by looping over the populated lists
             populateMitigationBreakdowns(dto);
-            
+
         } catch (Exception e) {
             System.err.println("Error generating detailed breakdown: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    private void updateScaSummaryFromReport(VeracodeReport report, VeracodeReportDTO dto, 
-                                            java.util.Map<String, String> cveToFixedVersion,
-                                            java.util.Map<String, String> scaCveToFindingId) {
+    private void updateScaSummaryFromReport(VeracodeReport report, VeracodeReportDTO dto,
+            java.util.Map<String, String> cveToFixedVersion,
+            java.util.Map<String, String> scaCveToFindingId) {
         if (report == null || report.getSca() == null || report.getSca().getVulnerableComponents() == null) {
             return;
         }
 
         var scaTotals = new java.util.HashMap<Integer, Integer>();
-        for (int i = 0; i <= 5; i++) scaTotals.put(i, 0);
+        for (int i = 0; i <= 5; i++)
+            scaTotals.put(i, 0);
 
         int vulnerabilitiesSca = 0;
         int totalVulnerablePackages = 0;
         var comps = report.getSca().getVulnerableComponents().getComponents();
-        if (comps == null) return;
+        if (comps == null)
+            return;
 
         for (var comp : comps) {
             boolean hasOpenVulnerability = false;
-            if (comp.getVulnerabilityList() == null || comp.getVulnerabilityList().getVulnerabilities() == null) continue;
+            if (comp.getVulnerabilityList() == null || comp.getVulnerabilityList().getVulnerabilities() == null)
+                continue;
 
             for (var vuln : comp.getVulnerabilityList().getVulnerabilities()) {
-                if (isScaVulnerabilityMitigated(vuln)) continue;
+                if (isScaVulnerabilityMitigated(vuln))
+                    continue;
 
                 int sev = (vuln.getSeverity() != null) ? vuln.getSeverity() : 0;
                 scaTotals.put(sev, scaTotals.get(sev) + 1);
@@ -1242,16 +1351,16 @@ public class VeracodeService {
                     var mitigationsList = vuln.getMitigationList().getMitigations();
                     if (!mitigationsList.isEmpty()) {
                         String latestAction = mitigationsList.get(0).getAction();
-                        if (!"Reject Mitigation".equalsIgnoreCase(latestAction) && 
-                            !"Rejected Mitigation".equalsIgnoreCase(latestAction) && 
-                            !"Rejected".equalsIgnoreCase(latestAction) && 
-                            !"Rollback Mitigation".equalsIgnoreCase(latestAction)) {
-                            
+                        if (!"Reject Mitigation".equalsIgnoreCase(latestAction) &&
+                                !"Rejected Mitigation".equalsIgnoreCase(latestAction) &&
+                                !"Rejected".equalsIgnoreCase(latestAction) &&
+                                !"Rollback Mitigation".equalsIgnoreCase(latestAction)) {
+
                             for (var mit : mitigationsList) {
                                 String action = mit.getAction();
-                                if ("Mitigate by Design".equalsIgnoreCase(action) || 
-                                    "Mitigate By Environment".equalsIgnoreCase(action) || 
-                                    "Potential False Positive".equalsIgnoreCase(action)) {
+                                if ("Mitigate by Design".equalsIgnoreCase(action) ||
+                                        "Mitigate By Environment".equalsIgnoreCase(action) ||
+                                        "Potential False Positive".equalsIgnoreCase(action)) {
                                     hasProposedAction = true;
                                     String comment = mit.getDescription();
                                     if (comment == null || comment.isEmpty()) {
@@ -1270,12 +1379,13 @@ public class VeracodeService {
                 if (hasProposedAction) {
                     var fDto = new VeracodeReportDTO.FindingDTO();
                     fDto.type = "SCA";
-                    
+
                     // Look up internal numerical finding ID from REST map, fall back to cveId
                     String cve = vuln.getCveId();
-                    String internalFindingId = (cve != null && scaCveToFindingId.containsKey(cve.toUpperCase())) ? 
-                        scaCveToFindingId.get(cve.toUpperCase()) : cve;
-                    
+                    String internalFindingId = (cve != null && scaCveToFindingId.containsKey(cve.toUpperCase()))
+                            ? scaCveToFindingId.get(cve.toUpperCase())
+                            : cve;
+
                     fDto.id = internalFindingId;
                     fDto.cweid = vuln.getCweId();
                     fDto.title = vuln.getCveId();
@@ -1284,15 +1394,17 @@ public class VeracodeService {
                     fDto.fileName = comp.getFileName();
                     fDto.cve_summary = vuln.getSummary();
                     fDto.userComments = scaComments;
-                    fDto.remediation_due_date = calculateDueDate(vuln.getFirstFoundDate(), dto.overview.tier, fDto.severity);
-                    
+                    fDto.remediation_due_date = calculateDueDate(vuln.getFirstFoundDate(), dto.overview.tier,
+                            fDto.severity);
+
                     // Use REST-derived fixed version if XML is empty
                     String fixedVer = vuln.getFixedVersion();
-                    if ((fixedVer == null || fixedVer.isEmpty() || "N/A".equals(fixedVer)) && cveToFixedVersion.containsKey(vuln.getCveId())) {
+                    if ((fixedVer == null || fixedVer.isEmpty() || "N/A".equals(fixedVer))
+                            && cveToFixedVersion.containsKey(vuln.getCveId())) {
                         fixedVer = cveToFixedVersion.get(vuln.getCveId());
                     }
                     fDto.fixedVersion = fixedVer;
-                    
+
                     dto.findingsWithCommentsSCA.add(fDto);
                 }
             }
@@ -1306,14 +1418,16 @@ public class VeracodeService {
         dto.scaSummary.breakdown.putAll(formatScaBreakdown(scaTotals));
     }
 
-    private void populateScaDetailSectionFromReport(VeracodeReport report, VeracodeReportDTO dto, java.util.Map<String, String> cveToFixedVersion) {
+    private void populateScaDetailSectionFromReport(VeracodeReport report, VeracodeReportDTO dto,
+            java.util.Map<String, String> cveToFixedVersion) {
         if (report == null || report.getSca() == null || report.getSca().getVulnerableComponents() == null) {
             return;
         }
 
         var ecosystems = new java.util.HashSet<String>();
         var comps = report.getSca().getVulnerableComponents().getComponents();
-        if (comps == null) return;
+        if (comps == null)
+            return;
 
         for (var comp : comps) {
             String library = comp.getLibrary();
@@ -1321,14 +1435,15 @@ public class VeracodeService {
             if (libId != null && libId.contains(":")) {
                 String eco = libId.split(":")[0];
                 boolean ignore = veracodeConfig.getIgnoreEcosystems().stream()
-                    .anyMatch(ecoName -> ecoName.equalsIgnoreCase(eco));
+                        .anyMatch(ecoName -> ecoName.equalsIgnoreCase(eco));
                 if (!ignore) {
                     ecosystems.add(mapToPrettyName(eco));
                 }
             }
 
-            if (comp.getVulnerabilityList() == null || comp.getVulnerabilityList().getVulnerabilities() == null) continue;
-            
+            if (comp.getVulnerabilityList() == null || comp.getVulnerabilityList().getVulnerabilities() == null)
+                continue;
+
             var componentVulns = new java.util.ArrayList<ScaVulnerability>();
             for (var vuln : comp.getVulnerabilityList().getVulnerabilities()) {
                 if (!isScaVulnerabilityMitigated(vuln)) {
@@ -1338,22 +1453,24 @@ public class VeracodeService {
 
             if (!componentVulns.isEmpty()) {
                 var detail = new VeracodeReportDTO.ScaDetailDTO();
-                detail.packageName = (comp.getFileName() != null && !comp.getFileName().isEmpty()) ? comp.getFileName() : library;
+                detail.packageName = (comp.getFileName() != null && !comp.getFileName().isEmpty()) ? comp.getFileName()
+                        : library;
                 detail.version = comp.getVersion();
-                
+
                 // Get the safe version from GitHub/OSV fallback or XML
                 String ghsaFix = componentVulns.stream()
-                    .map(v -> {
-                        String fv = v.getFixedVersion();
-                        if ((fv == null || fv.isEmpty() || "N/A".equals(fv)) && cveToFixedVersion.containsKey(library)) {
-                            fv = cveToFixedVersion.get(library);
-                        }
-                        return fv;
-                    })
-                    .filter(v -> v != null && !v.isEmpty() && !"N/A".equals(v))
-                    .sorted((v1, v2) -> v2.compareTo(v1))
-                    .findFirst()
-                    .orElse(null);
+                        .map(v -> {
+                            String fv = v.getFixedVersion();
+                            if ((fv == null || fv.isEmpty() || "N/A".equals(fv))
+                                    && cveToFixedVersion.containsKey(library)) {
+                                fv = cveToFixedVersion.get(library);
+                            }
+                            return fv;
+                        })
+                        .filter(v -> v != null && !v.isEmpty() && !"N/A".equals(v))
+                        .sorted((v1, v2) -> v2.compareTo(v1))
+                        .findFirst()
+                        .orElse(null);
 
                 if (ghsaFix == null) {
                     detail.safeVersion = veracodeConfig.getScaNoFixMessage();
@@ -1362,40 +1479,42 @@ public class VeracodeService {
                 } else {
                     detail.safeVersion = ghsaFix;
                 }
-                
+
                 detail.firstFoundDate = componentVulns.stream()
-                    .map(v -> v.getFirstFoundDate())
-                    .filter(d -> d != null && !d.isEmpty())
-                    .min(String::compareTo)
-                    .orElse("");
-                
+                        .map(v -> v.getFirstFoundDate())
+                        .filter(d -> d != null && !d.isEmpty())
+                        .min(String::compareTo)
+                        .orElse("");
+
                 detail.cveList = componentVulns.stream()
-                    .map(v -> v.getCveId())
-                    .distinct()
-                    .collect(java.util.stream.Collectors.joining(","));
-                
+                        .map(v -> v.getCveId())
+                        .distinct()
+                        .collect(java.util.stream.Collectors.joining(","));
+
                 var counts = new java.util.TreeMap<String, Integer>(java.util.Collections.reverseOrder());
                 int maxSev = 0;
                 for (var v : componentVulns) {
                     int sValue = (v.getSeverity() != null) ? v.getSeverity() : 0;
-                    if (sValue > maxSev) maxSev = sValue;
-                    
+                    if (sValue > maxSev)
+                        maxSev = sValue;
+
                     String sDesc = v.getSeverityDesc();
                     if (sDesc == null || sDesc.isEmpty()) {
                         sDesc = getSeverityName(sValue);
                     }
                     counts.put(sDesc, counts.getOrDefault(sDesc, 0) + 1);
                 }
-                detail.remediation_due_date = calculateDueDate(detail.firstFoundDate, dto.overview.tier, getSeverityName(maxSev));
-                
+                detail.remediation_due_date = calculateDueDate(detail.firstFoundDate, dto.overview.tier,
+                        getSeverityName(maxSev));
+
                 var severityList = new java.util.ArrayList<String>();
                 counts.forEach((sev, count) -> severityList.add(sev + ": " + count));
                 detail.severityCounts = String.join(", ", severityList);
-                
+
                 dto.scaDetails.add(detail);
             }
         }
-        
+
         if (veracodeConfig.getNoSca() != null && dto.architectures != null) {
             for (String noScaArch : veracodeConfig.getNoSca()) {
                 for (String arch : dto.architectures) {
@@ -1406,37 +1525,42 @@ public class VeracodeService {
                 }
             }
         }
-        
+
         dto.scaEcosystems = ecosystems.toString();
         verifyPackaging(new java.util.HashSet<>(dto.architectures), ecosystems, dto);
     }
 
     private boolean isScaVulnerabilityMitigated(ScaVulnerability vuln) {
-        if ("accepted".equalsIgnoreCase(vuln.getMitigationStatus())) return true;
+        if ("accepted".equalsIgnoreCase(vuln.getMitigationStatus()))
+            return true;
         if ("true".equalsIgnoreCase(vuln.getMitigation())) {
             if (vuln.getMitigationList() != null && vuln.getMitigationList().getMitigations() != null) {
                 for (var mit : vuln.getMitigationList().getMitigations()) {
-                    if ("Approve Mitigation".equalsIgnoreCase(mit.getAction())) return true;
+                    if ("Approve Mitigation".equalsIgnoreCase(mit.getAction()))
+                        return true;
                 }
             }
-            // If mitigation=true but no approval list found, Veracode usually implies it's resolved in detailed reports
+            // If mitigation=true but no approval list found, Veracode usually implies it's
+            // resolved in detailed reports
             return true;
         }
         return false;
     }
 
-    private void verifyPackaging(java.util.Set<String> architectures, java.util.Set<String> ecosystems, VeracodeReportDTO dto) {
+    private void verifyPackaging(java.util.Set<String> architectures, java.util.Set<String> ecosystems,
+            VeracodeReportDTO dto) {
         var mappings = veracodeConfig.getArchitectureMappings();
-        if (mappings == null || mappings.isEmpty()) return;
+        if (mappings == null || mappings.isEmpty())
+            return;
 
         // 1. Architecture detected in SAST but Ecosystem missing in SCA
         for (String arch : architectures) {
             // Find mapping for this arch (which is already a pretty name)
             String rawExpected = mappings.entrySet().stream()
-                .filter(e -> e.getKey().equalsIgnoreCase(arch))
-                .map(java.util.Map.Entry::getValue)
-                .findFirst()
-                .orElse(null);
+                    .filter(e -> e.getKey().equalsIgnoreCase(arch))
+                    .map(java.util.Map.Entry::getValue)
+                    .findFirst()
+                    .orElse(null);
 
             if (rawExpected != null) {
                 String[] expectedEcos = rawExpected.split(",");
@@ -1453,10 +1577,14 @@ public class VeracodeService {
 
                 if (!foundAny) {
                     // Special cases (using pretty names)
-                    if (arch.equalsIgnoreCase("JavaScript") && ecosystems.contains("JavaScript")) continue; // Should be handled by loop but just in case
-                    if (arch.equalsIgnoreCase("Java") && ecosystems.contains("Java")) continue;
-                    
-                    dto.packagingAnomalies.add("Architecture " + arch + " detected in SAST but no corresponding SCA ecosystem (" + rawExpected + ") found. Packaging may be incomplete.");
+                    if (arch.equalsIgnoreCase("JavaScript") && ecosystems.contains("JavaScript"))
+                        continue; // Should be handled by loop but just in case
+                    if (arch.equalsIgnoreCase("Java") && ecosystems.contains("Java"))
+                        continue;
+
+                    dto.packagingAnomalies
+                            .add("Architecture " + arch + " detected in SAST but no corresponding SCA ecosystem ("
+                                    + rawExpected + ") found. Packaging may be incomplete.");
                 }
             }
         }
@@ -1470,13 +1598,14 @@ public class VeracodeService {
             for (java.util.Map.Entry<String, String> entry : mappings.entrySet()) {
                 String prettyArch = entry.getKey();
                 String rawVal = entry.getValue();
-                if (rawVal == null) continue;
-                
+                if (rawVal == null)
+                    continue;
+
                 boolean ecoInList = java.util.Arrays.stream(rawVal.split(","))
-                    .anyMatch(v -> {
-                        String technical = v.trim();
-                        return technical.equalsIgnoreCase(eco) || mapToPrettyName(technical).equalsIgnoreCase(eco);
-                    });
+                        .anyMatch(v -> {
+                            String technical = v.trim();
+                            return technical.equalsIgnoreCase(eco) || mapToPrettyName(technical).equalsIgnoreCase(eco);
+                        });
 
                 if (ecoInList) {
                     hasMappingForEco = true;
@@ -1489,15 +1618,17 @@ public class VeracodeService {
 
             if (hasMappingForEco && !archFound) {
                 String expectedArches = mappings.entrySet().stream()
-                    .filter(e -> e.getValue() != null && java.util.Arrays.stream(e.getValue().split(",")).anyMatch(v -> {
-                        String t = v.trim();
-                        return t.equalsIgnoreCase(eco) || mapToPrettyName(t).equalsIgnoreCase(eco);
-                    }))
-                    .map(java.util.Map.Entry::getKey)
-                    .distinct()
-                    .collect(java.util.stream.Collectors.joining(" or "));
-                
-                dto.packagingAnomalies.add("Ecosystem " + eco + " detected in SCA but no corresponding architecture (" + expectedArches + ") was scanned in SAST. Check module selection.");
+                        .filter(e -> e.getValue() != null
+                                && java.util.Arrays.stream(e.getValue().split(",")).anyMatch(v -> {
+                                    String t = v.trim();
+                                    return t.equalsIgnoreCase(eco) || mapToPrettyName(t).equalsIgnoreCase(eco);
+                                }))
+                        .map(java.util.Map.Entry::getKey)
+                        .distinct()
+                        .collect(java.util.stream.Collectors.joining(" or "));
+
+                dto.packagingAnomalies.add("Ecosystem " + eco + " detected in SCA but no corresponding architecture ("
+                        + expectedArches + ") was scanned in SAST. Check module selection.");
             }
         }
     }
@@ -1513,7 +1644,8 @@ public class VeracodeService {
         };
     }
 
-    private java.util.Map<String, VeracodeReportDTO.SeverityBreakdownDTO> formatScaBreakdown(java.util.Map<Integer, Integer> map) {
+    private java.util.Map<String, VeracodeReportDTO.SeverityBreakdownDTO> formatScaBreakdown(
+            java.util.Map<Integer, Integer> map) {
         var breakdown = new java.util.LinkedHashMap<String, VeracodeReportDTO.SeverityBreakdownDTO>();
         for (int sev = 5; sev >= 2; sev--) {
             var b = new VeracodeReportDTO.SeverityBreakdownDTO();
@@ -1548,49 +1680,59 @@ public class VeracodeService {
     }
 
     private String calculateTier(String policyName) {
-        if (policyName == null || !policyName.startsWith("PwC")) return "N/A";
-        
+        if (policyName == null || !policyName.startsWith("PwC"))
+            return "N/A";
+
         // Remove 6 characters as requested
-        if (policyName.length() <= 6) return "N/A";
+        if (policyName.length() <= 6)
+            return "N/A";
         String trimmed = policyName.substring(6);
-        if (!trimmed.contains("_")) return "N/A";
-        
+        if (!trimmed.contains("_"))
+            return "N/A";
+
         String[] parts = trimmed.split("_", 2);
         // Remove leading digits (e.g., "3HighlyConfidential" -> "HighlyConfidential")
         String dataClassification = parts[0].replaceAll("^\\d+", "");
-        // Only take the first part of the exposure (e.g., "External_something" -> "External")
+        // Only take the first part of the exposure (e.g., "External_something" ->
+        // "External")
         String tierExposure = parts[1].split("_")[0];
-        
+
         var tierMappings = veracodeConfig.getTierMappings();
         if (tierMappings.containsKey(tierExposure)) {
             return tierMappings.get(tierExposure).getOrDefault(dataClassification, "N/A");
         }
-        
+
         return "N/A";
     }
 
     private String calculateDueDate(String dateStr, String tier, String severity) {
-        if (dateStr == null || dateStr.isEmpty() || tier == null || "N/A".equals(tier)) return null;
-        
+        if (dateStr == null || dateStr.isEmpty() || tier == null || "N/A".equals(tier))
+            return null;
+
         var gracePeriods = veracodeConfig.getGracePeriods();
-        if (!gracePeriods.containsKey(tier)) return null;
-        
-        // Normalize severity name (e.g., "Very High" -> "VeryHigh") to match config keys
+        if (!gracePeriods.containsKey(tier))
+            return null;
+
+        // Normalize severity name (e.g., "Very High" -> "VeryHigh") to match config
+        // keys
         String normalizedSeverity = severity != null ? severity.replace(" ", "") : "";
         Integer days = gracePeriods.get(tier).get(normalizedSeverity);
-        if (days == null) return null;
-        
+        if (days == null)
+            return null;
+
         try {
             java.time.LocalDateTime ldt;
             if (dateStr.length() > 10) {
                 // SCA format "2026-03-24 18:11:44 UTC"
                 String cleanDate = dateStr.replace(" UTC", "");
-                ldt = java.time.LocalDateTime.parse(cleanDate, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                ldt = java.time.LocalDateTime.parse(cleanDate,
+                        java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
             } else {
                 // SAST format "2026-03-24"
-                ldt = java.time.LocalDate.parse(dateStr, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")).atStartOfDay();
+                ldt = java.time.LocalDate.parse(dateStr, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+                        .atStartOfDay();
             }
-            
+
             return ldt.plusDays(days).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         } catch (Exception e) {
             return null;
@@ -1599,23 +1741,27 @@ public class VeracodeService {
 
     private String mapToPrettyName(String technicalName) {
         var mappings = veracodeConfig.getArchitectureMappings();
-        if (mappings == null || mappings.isEmpty()) return technicalName;
-        
+        if (mappings == null || mappings.isEmpty())
+            return technicalName;
+
         return mappings.entrySet().stream()
-            .filter(e -> {
-                if (e.getKey().equalsIgnoreCase(technicalName)) return true;
-                String val = e.getValue();
-                if (val == null) return false;
-                return java.util.Arrays.stream(val.split(","))
-                    .anyMatch(v -> v.trim().equalsIgnoreCase(technicalName));
-            })
-            .map(java.util.Map.Entry::getKey)
-            .findFirst()
-            .orElse(technicalName);
+                .filter(e -> {
+                    if (e.getKey().equalsIgnoreCase(technicalName))
+                        return true;
+                    String val = e.getValue();
+                    if (val == null)
+                        return false;
+                    return java.util.Arrays.stream(val.split(","))
+                            .anyMatch(v -> v.trim().equalsIgnoreCase(technicalName));
+                })
+                .map(java.util.Map.Entry::getKey)
+                .findFirst()
+                .orElse(technicalName);
     }
 
     private boolean isVersionLower(String v1, String v2) {
-        if (v1 == null || v2 == null) return false;
+        if (v1 == null || v2 == null)
+            return false;
         try {
             String[] parts1 = v1.replaceAll("[^0-9.]", "").split("\\.");
             String[] parts2 = v2.replaceAll("[^0-9.]", "").split("\\.");
@@ -1623,8 +1769,10 @@ public class VeracodeService {
             for (int i = 0; i < length; i++) {
                 int p1 = i < parts1.length && !parts1[i].isEmpty() ? Integer.parseInt(parts1[i]) : 0;
                 int p2 = i < parts2.length && !parts2[i].isEmpty() ? Integer.parseInt(parts2[i]) : 0;
-                if (p1 < p2) return true;
-                if (p1 > p2) return false;
+                if (p1 < p2)
+                    return true;
+                if (p1 > p2)
+                    return false;
             }
         } catch (Exception e) {
             return v1.compareTo(v2) < 0;
@@ -1645,24 +1793,28 @@ public class VeracodeService {
             String secret = creds[1];
 
             java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
-            java.net.URL url = new java.net.URL("https://api.veracode.com/appsec/v2/applications/" + appGuid + "/findings?scan_type=SCA");
-            String auth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, url, "GET");
+            java.net.URL url = new java.net.URL(
+                    "https://api.veracode.com/appsec/v2/applications/" + appGuid + "/findings?scan_type=SCA");
+            String auth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, url,
+                    "GET");
 
             java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
-                .uri(java.net.URI.create(url.toString()))
-                .header("Authorization", auth)
-                .header("Accept", "application/json")
-                .GET()
-                .build();
+                    .uri(java.net.URI.create(url.toString()))
+                    .header("Authorization", auth)
+                    .header("Accept", "application/json")
+                    .GET()
+                    .build();
 
-            java.net.http.HttpResponse<String> res = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
-            
+            java.net.http.HttpResponse<String> res = client.send(req,
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
+
             // Save raw findings JSON to log folder
             try {
                 String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
                 java.nio.file.Path logDir = java.nio.file.Paths.get("veracode", "logs");
                 java.nio.file.Files.createDirectories(logDir);
-                java.nio.file.Files.writeString(logDir.resolve("sca_findings_rest_" + appGuid + "_" + timestamp + ".json"), res.body());
+                java.nio.file.Files.writeString(
+                        logDir.resolve("sca_findings_rest_" + appGuid + "_" + timestamp + ".json"), res.body());
                 debugLog("DEBUG: Saved raw REST SCA findings to log folder.");
             } catch (Exception logEx) {
                 debugLog("DEBUG: Failed to save REST SCA findings to log: " + logEx.getMessage());
@@ -1670,7 +1822,8 @@ public class VeracodeService {
 
             if (res.statusCode() == 200) {
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                com.crs_reivew_api.dto.VeracodeScaFindingsRestDTO restDto = mapper.readValue(res.body(), com.crs_reivew_api.dto.VeracodeScaFindingsRestDTO.class);
+                com.crs_reivew_api.dto.VeracodeScaFindingsRestDTO restDto = mapper.readValue(res.body(),
+                        com.crs_reivew_api.dto.VeracodeScaFindingsRestDTO.class);
                 if (restDto != null && restDto._embedded != null && restDto._embedded.findings != null) {
                     for (var finding : restDto._embedded.findings) {
                         if (finding.finding_details != null && finding.finding_details.cve != null) {
@@ -1697,20 +1850,23 @@ public class VeracodeService {
         String secret = creds[1];
         java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
 
-        java.net.URL url = new java.net.URL("https://api.veracode.com/appsec/v2/applications/" + appGuid + "/findings?scan_type=SCA");
-        String auth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, url, "GET");
+        java.net.URL url = new java.net.URL(
+                "https://api.veracode.com/appsec/v2/applications/" + appGuid + "/findings?scan_type=SCA");
+        String auth = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(id, secret, url,
+                "GET");
 
         java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
-            .uri(java.net.URI.create(url.toString()))
-            .header("Authorization", auth)
-            .header("Accept", "application/json")
-            .GET()
-            .build();
+                .uri(java.net.URI.create(url.toString()))
+                .header("Authorization", auth)
+                .header("Accept", "application/json")
+                .GET()
+                .build();
 
         java.net.http.HttpResponse<String> res = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
         if (res.statusCode() == 200) {
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            com.crs_reivew_api.dto.VeracodeScaFindingsRestDTO restDto = mapper.readValue(res.body(), com.crs_reivew_api.dto.VeracodeScaFindingsRestDTO.class);
+            com.crs_reivew_api.dto.VeracodeScaFindingsRestDTO restDto = mapper.readValue(res.body(),
+                    com.crs_reivew_api.dto.VeracodeScaFindingsRestDTO.class);
             if (restDto != null && restDto._embedded != null && restDto._embedded.findings != null) {
                 for (var finding : restDto._embedded.findings) {
                     if (finding.finding_details != null && finding.finding_details.cve != null) {
@@ -1728,7 +1884,7 @@ public class VeracodeService {
         } else {
             debugLog("DEBUG: Failed to query SCA findings from REST API (" + res.statusCode() + "): " + res.body());
         }
-        
+
         throw new RuntimeException("Could not find a matching internal Veracode Finding ID for SCA CVE: " + cveId);
     }
 }
