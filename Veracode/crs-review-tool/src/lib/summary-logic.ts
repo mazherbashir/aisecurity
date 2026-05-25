@@ -11,6 +11,7 @@ export interface SummaryInput {
   configNoSca: string[];
   scaDetails: any[];
   scaSafeVersionEnabled?: boolean;
+  selectedTools?: string[];
 }
 
 export function generateReviewSummary(input: SummaryInput) {
@@ -21,7 +22,8 @@ export function generateReviewSummary(input: SummaryInput) {
     overview,
     configNoSca,
     scaDetails,
-    scaSafeVersionEnabled = false
+    scaSafeVersionEnabled = false,
+    selectedTools
   } = input;
 
   let rows = "";
@@ -85,9 +87,108 @@ export function generateReviewSummary(input: SummaryInput) {
   }
 
   const hasAnyProcessedSAST = (aggregatedData.sast || []).some(g => !!g.status);
+
+  // Calculate dynamic Code Flaws class and status text
+  let headingClass = "bg-green";
+  let hasOutstandingHighOrMediumOrVeryHigh = false;
+  let hasOutstandingLowOrLower = false;
+  let hasAnySastVulnerability = false;
+
+  if (backendSastSummary && backendSastSummary.breakdown) {
+    Object.entries(backendSastSummary.breakdown).forEach(
+      ([severity, data]: [string, any]) => {
+        data.findings?.forEach((finding: any) => {
+          hasAnySastVulnerability = true;
+          const cweIdMatch = finding.cwe.match(/\d+/);
+          const extractedCwe = cweIdMatch ? cweIdMatch[0] : "";
+          
+          let approvedCount = 0;
+          let rejectedCount = 0;
+          const originalCount = parseInt(finding.count, 10) || 0;
+          
+          if (aggregatedData?.sast) {
+            for (const g of aggregatedData.sast) {
+              let gSev = g.severity;
+              if (gSev === "VeryHigh") gSev = "Very High";
+              if (gSev === "Information") gSev = "Info";
+              
+              let bSev = severity;
+              if (bSev === "VeryHigh") bSev = "Very High";
+              if (bSev === "Information") bSev = "Info";
+              
+              if (String(g.cweId) === String(extractedCwe) && gSev === bSev) {
+                if (g.status === "approved") {
+                  approvedCount += g.records.length;
+                }
+                if (g.status === "rejected") {
+                  rejectedCount += g.records.length;
+                }
+              }
+            }
+          }
+          
+          const noneCount = Math.max(0, originalCount - approvedCount - rejectedCount);
+          const outstandingCount = noneCount + rejectedCount;
+          
+          if (outstandingCount > 0) {
+            const sevLower = severity.toLowerCase().replace(" ", "");
+            if (["medium", "high", "veryhigh", "very high"].includes(sevLower)) {
+              hasOutstandingHighOrMediumOrVeryHigh = true;
+            } else {
+              hasOutstandingLowOrLower = true;
+            }
+          }
+        });
+      }
+    );
+  }
+
+  if (hasAnySastVulnerability) {
+    if (hasOutstandingHighOrMediumOrVeryHigh) {
+      headingClass = "bg-red";
+    } else if (hasOutstandingLowOrLower) {
+      headingClass = "bg-gold";
+    } else {
+      headingClass = "bg-green";
+    }
+  }
+
+  let proposalSummaryText = "";
+  const num_approved = (aggregatedData.sast || [])
+    .filter((g) => g.status === "approved")
+    .reduce((sum, g) => sum + (g.records ? g.records.length : 0), 0);
+  const num_rejected = (aggregatedData.sast || [])
+    .filter((g) => g.status === "rejected")
+    .reduce((sum, g) => sum + (g.records ? g.records.length : 0), 0);
+
+  if (num_approved > 0 || num_rejected > 0) {
+    proposalSummaryText += "<p>";
+    if (num_approved > 0 && num_rejected > 0) {
+      const verbApp = num_approved > 1 ? "have been" : "has been";
+      const verbRej = num_rejected > 1 ? "have been" : "has been";
+      proposalSummaryText += `After reviewing all available flaw mitigation proposals, ${num_approved} ${verbApp} approved and ${num_rejected} ${verbRej} rejected or require(s) additional information.<br/>`;
+    } else if (num_approved > 0) {
+      const verbApp = num_approved > 1 ? "have been" : "has been";
+      proposalSummaryText += `After reviewing all available flaw mitigation proposals, ${num_approved} ${verbApp} approved.<br/>`;
+    } else if (num_rejected > 0) {
+      const verbRej = num_rejected > 1 ? "have been" : "has been";
+      proposalSummaryText += `After reviewing all available flaw mitigation proposals, ${num_rejected} ${verbRej} rejected or require(s) additional information.<br/>`;
+    }
+
+    const hasVeracode = !selectedTools || selectedTools.includes("Veracode");
+    if (hasVeracode) {
+      proposalSummaryText += `For approval and rejection details, review the <a target="_blank" href="https://docs.veracode.com/r/improve_mitigation?section=mitigate__team">individual flaws on the Triage Flaws page</a> and the <a target="_blank" href="https://docs.veracode.com/r/Approve_or_Reject_Veracode_SCA_Mitigations">History tab of the individual Component Profiles on the Software Composition Analysis page</a> within the Veracode platform.<br/>`;
+    }
+    proposalSummaryText += "</p>";
+  }
+
   const sastSection =
     backendSastSummary && (backendSastSummary.vulnerabilities > 0 || hasAnyProcessedSAST) && rows !== ""
-      ? StaticContent.sastHeader + rows + StaticContent.sastFooter
+      ? `<h3 class="heading ${headingClass}">Code Flaws</h3></br>` +
+        proposalSummaryText +
+        StaticContent.sastHeader +
+        rows +
+        StaticContent.sastFooter
       : "";
 
   let missingScaMessages = "";

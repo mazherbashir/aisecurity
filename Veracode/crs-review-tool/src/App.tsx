@@ -237,29 +237,151 @@ function adaptBreakdown(breakdownObj: any): {
   return result;
 }
 
+/**
+ * Build a sanitized PDF filename from a title and today's date.
+ * Example:
+ *   "DEU-xLOS-PwC Products Platform on SAP Cloud Platform"
+ * → "CustomizedReport_DEU_xLOS_PwC_Products_Platform_on_SAP_Cloud_Platform_06_Mar_2026.pdf"
+ */
+function buildPdfFilename(
+  title: string,
+  options: {
+    useFullMonth?: boolean;
+    prefix?: string;
+    date?: Date;
+  } = {}
+) {
+  const {
+    useFullMonth = false,    // true → "March", false → "Mar"
+    prefix = "CustomizedReport", // change if needed
+    date = new Date()        // allow override for testing
+  } = options;
+
+  // Format date → DD_Mon_YYYY or DD_March_YYYY
+  const day = String(date.getDate()).padStart(2, '0');
+  const monthsShort = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const monthsLong  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const monthStr = useFullMonth ? monthsLong[date.getMonth()] : monthsShort[date.getMonth()];
+  const year = date.getFullYear();
+  const datePart = `${day}_${monthStr}_${year}`;
+
+  // Normalize and sanitize the title → keep letters/numbers/underscore
+  // 1) Remove accents/diacritics
+  let sanitized = title.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+
+  // 2) Replace any sequence of non-alphanumeric characters with underscore
+  sanitized = sanitized.replace(/[^A-Za-z0-9]+/g, '_');
+
+  // 3) Collapse multiple underscores and trim from ends
+  sanitized = sanitized.replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+
+  // Ensure we have something sensible
+  if (!sanitized) sanitized = 'Report';
+
+  // Build final filename
+  return `${prefix}_${sanitized}_${datePart}.pdf`;
+}
+
 function ReviewTabContent({
   overview,
   backendSastSummary,
   backendScaSummary,
   scaDetails = [],
   sastSummary,
+  scaSummary,
   configNoSca = [],
   configScanValidityDays = 90,
   scaSafeVersionEnabled = false,
   aggregatedData,
+  selectedTools,
 }: {
   overview: any;
   backendSastSummary: any;
   backendScaSummary: any;
   scaDetails: any[];
   sastSummary: any;
+  scaSummary: any;
   configNoSca?: string[];
   configScanValidityDays?: number;
   scaSafeVersionEnabled?: boolean;
   aggregatedData: { sast: AggregatedGroup[]; sca: AggregatedGroup[] };
+  selectedTools?: string[];
 }) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+
+  // Determine if SCA missing is "NORMAL"
+  const isScaMissingNormal = React.useMemo(() => {
+    const archs = overview?.architectures || [];
+    const ecoObj = overview?.scaEcosystems || "";
+    let ecos: string[] = [];
+    if (typeof ecoObj === "string") {
+      ecos = ecoObj
+        .replace(/[\[\]]/g, "")
+        .split(",")
+        .map((s: string) => s.trim())
+        .filter(Boolean);
+    } else if (Array.isArray(ecoObj)) {
+      ecos = ecoObj;
+    }
+    const missing = archs.filter(
+      (a: string) =>
+        !ecos.some(
+          (e: string) =>
+            e.toLowerCase() === a.toLowerCase(),
+        ),
+    );
+    return missing.length === 0;
+  }, [overview]);
+
+  // Determine if sastSummary AND scaSummary have only LOW findings or less (i.e. zero Very High, High, Medium)
+  const hasOnlyLowFindings = React.useMemo(() => {
+    const sast_very_high = sastSummary?.breakdown?.["Very High"] || 0;
+    const sast_high = sastSummary?.breakdown?.["High"] || 0;
+    const sast_medium = sastSummary?.breakdown?.["Medium"] || 0;
+
+    const sca_very_high = scaSummary?.breakdown?.["Very High"] || 0;
+    const sca_high = scaSummary?.breakdown?.["High"] || 0;
+    const sca_medium = scaSummary?.breakdown?.["Medium"] || 0;
+
+    return (
+      Number(sast_very_high) === 0 &&
+      Number(sast_high) === 0 &&
+      Number(sast_medium) === 0 &&
+      Number(sca_very_high) === 0 &&
+      Number(sca_high) === 0 &&
+      Number(sca_medium) === 0
+    );
+  }, [sastSummary, scaSummary]);
+
+  const showSignOffButton = isScaMissingNormal && hasOnlyLowFindings;
+
+  const [isSignOffModalOpen, setIsSignOffModalOpen] = useState(false);
+  const [scanNameInput, setScanNameInput] = useState("");
+  const [reportUrlInput, setReportUrlInput] = useState("");
+  const [overrideHtml, setOverrideHtml] = useState<string | null>(null);
+
+  // Sync scan name default when modal opens or overview loads
+  useEffect(() => {
+    if (isSignOffModalOpen && !scanNameInput && overview?.scanName) {
+      setScanNameInput(overview.scanName);
+    }
+  }, [isSignOffModalOpen, overview?.scanName, scanNameInput]);
+
+  const [isRpSignOffModalOpen, setIsRpSignOffModalOpen] = useState(false);
+  const [rpScanNameInput, setRpScanNameInput] = useState("");
+  const [rpReportUrlInput, setRpReportUrlInput] = useState("");
+  const [rpEstimatedCompletionDate, setRpEstimatedCompletionDate] = useState("");
+  const [rpDoesMeet, setRpDoesMeet] = useState<"YES" | "NO">("YES");
+  const [rpNumber, setRpNumber] = useState("");
+
+  // Sync scan name default when RP modal opens or overview loads
+  useEffect(() => {
+    if (isRpSignOffModalOpen && !rpScanNameInput && overview?.scanName) {
+      setRpScanNameInput(overview.scanName);
+    }
+  }, [isRpSignOffModalOpen, overview?.scanName, rpScanNameInput]);
+
   // TEMPORARY TOGGLE for Scan Too Old
   const [isScanTooOld, setIsScanTooOld] = useState(false);
 
@@ -307,7 +429,8 @@ function ReviewTabContent({
       overview,
       configNoSca,
       scaDetails,
-      scaSafeVersionEnabled
+      scaSafeVersionEnabled,
+      selectedTools
     });
 
     let moduleSelectionSection = "";
@@ -340,7 +463,8 @@ function ReviewTabContent({
     isScanTooOld,
     aggregatedData,
     configNoSca,
-    configScanValidityDays
+    configScanValidityDays,
+    selectedTools
   ]);
 
 
@@ -348,8 +472,12 @@ function ReviewTabContent({
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    setRawHtml(formattedHeader);
-  }, [formattedHeader]);
+    if (overrideHtml !== null) {
+      setRawHtml(overrideHtml);
+    } else {
+      setRawHtml(formattedHeader);
+    }
+  }, [formattedHeader, overrideHtml]);
 
   const handleCopy = async () => {
     try {
@@ -370,6 +498,46 @@ function ReviewTabContent({
           Review Comments Editor
         </h2>
         <div className="flex items-center gap-4">
+          {showSignOffButton ? (
+            <button
+              type="button"
+              onClick={() => setIsSignOffModalOpen(true)}
+              className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 transition-all bg-emerald-950/40 hover:bg-emerald-900/50 px-3 py-1.5 rounded-md border border-emerald-800/50"
+              title="Sign-off scan"
+            >
+              <Check size={14} />
+              <span className="text-[10px] font-bold uppercase">
+                Sign-off
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsRpSignOffModalOpen(true)}
+              className="flex items-center gap-2 text-sky-400 hover:text-sky-300 transition-all bg-sky-950/40 hover:bg-sky-900/50 px-3 py-1.5 rounded-md border border-sky-800/50"
+              title="RP Sign-off scan"
+            >
+              <CheckCircle2 size={14} />
+              <span className="text-[10px] font-bold uppercase">
+                RP Sign-off
+              </span>
+            </button>
+          )}
+
+          {overrideHtml !== null && (
+            <button
+              type="button"
+              onClick={() => setOverrideHtml(null)}
+              className="flex items-center gap-2 text-rose-400 hover:text-rose-300 transition-all bg-rose-950/40 hover:bg-rose-900/50 px-3 py-1.5 rounded-md border border-rose-800/50"
+              title="Reset Sign-off"
+            >
+              <X size={14} />
+              <span className="text-[10px] font-bold uppercase">
+                Reset
+              </span>
+            </button>
+          )}
+
           <button
             onClick={handleCopy}
             className="flex items-center gap-2 text-slate-500 hover:text-white transition-all bg-slate-800/50 hover:bg-slate-800 px-3 py-1.5 rounded-md border border-slate-700/50"
@@ -384,6 +552,7 @@ function ReviewTabContent({
               {copied ? "Copied!" : "Copy HTML"}
             </span>
           </button>
+
           <button
             onClick={() => setIsMaximized(!isMaximized)}
             className="text-slate-500 hover:text-white transition-all"
@@ -407,9 +576,14 @@ function ReviewTabContent({
 
       {isEditMode ? (
         <textarea
-          className="w-full flex-1 p-4 bg-slate-950 text-slate-200 font-mono text-[11px] rounded-lg border border-slate-800 resize-none"
+          className="w-full flex-1 p-4 bg-slate-950 text-slate-200 font-mono text-[11px] rounded-lg border border-slate-800 resize-none font-mono"
           value={rawHtml}
-          onChange={(e) => setRawHtml(e.target.value)}
+          onChange={(e) => {
+            setRawHtml(e.target.value);
+            if (overrideHtml !== null) {
+              setOverrideHtml(e.target.value);
+            }
+          }}
         />
       ) : (
         <div
@@ -417,6 +591,341 @@ function ReviewTabContent({
           dangerouslySetInnerHTML={{ __html: rawHtml }}
         />
       )}
+
+      {/* Sign-off Modal */}
+      <AnimatePresence>
+        {isSignOffModalOpen && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-transparent pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSignOffModalOpen(false)}
+              className="absolute inset-0 bg-black/75 pointer-events-auto"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-lg bg-[#0a0c10] border border-emerald-500/30 rounded-xl flex flex-col shadow-2xl overflow-hidden relative z-10 pointer-events-auto"
+            >
+              <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                <div className="flex items-center gap-2 text-emerald-400">
+                  <Check size={18} />
+                  <h2 className="text-sm font-black uppercase tracking-widest text-emerald-400">
+                    Veracode SAST Sign-off
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSignOffModalOpen(false)}
+                  className="text-slate-500 hover:text-slate-300 transition-all"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  
+                  const accountId = overview.accountId || "---";
+                  const appId = overview.appId || "---";
+                  const buildId = overview.buildId || "---";
+                  const analysisId = overview.analysisId || "---";
+                  const staticAnalysisUnitId = overview.staticAnalysisUnitId || "---";
+                  const sandboxId = overview.sandboxId || "---";
+                  const profileName = overview.applicationName || "---";
+                  const reportFilename = buildPdfFilename(profileName);
+
+                  const veracodeSignUp = `The SAST assessment has been completed successfully with no remaining open findings in 
+  adherence to the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a>.<br/>
+<br/>
+This can be considered a <b>final</b> sign-off for the static code analysis for this assessed version,
+scan <code><a target="_blank" href="https://analysiscenter.veracode.com/auth/index.jsp#StaticOverview:${accountId}:${appId}:${buildId}:${analysisId}:${staticAnalysisUnitId}::::${sandboxId}">${scanNameInput}</a></code>, of the <code>, 
+of the <code><a target="_blank" href="https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:${accountId}:${appId}:${buildId}">${profileName}</a></code>  application. For more details, please see the Veracode report <code><a target="_blank" href="${reportUrlInput}">${reportFilename}</a></code> attached to this request. Please note that after this sign off, this request will be closed and will not be tracked anymore.<br/>
+<br/>
+Thank you!`;
+
+                  const finalHtml = StaticContent.header_style + veracodeSignUp + StaticContent.footerMsg;
+                  setOverrideHtml(finalHtml);
+                  setIsSignOffModalOpen(false);
+                }}
+                className="flex flex-col"
+              >
+                <div className="p-6 space-y-4">
+                  <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                    Generate the final sign-off HTML message. Provide the scan name and the Veracode report PDF URL.
+                  </p>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-sans">
+                      Scan Name (scan_Name)
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={scanNameInput}
+                      onChange={(e) => setScanNameInput(e.target.value)}
+                      placeholder="e.g. 2026-05-23-Scan"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-sans">
+                      Report URL (report_url)
+                    </label>
+                    <input
+                      type="url"
+                      required
+                      value={reportUrlInput}
+                      onChange={(e) => setReportUrlInput(e.target.value)}
+                      placeholder="https://analysiscenter.veracode.com/..."
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-900/40 border-t border-slate-800 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsSignOffModalOpen(false)}
+                    className="px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all font-sans"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 text-xs font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-all font-sans"
+                  >
+                    Generate Sign-off
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* RP Sign-off Modal */}
+      <AnimatePresence>
+        {isRpSignOffModalOpen && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-transparent pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsRpSignOffModalOpen(false)}
+              className="absolute inset-0 bg-black/75 pointer-events-auto"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-lg bg-[#0a0c10] border border-sky-500/30 rounded-xl flex flex-col shadow-2xl overflow-hidden relative z-10 pointer-events-auto"
+            >
+              <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                <div className="flex items-center gap-2 text-sky-400">
+                  <CheckCircle2 size={18} />
+                  <h2 className="text-sm font-black uppercase tracking-widest text-sky-400 font-sans">
+                    Veracode RP Sign-off
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsRpSignOffModalOpen(false)}
+                  className="text-slate-500 hover:text-slate-300 transition-all"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  
+                  const accountId = overview.accountId || "---";
+                  const appId = overview.appId || "---";
+                  const buildId = overview.buildId || "---";
+                  const analysisId = overview.analysisId || "---";
+                  const staticAnalysisUnitId = overview.staticAnalysisUnitId || "---";
+                  const sandboxId = overview.sandboxId || "---";
+                  const profileName = overview.applicationName || "---";
+                  const reportFilename = buildPdfFilename(profileName);
+
+                  let veryHighHighDays = "60";
+                  let mediumDays = "90";
+                  if (overview?.gracePeriod && typeof overview.gracePeriod === "string") {
+                    const vhMatch = overview.gracePeriod.match(/veryhigh\/high:\s*(\d+)/i);
+                    if (vhMatch) veryHighHighDays = vhMatch[1];
+                    const mMatch = overview.gracePeriod.match(/Medium:\s*(\d+)/i);
+                    if (mMatch) mediumDays = mMatch[1];
+                  }
+
+                  const meetText = rpDoesMeet === "YES" ? "does" : "does not";
+
+                  const veracodeRp = `The SAST assessment has been completed successfully with open findings. The remediation plan <code><a target="_blank" href="https://eu.workbench.pwc.com/home/my-reports/IRM-ARR-Dashboard">${rpNumber}</a></code> is in place for the open findings in adherence to the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a>.<br/>
+<br/>
+This can be considered a <b>final</b> sign-off for the static code analysis for this assessed version, scan <code><a target="_blank" href="https://analysiscenter.veracode.com/auth/index.jsp#StaticOverview:${accountId}:${appId}:${buildId}:${analysisId}:${staticAnalysisUnitId}::::${sandboxId}">${rpScanNameInput}</a></code>, of the <code>, of the <code><a target="_blank" href="https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:${accountId}:${appId}:${buildId}">${profileName}</a></code> application. For more details, please see the Veracode report <code><a target="_blank" href="${rpReportUrlInput}">${reportFilename}</a></code> attached to this request. Please note that after this sign off, this request will be closed and will not be tracked anymore.<br/>
+<br/>
+Thank you!
+<hr/>
+<p><b><u>Remediation Plan ${rpNumber} Risk Review</u></b><br/>
+The estimated completion date of ${rpEstimatedCompletionDate} <u>${meetText} meet</u> the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a> Vulnerability Remediation Timeframe for <span class="rounded veryhigh">Very High</span> and <span class="rounded high">High</span> findings (within ${veryHighHighDays} days) and <span class="rounded medium">Medium</span> findings (within ${mediumDays} days).</p>`;
+
+                  const hasSastVulnerabilities = (sastSummary?.vulnerabilities || 0) > 0;
+                  const hasScaVulnerabilities = (backendScaSummary?.vulnerabilities || 0) > 0;
+
+                  let sastBlock = "";
+                  let scaBlock = "";
+
+                  if (hasSastVulnerabilities || hasScaVulnerabilities) {
+                    const summaryResult = generateReviewSummary({
+                      backendSastSummary,
+                      backendScaSummary,
+                      aggregatedData,
+                      overview,
+                      configNoSca,
+                      scaDetails,
+                      scaSafeVersionEnabled,
+                      selectedTools
+                    });
+
+                    if (hasSastVulnerabilities) {
+                      let sastTablePart = "";
+                      if (summaryResult.sastSection) {
+                        const pIndex = summaryResult.sastSection.indexOf("<p><b>Open Flaw");
+                        if (pIndex !== -1) {
+                          sastTablePart = summaryResult.sastSection.substring(pIndex);
+                        } else {
+                          const tIndex = summaryResult.sastSection.indexOf("<table");
+                          if (tIndex !== -1) {
+                            sastTablePart = summaryResult.sastSection.substring(tIndex);
+                          }
+                        }
+                      }
+                      sastBlock = `<p><b><u>Risk Statement for Flaws</u></b><br/>
+The CWE findings identified in the Veracode scan are potentially serious security flaws that can allow an attacker to access and/or tamper with data. There is a lower risk that attackers can affect system reliability resulting in denial of service. In addition, the combination of flaws represented here include vulnerabilities in the logging mechanisms that can allow attackers to destroy evidence of their exploitation and remain undetected.</p>
+${sastTablePart}`;
+                    }
+
+                    if (hasScaVulnerabilities) {
+                      let scaSec = summaryResult.scaSection || "";
+                      scaSec = scaSec.replace(/Please\s+be\s+advised,\s+the[\s\S]*?<\/ol>\s*<br\/?>\s*/gi, "");
+                      scaBlock = `<p><b><u>Risk Statement for Software Composition Analysis Vulnerabilities</u></b><br/></p>
+${scaSec}`;
+                    }
+                  }
+
+                  const finalHtml = StaticContent.header_style + veracodeRp + sastBlock + scaBlock + StaticContent.footerMsg;
+                  setOverrideHtml(finalHtml);
+                  setIsRpSignOffModalOpen(false);
+                }}
+                className="flex flex-col"
+              >
+                <div className="p-6 space-y-4">
+                  <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                    Generate the Remediation Plan (RP) sign-off HTML message. Provide the scan name, Remediation Plan number (rp_number), Report URL and estimated completion date.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-sans">
+                        Scan Name
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={rpScanNameInput}
+                        onChange={(e) => setRpScanNameInput(e.target.value)}
+                        placeholder="e.g. 2026-05-23-Scan"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-sans">
+                        Remediation Plan ID (rp_number)
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={rpNumber}
+                        onChange={(e) => setRpNumber(e.target.value)}
+                        placeholder="e.g. IRM-RP-001"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-sans">
+                      Report URL (report_url)
+                    </label>
+                    <input
+                      type="url"
+                      required
+                      value={rpReportUrlInput}
+                      onChange={(e) => setRpReportUrlInput(e.target.value)}
+                      placeholder="https://analysiscenter.veracode.com/..."
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-sans">
+                        Estimated Completion Date
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={rpEstimatedCompletionDate}
+                        onChange={(e) => setRpEstimatedCompletionDate(e.target.value)}
+                        placeholder="MM/DD/YYYY"
+                        pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}"
+                        title="Date format: MM/DD/YYYY"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-sans">
+                        RP within grace period
+                      </label>
+                      <select
+                        value={rpDoesMeet}
+                        onChange={(e) => setRpDoesMeet(e.target.value as "YES" | "NO")}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-sans"
+                      >
+                        <option value="YES">YES</option>
+                        <option value="NO">NO</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-900/40 border-t border-slate-800 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsRpSignOffModalOpen(false)}
+                    className="px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all font-sans"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 text-xs font-black uppercase tracking-widest bg-sky-600 hover:bg-sky-500 text-white rounded-lg transition-all font-sans"
+                  >
+                    Generate RP Sign-off
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1917,10 +2426,12 @@ export default function App() {
                       backendScaSummary={backendScaSummary}
                       scaDetails={scaDetails}
                       sastSummary={sastSummary}
+                      scaSummary={scaSummary}
                       configNoSca={configNoSca}
                       configScanValidityDays={configScanValidityDays}
                       scaSafeVersionEnabled={scaSafeVersionEnabled}
                       aggregatedData={aggregatedData}
+                      selectedTools={selectedTools}
                     />
                   ) : (
                     <>

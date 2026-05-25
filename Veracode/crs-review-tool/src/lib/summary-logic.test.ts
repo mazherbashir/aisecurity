@@ -73,4 +73,153 @@ describe('generateReviewSummary', () => {
       const result = generateReviewSummary(emptyInput);
       expect(result.scaSection).toBe("");
     });
+
+  it('should display Code Flaws head with bg-green if all SAST mitigations are approved', () => {
+    const inputAllApproved = {
+      ...mockInput,
+      backendSastSummary: {
+        vulnerabilities: 1,
+        breakdown: {
+          'High': {
+            findings: [
+              { cwe: 'CWE-89', count: '1', remediation_due_date: '2023-01-01' }
+            ]
+          }
+        }
+      },
+      aggregatedData: {
+        sast: [
+          { groupId: 'g1', cweId: '89', severity: 'High', status: 'approved', records: [{}], type: 'SAST' }
+        ],
+        sca: []
+      }
+    };
+    const result = generateReviewSummary(inputAllApproved);
+    expect(result.sastSection).toContain('class="heading bg-green">Code Flaws</h3>');
+    expect(result.sastSection).toContain('After reviewing all available flaw mitigation proposals, 1 has been approved');
+    expect(result.sastSection).toContain('For approval and rejection details, review');
+  });
+
+  it('should display the corect count of multiple proposals in a single approved group', () => {
+    const inputMultipleApproved = {
+      ...mockInput,
+      backendSastSummary: {
+        vulnerabilities: 7,
+        breakdown: {
+          'High': {
+            findings: [
+              { cwe: 'CWE-89', count: '7', remediation_due_date: '2023-01-01' }
+            ]
+          }
+        }
+      },
+      aggregatedData: {
+        sast: [
+          {
+            groupId: 'g1',
+            cweId: '89',
+            severity: 'High',
+            status: 'approved',
+            records: [{}, {}, {}, {}, {}, {}, {}], // 7 proposals
+            type: 'SAST'
+          }
+        ],
+        sca: []
+      }
+    };
+    const result = generateReviewSummary(inputMultipleApproved);
+    expect(result.sastSection).toContain('After reviewing all available flaw mitigation proposals, 7 have been approved.');
+  });
+
+  it('should display Code Flaws head with bg-red if any SAST mitigation is NONE at High severity', () => {
+    const inputNoneHigh = {
+      ...mockInput,
+      backendSastSummary: {
+        vulnerabilities: 1,
+        breakdown: {
+          'High': {
+            findings: [
+              { cwe: 'CWE-89', count: '1', remediation_due_date: '2023-01-01' }
+            ]
+          }
+        }
+      },
+      aggregatedData: {
+        sast: [], // None processed, so status is "None"
+        sca: []
+      }
+    };
+    const result = generateReviewSummary(inputNoneHigh);
+    expect(result.sastSection).toContain('class="heading bg-red">Code Flaws</h3>');
+  });
+
+  it('should display Code Flaws head with bg-gold if any SAST mitigation is NONE at Low severity', () => {
+    const inputNoneLow = {
+      ...mockInput,
+      backendSastSummary: {
+        vulnerabilities: 1,
+        breakdown: {
+          'Low': {
+            findings: [
+              { cwe: 'CWE-80', count: '1', remediation_due_date: '2023-01-01' }
+            ]
+          }
+        }
+      },
+      aggregatedData: {
+        sast: [], // None processed
+        sca: []
+      }
+    };
+    const result = generateReviewSummary(inputNoneLow);
+    expect(result.sastSection).toContain('class="heading bg-gold">Code Flaws</h3>');
+  });
+
+  it('should display Code Flaws head with bg-red if any SAST mitigation is rejected at Medium severity', () => {
+    const inputRejectedMedium = {
+      ...mockInput,
+      backendSastSummary: {
+        vulnerabilities: 1,
+        breakdown: {
+          'Medium': {
+            findings: [
+              { cwe: 'CWE-79', count: '1', remediation_due_date: '2023-01-01' }
+            ]
+          }
+        }
+      },
+      aggregatedData: {
+        sast: [
+          { groupId: 'g1', cweId: '79', severity: 'Medium', status: 'rejected', records: [{}], type: 'SAST' }
+        ],
+        sca: []
+      }
+    };
+    const result = generateReviewSummary(inputRejectedMedium);
+    expect(result.sastSection).toContain('class="heading bg-red">Code Flaws</h3>');
+  });
+
+  it('should display Code Flaws head with bg-gold if any SAST mitigation is rejected at Low severity and none at Medium/High/Very High', () => {
+    const inputRejectedLow = {
+      ...mockInput,
+      backendSastSummary: {
+        vulnerabilities: 1,
+        breakdown: {
+          'Low': {
+            findings: [
+              { cwe: 'CWE-80', count: '1', remediation_due_date: '2023-01-01' }
+            ]
+          }
+        }
+      },
+      aggregatedData: {
+        sast: [
+          { groupId: 'g1', cweId: '80', severity: 'Low', status: 'rejected', records: [{}], type: 'SAST' }
+        ],
+        sca: []
+      }
+    };
+    const result = generateReviewSummary(inputRejectedLow);
+    expect(result.sastSection).toContain('class="heading bg-gold">Code Flaws</h3>');
+  });
 });
