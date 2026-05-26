@@ -2,7 +2,7 @@
 # Stage 1 — Build
 # Uses Maven wrapper to compile and package the fat JAR.
 # ============================================================
-FROM eclipse-temurin:17-jdk-alpine AS build
+FROM eclipse-temurin:21-jdk-alpine AS build
 
 WORKDIR /workspace
 
@@ -22,7 +22,7 @@ RUN ./mvnw package -DskipTests -B
 # Stage 2 — Runtime
 # Lean JRE image; only the fat JAR is copied in.
 # ============================================================
-FROM eclipse-temurin:17-jre-alpine AS runtime
+FROM eclipse-temurin:21-jre-alpine AS runtime
 
 LABEL maintainer="crsaitool"
 LABEL description="CRS Review API — Veracode reporting backend"
