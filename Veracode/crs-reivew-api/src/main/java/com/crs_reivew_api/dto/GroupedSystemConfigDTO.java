@@ -24,7 +24,12 @@ public class GroupedSystemConfigDTO {
     @JsonProperty("Compliance")
     private ComplianceSettings compliance;
 
+    @JsonProperty("architecture-mappings")
+    private Map<String, List<String>> architectureMappings;
+
     // Getters and Setters
+    public Map<String, List<String>> getArchitectureMappings() { return architectureMappings; }
+    public void setArchitectureMappings(Map<String, List<String>> architectureMappings) { this.architectureMappings = architectureMappings; }
     public SastAndScaPrompts getSastAndScaPrompts() { return sastAndScaPrompts; }
     public void setSastAndScaPrompts(SastAndScaPrompts sastAndScaPrompts) { this.sastAndScaPrompts = sastAndScaPrompts; }
 

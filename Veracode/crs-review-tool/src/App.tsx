@@ -26,6 +26,9 @@ import {
   Minimize2,
   Copy,
   Check,
+  Plus,
+  Trash2,
+  Edit2,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -375,6 +378,7 @@ function ReviewTabContent({
   const [rpEstimatedCompletionDate, setRpEstimatedCompletionDate] = useState("");
   const [rpDoesMeet, setRpDoesMeet] = useState<"YES" | "NO">("YES");
   const [rpNumber, setRpNumber] = useState("");
+  const [rpError, setRpError] = useState<string | null>(null);
 
   // Sync scan name default when RP modal opens or overview loads
   useEffect(() => {
@@ -550,7 +554,10 @@ function ReviewTabContent({
           ) : (
             <button
               type="button"
-              onClick={() => setIsRpSignOffModalOpen(true)}
+              onClick={() => {
+                setRpError(null);
+                setIsRpSignOffModalOpen(true);
+              }}
               className="flex items-center gap-2 text-sky-400 hover:text-sky-300 transition-all bg-sky-950/40 hover:bg-sky-900/50 px-3 py-1.5 rounded-md border border-sky-800/50"
               title="RP Sign-off scan"
             >
@@ -807,6 +814,51 @@ Thank you!`;
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
+                  setRpError(null);
+
+                  // 1. REPORT URL VALIDATION: should start with https: http is not allowed
+                  const urlTrimmed = (rpReportUrlInput || "").trim();
+                  if (!urlTrimmed.toLowerCase().startsWith("https://")) {
+                    setRpError("REPORT URL: Should start with https. http is not allowed.");
+                    return;
+                  }
+
+                  // 2. REMEDIATION PLAN ID VALIDATION: should start either with RITM, IPT or PER
+                  const rpNumberTrimmed = (rpNumber || "").trim();
+                  const rpUpper = rpNumberTrimmed.toUpperCase();
+                  if (!rpUpper.startsWith("RITM") && !rpUpper.startsWith("IPT") && !rpUpper.startsWith("PER")) {
+                    setRpError("REMEDIATION PLAN ID: Should start either with RITM, IPT or PER. Other formats are not allowed.");
+                    return;
+                  }
+
+                  // 3. ESTIMATED COMPLETION DATE VALIDATION: should not be from the past
+                  const dateParts = rpEstimatedCompletionDate.trim().split("/");
+                  if (dateParts.length !== 3) {
+                    setRpError("ESTIMATED COMPLETION DATE: Invalid format. Please use MM/DD/YYYY format.");
+                    return;
+                  }
+                  const month = parseInt(dateParts[0], 10) - 1;
+                  const day = parseInt(dateParts[1], 10);
+                  const year = parseInt(dateParts[2], 10);
+
+                  // Quick valid checking
+                  if (isNaN(month) || isNaN(day) || isNaN(year) || month < 0 || month > 11 || day < 1 || day > 31 || year < 1000) {
+                    setRpError("ESTIMATED COMPLETION DATE: Date format must be a valid calendar date MM/DD/YYYY.");
+                    return;
+                  }
+
+                  const inputDate = new Date(year, month, day);
+                  if (isNaN(inputDate.getTime())) {
+                    setRpError("ESTIMATED COMPLETION DATE: Invalid date.");
+                    return;
+                  }
+
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  if (inputDate < today) {
+                    setRpError("ESTIMATED COMPLETION DATE: Date should not be from the past.");
+                    return;
+                  }
                   
                   const accountId = overview.accountId || "---";
                   const appId = overview.appId || "---";
@@ -888,6 +940,13 @@ ${scaSec}`;
                   <p className="text-xs text-slate-400 leading-relaxed font-sans">
                     Generate the Remediation Plan (RP) sign-off HTML message. Provide the scan name, Remediation Plan number (rp_number), Report URL and estimated completion date.
                   </p>
+
+                  {rpError && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400 font-bold flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                      <span>{rpError}</span>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
@@ -1035,6 +1094,8 @@ export default function App() {
   const [initialFullConfig, setInitialFullConfig] = useState<any>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<string>("SAST&SCA Prompts");
+  const [newValues, setNewValues] = useState<Record<string, string>>({});
+  const [newLangCategory, setNewLangCategory] = useState("");
   
   const [hideProcessedFindings, setHideProcessedFindings] = useState<boolean>(() => {
     return localStorage.getItem("hide_processed_findings") === "true";
@@ -1142,6 +1203,15 @@ export default function App() {
           includedModules: data.includedModules || [ "veracodegen.htmla.pya", "pwc.", ".zip", ".war", "snapshot.jar", "0.jar", "pwc", "release.jar", "app_", ".bca", ".gz", "-service.jar", "-advancer.jar" ],
           ignoredEcosystems: data.ignoredEcosystems || [ "so" ],
           noScaArchitectures: data.noScaArchitectures || [ "Apex", "TSQL" ]
+        },
+        "architecture-mappings": data["architecture-mappings"] || {
+          "Java": ["maven", "gradle", "JAVA", "JVM"],
+          "JavaScript": ["npm", "bower", "JAVASCRIPT"],
+          "Go": ["go", "golang", "GO", "GOLANG"],
+          "PHP": ["composer", "PHP", "Packagist"],
+          "NET": ["nuget", "CIL32", "MSIL"],
+          "Ruby": ["rubygems", "RUBY"],
+          "Python": ["pip", "pypi", "PYTHON"]
         }
       };
 
@@ -2795,7 +2865,7 @@ export default function App() {
                 </div>
 
                 <div className="flex gap-2 p-3 border-b border-slate-800 bg-slate-900/30 overflow-x-auto scrollbar-hide">
-                  {["SAST&SCA Prompts", "System", "AiEngine", "SecondaryAudit", "Compliance", "Exclusions"].filter(tab => {
+                  {["SAST&SCA Prompts", "System", "AiEngine", "SecondaryAudit", "Compliance", "Exclusions", "Architecture Mapping"].filter(tab => {
                     if (tab === "SecondaryAudit") {
                       return fullConfig["System"]?.secondaryAuditEnabled;
                     }
@@ -3364,6 +3434,170 @@ export default function App() {
                                 </div>
                             </section>
                         </div>
+                    )}
+
+                    {/* Architecture Mapping Tab */}
+                    {settingsTab === "Architecture Mapping" && fullConfig["architecture-mappings"] && (
+                      <div className="space-y-6">
+                        <section className="space-y-1">
+                          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" /> Architecture Mapping Engine
+                          </h3>
+                          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest leading-relaxed">
+                            Configure association values/ecosystems mapping detected under matching environments
+                          </p>
+                        </section>
+
+                        {/* Card to Add a new Language Category */}
+                        <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-5 bg-slate-900/30 border border-slate-800/80 rounded-2xl">
+                          <div>
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                              Define Custom Language Category
+                            </h4>
+                            <p className="text-[9px] text-slate-500 font-medium uppercase tracking-wider mt-0.5">
+                              Register a new technology or pipeline environment mapping
+                            </p>
+                          </div>
+                          <div className="flex gap-2 w-full md:w-auto">
+                            <input 
+                              type="text"
+                              placeholder="e.g. Rust, Kotlin, Scala..."
+                              value={newLangCategory}
+                              onChange={(e) => setNewLangCategory(e.target.value)}
+                              className="bg-slate-900/50 border border-slate-800 text-xs text-slate-300 font-bold py-2 px-3 rounded-xl outline-none focus:border-blue-500 transition-all max-w-xs w-full"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  if (!newLangCategory.trim()) return;
+                                  const normalizedKey = newLangCategory.trim();
+                                  const next = { ...fullConfig };
+                                  if (!next["architecture-mappings"]) {
+                                    next["architecture-mappings"] = {};
+                                  }
+                                  if (!next["architecture-mappings"][normalizedKey]) {
+                                    next["architecture-mappings"][normalizedKey] = [];
+                                    setFullConfig(next);
+                                  }
+                                  setNewLangCategory("");
+                                }
+                              }}
+                            />
+                            <button 
+                              onClick={() => {
+                                if (!newLangCategory.trim()) return;
+                                const normalizedKey = newLangCategory.trim();
+                                const next = { ...fullConfig };
+                                if (!next["architecture-mappings"]) {
+                                  next["architecture-mappings"] = {};
+                                }
+                                if (!next["architecture-mappings"][normalizedKey]) {
+                                  next["architecture-mappings"][normalizedKey] = [];
+                                  setFullConfig(next);
+                                }
+                                setNewLangCategory("");
+                              }}
+                              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-lg flex items-center gap-1 shrink-0 cursor-pointer"
+                            >
+                              <Plus size={12} /> Add Category
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Grid with category cards */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          {Object.entries(fullConfig["architecture-mappings"] || {}).map(([lang, vals]: [string, any]) => {
+                            const valueList = Array.isArray(vals) ? vals : [];
+                            return (
+                              <div key={lang} className="bg-slate-950/40 border border-slate-800/85 rounded-2xl p-5 flex flex-col space-y-4 shadow-sm hover:border-slate-700/50 transition-colors">
+                                <div className="flex items-center justify-between border-b border-slate-800/60 pb-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_6px_rgba(59,130,246,0.8)]" />
+                                    <span className="text-xs font-bold text-slate-100 uppercase tracking-widest">{lang}</span>
+                                    <span className="text-[9px] font-bold text-slate-500 font-mono">({valueList.length})</span>
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      const next = JSON.parse(JSON.stringify(fullConfig));
+                                      delete next["architecture-mappings"][lang];
+                                      setFullConfig(next);
+                                    }}
+                                    className="p-1.5 bg-red-950/10 hover:bg-red-950/40 text-red-500 hover:text-red-400 rounded-lg transition-colors border border-red-900/10 cursor-pointer"
+                                    title={`Delete Category ${lang}`}
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+
+                                <div className="space-y-2 max-h-[180px] overflow-y-auto custom-scrollbar pr-1">
+                                  {valueList.length === 0 ? (
+                                    <p className="text-[10px] italic text-slate-600 text-center py-2 uppercase tracking-wider">No matching values configured</p>
+                                  ) : (
+                                    valueList.map((valStr: string, idx: number) => (
+                                      <div key={idx} className="flex items-center gap-1">
+                                        <input
+                                          type="text"
+                                          value={valStr}
+                                          onChange={(e) => {
+                                            const next = JSON.parse(JSON.stringify(fullConfig));
+                                            next["architecture-mappings"][lang][idx] = e.target.value;
+                                            setFullConfig(next);
+                                          }}
+                                          className="bg-slate-900/50 border border-slate-800 text-xs text-slate-300 font-mono py-1 px-3 rounded-lg flex-1 outline-none focus:border-blue-500/60 transition-all"
+                                        />
+                                        <button
+                                          onClick={() => {
+                                            const next = JSON.parse(JSON.stringify(fullConfig));
+                                            next["architecture-mappings"][lang].splice(idx, 1);
+                                            setFullConfig(next);
+                                          }}
+                                          className="p-1.5 bg-red-950/10 text-red-400 hover:bg-red-900/20 hover:text-red-300 rounded-lg transition-colors cursor-pointer"
+                                          title="Remove Value"
+                                        >
+                                          <X size={12} />
+                                        </button>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+
+                                <div className="pt-2 border-t border-slate-800 flex gap-2">
+                                  <input
+                                    type="text"
+                                    placeholder="Add mapping value..."
+                                    value={newValues[lang] || ""}
+                                    onChange={(e) => setNewValues({ ...newValues, [lang]: e.target.value })}
+                                    className="bg-slate-900/30 border border-slate-800 text-[11px] font-mono py-1 px-3 rounded-lg outline-none focus:border-blue-500 block flex-1 text-slate-300"
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const pending = (newValues[lang] || "").trim();
+                                        if (!pending) return;
+                                        const next = JSON.parse(JSON.stringify(fullConfig));
+                                        next["architecture-mappings"][lang].push(pending);
+                                        setFullConfig(next);
+                                        setNewValues({ ...newValues, [lang]: "" });
+                                      }
+                                    }}
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      const pending = (newValues[lang] || "").trim();
+                                      if (!pending) return;
+                                      const next = JSON.parse(JSON.stringify(fullConfig));
+                                      next["architecture-mappings"][lang].push(pending);
+                                      setFullConfig(next);
+                                      setNewValues({ ...newValues, [lang]: "" });
+                                    }}
+                                    className="p-1.5 bg-blue-600/10 hover:bg-blue-600/30 text-blue-400 hover:text-blue-300 rounded-lg transition-all border border-blue-900/10 flex items-center justify-center shrink-0 cursor-pointer"
+                                  >
+                                    <Plus size={12} />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>

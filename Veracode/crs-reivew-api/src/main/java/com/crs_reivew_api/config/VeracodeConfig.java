@@ -13,6 +13,10 @@ import java.io.IOException;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.core.env.PropertiesPropertySource;
+import org.springframework.core.env.StandardEnvironment;
 
 @Configuration
 @ConfigurationProperties(prefix = "veracode.api")
@@ -91,12 +95,34 @@ public class VeracodeConfig {
             logger.warn("Credentials file not found at {}. AI keys will be read from environment or application.properties if available.", credentialsFile.getAbsolutePath());
         }
         
-        // Manually parse application.properties to populate gracePeriods and tierMappings if they are empty
-        File appPropsFile = new File("src/main/resources/application.properties");
-        if (appPropsFile.exists()) {
+        // Manually parse application.properties to populate configuration properties from the outside
+        File appPropsFile = null;
+        String[] candidatePaths = {
+            "src/main/resources/application.properties",
+            "../src/main/resources/application.properties",
+            "application.properties",
+            "config/application.properties",
+            "target/classes/application.properties"
+        };
+        for (String path : candidatePaths) {
+            File f = new File(path);
+            if (f.exists()) {
+                appPropsFile = f;
+                break;
+            }
+        }
+
+        if (appPropsFile != null) {
+            logger.info("Found external properties file at: {}", appPropsFile.getAbsolutePath());
             Properties appProps = new Properties();
             try (FileInputStream fis = new FileInputStream(appPropsFile)) {
                 appProps.load(fis);
+                
+                // Bind all veracode.api.* properties from the external file onto this instance
+                PropertiesPropertySource propertySource = new PropertiesPropertySource("externalAppProps", appProps);
+                StandardEnvironment env = new StandardEnvironment();
+                env.getPropertySources().addFirst(propertySource);
+                Binder.get(env).bind("veracode.api", Bindable.ofInstance(this));
                 
                 // Populate tierMappings
                 if (this.tierMappings == null || this.tierMappings.isEmpty()) {

@@ -235,6 +235,17 @@ public class ConfigService {
                     }
                 }
             }
+            if (payload.getArchitectureMappings() != null) {
+                java.util.Map<String, String> newRawMappings = new java.util.HashMap<>();
+                for (java.util.Map.Entry<String, java.util.List<String>> entry : payload.getArchitectureMappings().entrySet()) {
+                    String key = entry.getKey();
+                    java.util.List<String> listVal = entry.getValue();
+                    String joinedVal = (listVal != null) ? String.join(",", listVal) : "";
+                    newRawMappings.put(key, joinedVal);
+                    updates.put("veracode.api.architecture-mappings." + key, joinedVal);
+                }
+                veracodeConfig.setArchitectureMappings(newRawMappings);
+            }
         }
 
         if (updates.isEmpty()) return;
@@ -353,6 +364,27 @@ public class ConfigService {
         compliance.put("tierDropDown", tiers);
         config.put("Compliance", compliance);
 
+        // Group 6: Architecture Mappings
+        java.util.Map<String, java.util.List<String>> formattedMappings = new java.util.HashMap<>();
+        var rawMap = veracodeConfig.getArchitectureMappings();
+        if (rawMap != null) {
+            for (java.util.Map.Entry<String, String> entry : rawMap.entrySet()) {
+                String key = entry.getKey();
+                String val = entry.getValue();
+                java.util.List<String> list = new java.util.ArrayList<>();
+                if (val != null) {
+                    for (String s : val.split(",")) {
+                        String trimmed = s.trim();
+                        if (!trimmed.isEmpty()) {
+                            list.add(trimmed);
+                        }
+                    }
+                }
+                formattedMappings.put(key, list);
+            }
+        }
+        config.put("architecture-mappings", formattedMappings);
+
         return config;
     }
 
@@ -419,6 +451,27 @@ public class ConfigService {
         java.util.Collections.sort(tiers);
         compliance.setTierDropDown(tiers);
         dto.setCompliance(compliance);
+
+        // Architecture Mappings
+        java.util.Map<String, java.util.List<String>> dtoFormattedMappings = new java.util.HashMap<>();
+        var rawDtoMap = veracodeConfig.getArchitectureMappings();
+        if (rawDtoMap != null) {
+            for (java.util.Map.Entry<String, String> entry : rawDtoMap.entrySet()) {
+                String key = entry.getKey();
+                String val = entry.getValue();
+                java.util.List<String> list = new java.util.ArrayList<>();
+                if (val != null) {
+                    for (String s : val.split(",")) {
+                        String trimmed = s.trim();
+                        if (!trimmed.isEmpty()) {
+                            list.add(trimmed);
+                        }
+                    }
+                }
+                dtoFormattedMappings.put(key, list);
+            }
+        }
+        dto.setArchitectureMappings(dtoFormattedMappings);
 
         return dto;
     }
