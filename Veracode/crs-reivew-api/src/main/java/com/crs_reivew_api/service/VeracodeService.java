@@ -744,6 +744,7 @@ public class VeracodeService {
         if (report.getStaticAnalysis() != null) {
             dto.overview.sastScore = report.getStaticAnalysis().getScore();
             dto.overview.sastRating = report.getStaticAnalysis().getRating();
+            dto.overview.submittedDate = report.getStaticAnalysis().getSubmittedDate();
             if (dto.overview.staticAnalysisUnitId == null) {
                 dto.overview.staticAnalysisUnitId = report.getStaticAnalysis().getStaticAnalysisUnitId();
             }

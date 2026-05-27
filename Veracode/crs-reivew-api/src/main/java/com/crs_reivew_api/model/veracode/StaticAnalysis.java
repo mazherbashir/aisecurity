@@ -8,6 +8,7 @@ public class StaticAnalysis {
     @XmlAttribute private Integer score;
     @XmlAttribute private String rating;
     @XmlAttribute(name = "static_analysis_unit_id") private String staticAnalysisUnitId;
+    @XmlAttribute(name = "submitted_date") private String submittedDate;
     @XmlElementWrapper(name = "modules")
     @XmlElement(name = "module")
     private List<VeracodeModule> modules;
@@ -15,5 +16,6 @@ public class StaticAnalysis {
     public Integer getScore() { return score; }
     public String getRating() { return rating; }
     public String getStaticAnalysisUnitId() { return staticAnalysisUnitId; }
+    public String getSubmittedDate() { return submittedDate; }
     public List<VeracodeModule> getModules() { return modules; }
 }

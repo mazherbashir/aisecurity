@@ -412,7 +412,7 @@ function ReviewTabContent({
         const match = ovw.scanName.match(/^\d{4}-\d{2}-\d{2}/);
         if (match) return match[0];
       }
-      return ovw?.generationDate || null;
+      return ovw?.submitted_date || ovw?.generationDate || null;
     };
     const effectiveDate = getEffectiveScanDate(overview);
     const isActuallyTooOld = calculateIsScanTooOld(effectiveDate, configScanValidityDays);
@@ -2096,6 +2096,7 @@ export default function App() {
         analysisId: "---",
         scanName: "---",
         generationDate: "---",
+        submitted_date: "---",
         policyName: "---",
         policyComplianceStatus: "---",
         sastScore: 0,
@@ -2553,9 +2554,9 @@ export default function App() {
                     <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
                       Date
                     </span>
-                    <p className="text-[11px] font-mono text-slate-400">
+                    <p className="text-[11px] font-mono text-slate-400" title={activeOverview.submitted_date || activeOverview.generationDate || ""}>
                       {
-                        String(activeOverview.generationDate || "---").split(
+                        String(activeOverview.submitted_date || activeOverview.generationDate || "---").split(
                           " ",
                         )[0]
                       }
@@ -2567,7 +2568,7 @@ export default function App() {
                         const match = ovw.scanName.match(/^\d{4}-\d{2}-\d{2}/);
                         if (match) return match[0];
                       }
-                      return ovw?.generationDate || null;
+                      return ovw?.submitted_date || ovw?.generationDate || null;
                     };
                     const effectiveDate = getEffectiveScanDate(activeOverview);
                     if (calculateIsScanTooOld(effectiveDate, configScanValidityDays)) {

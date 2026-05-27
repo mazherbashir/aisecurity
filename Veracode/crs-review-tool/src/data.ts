@@ -7,6 +7,7 @@ export const sampleReportData = {
     "analysisId" : "67530620",
     "scanName" : "MASTERSCAN",
     "generationDate" : "2026-05-06 19:13:48 UTC",
+    "submitted_date" : "2026-05-06 19:13:48 UTC",
     "policyName" : "PwC_DC3HighlyConfidential_External",
     "policyComplianceStatus" : "Did Not Pass",
     "sastScore" : 91,

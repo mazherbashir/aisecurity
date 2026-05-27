@@ -41,6 +41,9 @@ public class VeracodeReportDTO {
         public String sandboxId;
         public String tier;
         public String gracePeriod;
+        
+        @com.fasterxml.jackson.annotation.JsonProperty("submitted_date")
+        public String submittedDate;
     }
 
     public static class SeveritySummaryDTO {
