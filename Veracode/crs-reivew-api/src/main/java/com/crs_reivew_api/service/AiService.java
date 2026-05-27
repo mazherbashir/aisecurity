@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.owasp.encoder.Encode;
 
 @Service
 public class AiService {
@@ -110,8 +111,9 @@ public class AiService {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
-            logger.error("Shared Auditor AI Service error ({}): {}", response.statusCode(), response.body());
-            throw new RuntimeException("Shared Auditor AI Service error (" + response.statusCode() + "): " + response.body());
+            String sanitizedBody = Encode.forJava(response.body());
+            logger.error("Shared Auditor AI Service error ({}): {}", response.statusCode(), sanitizedBody);
+            throw new RuntimeException("Shared Auditor AI Service error (" + response.statusCode() + "): " + sanitizedBody);
         }
 
         JsonNode root = objectMapper.readTree(response.body());
@@ -179,8 +181,9 @@ public class AiService {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
-            logger.error("Shared AI Service error ({}): {}", response.statusCode(), response.body());
-            throw new RuntimeException("Shared AI Service error (" + response.statusCode() + "): " + response.body());
+            String sanitizedBody = Encode.forJava(response.body());
+            logger.error("Shared AI Service error ({}): {}", response.statusCode(), sanitizedBody);
+            throw new RuntimeException("Shared AI Service error (" + response.statusCode() + "): " + sanitizedBody);
         }
 
         JsonNode root = objectMapper.readTree(response.body());
@@ -217,8 +220,9 @@ public class AiService {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
-            logger.error("Gemini API error ({}): {}", response.statusCode(), response.body());
-            throw new RuntimeException("Gemini API error (" + response.statusCode() + "): " + response.body());
+            String sanitizedBody = Encode.forJava(response.body());
+            logger.error("Gemini API error ({}): {}", response.statusCode(), sanitizedBody);
+            throw new RuntimeException("Gemini API error (" + response.statusCode() + "): " + sanitizedBody);
         }
 
         JsonNode root = objectMapper.readTree(response.body());
@@ -257,7 +261,8 @@ public class AiService {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
-            throw new RuntimeException("Azure OpenAI API error (" + response.statusCode() + "): " + response.body());
+            String sanitizedBody = Encode.forJava(response.body());
+            throw new RuntimeException("Azure OpenAI API error (" + response.statusCode() + "): " + sanitizedBody);
         }
 
         JsonNode root = objectMapper.readTree(response.body());

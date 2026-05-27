@@ -31,7 +31,7 @@ Code Review Services (CRS) has assessed your latest policy-level scan <code><a t
 <style>
     table.crs {border-collapse: collapse;}
     table.crs th {text-align: left !important; white-space: nowrap;}
-    table.crs th, td {border: 1px solid black; padding: 3px 5px; text-align: center;}
+    table.crs th, table.crs td {border: 1px solid black; padding: 3px 5px; text-align: center;}
     table.crs tr:nth-child(even) {background-color: gainsboro;}
     table.crs td:nth-of-type(2) {text-align: left}
 </style>
@@ -46,17 +46,17 @@ Code Review Services (CRS) has assessed your latest policy-level scan <code><a t
 <hr/>
 `;
 
-  public static readonly nodeMsg =  `If this is a transitive dependency, you can utilize the <code><a target="_blank" href="https://docs.npmjs.com/cli/v8/configuring-npm/package-json#overrides">overrides</a></code> section of the <code>package.json</code> to force the dependency to a vulnerability-free version in NPM v8.3+. Otherwise, try utilizing the <code><a target="_blank" href="https://www.npmjs.com/package/force-resolutions">force-resolutions</a></code> package to force the dependency to a vulnerability-free version. Additionally, ensure that only production dependencies are included by running <code>npm install --production</code> and including the generated <code>package-lock.json</code> file in the scan.`;
+  public static readonly nodeMsg = `If this is a transitive dependency, you can utilize the <code><a target="_blank" href="https://docs.npmjs.com/cli/v8/configuring-npm/package-json#overrides">overrides</a></code> section of the <code>package.json</code> to force the dependency to a vulnerability-free version in NPM v8.3+. Otherwise, try utilizing the <code><a target="_blank" href="https://www.npmjs.com/package/force-resolutions">force-resolutions</a></code> package to force the dependency to a vulnerability-free version. Additionally, ensure that only production dependencies are included by running <code>npm install --production</code> and including the generated <code>package-lock.json</code> file in the scan.`;
 
   public static readonly requestMsg = `This option is not valid for the <code>request</code> component as the library has been deprecated and there are no future updates. For further guidance on mitigating the <code>request</code> vulnerabilities, see the <a class="crs-rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/:w:/r/sites/GBL-IFS-NIS-Application-Security/AppReadiness/CRS%20Documents/Client-Facing%20Documentation/CRS%20SAST%20Developer%20Guidance.docx?d=w18d11ae841444f1ba48c2efe66bc6c92&e=M7j31q&nav=eyJoIjoiMjY5MzU4NzU4In0">CRS SAST Developer Guidelines</a>.`;
 
   public static readonly javaMsg = `For Java/Jar files, "not used in production" is NOT a mitigation that can be approved as they may potentially be accessed using other attack vectors.`;
-  
+
   public static readonly scaDetailHeader = `
 <style>
     table.crs {border-collapse: collapse;}
     table.crs th {white-space: nowrap;}
-    table.crs th, td {border: 1px solid black; padding: 3px 5px; text-align: left;}
+    table.crs th, table.crs td {border: 1px solid black; padding: 3px 5px; text-align: left;}
     table.crs tr:nth-child(even) {background-color: gainsboro;}
 </style>
 <h4>Software Composition Analysis Table</h4>

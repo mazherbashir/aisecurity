@@ -51,7 +51,7 @@ public class VeracodeController {
     }
 
     @org.springframework.web.bind.annotation.PostMapping("/api/veracode/mitigation")
-    public String updateMitigation(@org.springframework.web.bind.annotation.RequestBody java.util.Map<String, String> payload) {
+    public java.util.Map<String, Object> updateMitigation(@org.springframework.web.bind.annotation.RequestBody java.util.Map<String, String> payload) {
         String buildId = payload.get("buildId");
         String appId = payload.get("appId");
         String flawIdList = payload.get("flawIdList");
@@ -61,6 +61,16 @@ public class VeracodeController {
         String type = payload.get("type");
         
         System.out.println("Received mitigation update request for Build ID: " + buildId + ", App ID: " + appId + ", Flaws: " + flawIdList + ", Action: " + action + ", Type: " + type);
-        return veracodeService.updateMitigation(buildId, appId, flawIdList, action, comment, cveId, type);
+        
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        try {
+            String result = veracodeService.updateMitigation(buildId, appId, flawIdList, action, comment, cveId, type);
+            response.put("status", "success");
+            response.put("result", org.owasp.encoder.Encode.forJava(result));
+        } catch (Exception e) {
+            response.put("status", "error");
+            response.put("message", "Failed to update mitigation. Please check the server logs.");
+        }
+        return response;
     }
 }

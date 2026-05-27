@@ -10,7 +10,6 @@ import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api/ai")
-@CrossOrigin(origins = "*")
 public class AiController {
 
     private static final Logger logger = LoggerFactory.getLogger(AiController.class);

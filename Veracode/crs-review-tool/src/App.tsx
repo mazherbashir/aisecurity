@@ -858,14 +858,11 @@ The estimated completion date of ${rpEstimatedCompletionDate} <u>${meetText} mee
                     if (hasSastVulnerabilities) {
                       let sastTablePart = "";
                       if (summaryResult.sastSection) {
+                        const styleIndex = summaryResult.sastSection.indexOf("<style>");
                         const pIndex = summaryResult.sastSection.indexOf("<p><b>Open Flaw");
-                        if (pIndex !== -1) {
-                          sastTablePart = summaryResult.sastSection.substring(pIndex);
-                        } else {
-                          const tIndex = summaryResult.sastSection.indexOf("<table");
-                          if (tIndex !== -1) {
-                            sastTablePart = summaryResult.sastSection.substring(tIndex);
-                          }
+                        const startIndex = styleIndex !== -1 ? styleIndex : (pIndex !== -1 ? pIndex : summaryResult.sastSection.indexOf("<table"));
+                        if (startIndex !== -1) {
+                          sastTablePart = summaryResult.sastSection.substring(startIndex);
                         }
                       }
                       sastBlock = `<p><b><u>Risk Statement for Flaws</u></b><br/>

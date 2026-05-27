@@ -27,6 +27,21 @@ public class VeracodeService {
     @Autowired
     private VeracodeConfig veracodeConfig;
 
+    private DocumentBuilderFactory createSecureDocumentBuilderFactory() {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        try {
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            factory.setXIncludeAware(false);
+            factory.setExpandEntityReferences(false);
+        } catch (Exception e) {
+            // Ignore feature unsupported exceptions
+        }
+        return factory;
+    }
+
     public String getAppId(String appName) {
         if (appName != null)
             appName = appName.trim();
@@ -96,7 +111,7 @@ public class VeracodeService {
             saveXmlToLog("app_list", "all", xml);
 
             Map<String, String> appMap = new HashMap<>();
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            DocumentBuilderFactory factory = createSecureDocumentBuilderFactory();
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(new InputSource(new StringReader(xml)));
             var nodes = doc.getElementsByTagName("app");
@@ -173,7 +188,7 @@ public class VeracodeService {
             String xml = uploadWrapper.getBuildList(appId);
             saveXmlToLog("build_list", appId, xml);
             debugLog("[" + java.time.LocalDateTime.now() + "] Raw Build List for App ID " + appId + ": " + xml);
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            DocumentBuilderFactory factory = createSecureDocumentBuilderFactory();
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(new InputSource(new StringReader(xml)));
             var nodes = doc.getElementsByTagName("build");
@@ -219,13 +234,19 @@ public class VeracodeService {
         if (!veracodeConfig.isSaveXmlLogs())
             return;
         try {
+            String safePrefix = prefix != null ? prefix.replaceAll("[^a-zA-Z0-9_]", "") : "log";
+            String safeId = id != null ? id.replaceAll("[^a-zA-Z0-9\\-]", "") : "unknown";
             String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-            java.nio.file.Path logDir = java.nio.file.Paths.get("veracode", "logs");
+            java.nio.file.Path logDir = java.nio.file.Paths.get("veracode", "logs").toAbsolutePath().normalize();
             java.nio.file.Files.createDirectories(logDir);
 
-            String fileName = String.format("%s_%s_%s.xml", prefix, id, timestamp);
-            java.nio.file.Files.writeString(logDir.resolve(fileName), xml);
-            debugLog("DEBUG: Saved XML log to: " + logDir.resolve(fileName));
+            String fileName = String.format("%s_%s_%s.xml", safePrefix, safeId, timestamp);
+            java.nio.file.Path targetFile = logDir.resolve(fileName).toAbsolutePath().normalize();
+            if (!targetFile.startsWith(logDir)) {
+                throw new IllegalArgumentException("Access Denied: Invalid log file path.");
+            }
+            java.nio.file.Files.writeString(targetFile, xml);
+            debugLog("DEBUG: Saved XML log to: " + targetFile);
         } catch (Exception e) {
             System.err.println("Warning: Could not save XML log: " + e.getMessage());
         }
@@ -395,7 +416,7 @@ public class VeracodeService {
             }
 
             try {
-                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                DocumentBuilderFactory factory = createSecureDocumentBuilderFactory();
                 DocumentBuilder builder = factory.newDocumentBuilder();
                 Document doc = builder.parse(new InputSource(new StringReader(buildXml)));
                 var nodes = doc.getElementsByTagName("detailedreport");
@@ -962,8 +983,12 @@ public class VeracodeService {
 
     private VeracodeReportDTO loadHistoryFile(String fileName) {
         try {
-            java.nio.file.Path historyDir = java.nio.file.Paths.get("veracode", "history");
-            java.nio.file.Path targetFile = historyDir.resolve(fileName);
+            java.nio.file.Path historyDir = java.nio.file.Paths.get("veracode", "history").toAbsolutePath().normalize();
+            java.nio.file.Path targetFile = historyDir.resolve(fileName).toAbsolutePath().normalize();
+
+            if (!targetFile.startsWith(historyDir)) {
+                throw new IllegalArgumentException("Access Denied: Invalid history file path.");
+            }
 
             if (!java.nio.file.Files.exists(targetFile)) {
                 throw new RuntimeException("History file not found: " + targetFile);
@@ -1073,7 +1098,7 @@ public class VeracodeService {
 
     private void populateModulesAndArchitectures(String xml, VeracodeReportDTO dto) {
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            DocumentBuilderFactory factory = createSecureDocumentBuilderFactory();
             factory.setNamespaceAware(true);
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(new InputSource(new StringReader(xml)));
@@ -1782,10 +1807,16 @@ public class VeracodeService {
 
     private java.util.Map<String, String> fetchScaFindingIdsAndLog(String appId) {
         java.util.Map<String, String> cveToFindingId = new java.util.HashMap<>();
+        if (appId == null || !appId.matches("^[a-zA-Z0-9\\-]+$")) {
+            throw new IllegalArgumentException("Invalid appId format");
+        }
         try {
             String appGuid = getApplicationGuid(appId);
             if (appGuid == null || appGuid.isEmpty()) {
                 return cveToFindingId;
+            }
+            if (!appGuid.matches("^[a-fA-F0-9\\-]+$")) {
+                throw new IllegalArgumentException("Invalid appGuid format");
             }
 
             String[] creds = getCredentials();
@@ -1810,11 +1841,15 @@ public class VeracodeService {
 
             // Save raw findings JSON to log folder
             try {
+                String safeAppGuid = appGuid.replaceAll("[^a-zA-Z0-9\\-]", "");
                 String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-                java.nio.file.Path logDir = java.nio.file.Paths.get("veracode", "logs");
+                java.nio.file.Path logDir = java.nio.file.Paths.get("veracode", "logs").toAbsolutePath().normalize();
                 java.nio.file.Files.createDirectories(logDir);
-                java.nio.file.Files.writeString(
-                        logDir.resolve("sca_findings_rest_" + appGuid + "_" + timestamp + ".json"), res.body());
+                java.nio.file.Path targetFile = logDir.resolve("sca_findings_rest_" + safeAppGuid + "_" + timestamp + ".json").toAbsolutePath().normalize();
+                if (!targetFile.startsWith(logDir)) {
+                    throw new IllegalArgumentException("Access Denied: Invalid log file path.");
+                }
+                java.nio.file.Files.writeString(targetFile, res.body());
                 debugLog("DEBUG: Saved raw REST SCA findings to log folder.");
             } catch (Exception logEx) {
                 debugLog("DEBUG: Failed to save REST SCA findings to log: " + logEx.getMessage());
