@@ -561,9 +561,14 @@ Code Review Services recommends upgrading the third-party component with a vulne
 
           if (aggregatedData?.sca) {
             for (const g of aggregatedData.sca) {
-              if (g.identifier === cve) {
-                const locMatch = g.records.some((r) => r.location === detail.packageName);
-                if (locMatch || g.identifier === cve) {
+              const isCveMatch = g.identifier === cve || (g.identifier && g.identifier.toLowerCase().includes(cve.toLowerCase()));
+              if (isCveMatch) {
+                const locMatch = g.records.some((r) => {
+                  const rPkg = (r.packageName || r.location || "").toLowerCase().trim();
+                  const dPkg = (detail.packageName || "").toLowerCase().trim();
+                  return rPkg.includes(dPkg) || dPkg.includes(rPkg);
+                });
+                if (locMatch || isCveMatch) {
                   status = g.status || "none";
                   let s = g.severity.trim();
                   if (s === "VeryHigh") s = "Very High";
