@@ -64,7 +64,9 @@ export const GroupRow: React.FC<GroupRowProps> = ({
             {/* IDENTIFIER SECTION - Aligned with IDENTIFIER header (w-40) */}
             <div className="flex flex-col items-start gap-1 flex-1 min-w-[160px]">
               {group.type === 'SCA' && group.identifier ? (
-                <span className="text-sm font-black text-blue-400 break-all">{group.identifier}</span>
+                <span className="text-sm font-black text-blue-400 break-all">
+                  {group.records[0]?.title || group.identifier.split(" - ")[0]}
+                </span>
               ) : (
                 <a 
                   href={`${CWE_BASE_URL}${group.cweId}.html`}

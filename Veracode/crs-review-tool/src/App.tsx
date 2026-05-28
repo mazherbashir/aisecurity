@@ -160,13 +160,17 @@ function aggregateFindings(
     const fileName = finding.fileName || "";
     const description = `${title} | ${severity} | ${fileName || location}`;
 
-    // For SCA rely on title or id for identifier 
+    // For SCA rely on title and id for identifier 
     let identifier: string | undefined = undefined;
     if (type === "SCA") {
-      // Use title as primary identifier for SCA as per user request
-      identifier = (finding.title && finding.title !== "Unknown Product" && finding.title !== "Unknown Finding")
-        ? finding.title
-        : (finding.id && finding.id !== "N/A" && finding.id !== "0" && !finding.id.startsWith("sca-") ? finding.id : `CWE-${cweId}`);
+      const parts: string[] = [];
+      if (finding.title && finding.title !== "Unknown Product" && finding.title !== "Unknown Finding") {
+        parts.push(finding.title);
+      }
+      if (finding.id && finding.id !== "N/A" && finding.id !== "0" && !finding.id.startsWith("sca-") && finding.id !== finding.title) {
+        parts.push(finding.id);
+      }
+      identifier = parts.length > 0 ? parts.join(" - ") : `CWE-${cweId}`;
     }
 
     // Create a stable group ID - include fileName for SCA to keep files separate
@@ -1939,7 +1943,14 @@ export default function App() {
 
     const missingComments = selected.filter((g) => !g.aiComment || g.aiComment.trim() === "");
     if (missingComments.length > 0) {
-      const missingNames = missingComments.map(g => g.type === "SCA" && g.identifier ? g.identifier : `CWE-${g.cweId}`).join("\n• ");
+      const missingNames = missingComments
+        .map(g => {
+          if (g.type === "SCA" && g.identifier) {
+            return g.records[0]?.title || g.identifier.split(" - ")[0];
+          }
+          return `CWE-${g.cweId}`;
+        })
+        .join("\n• ");
       setErrorType("MITIGATION_COMMENTS_REQUIRED");
       setBackendError(`Mitigation proposals or Review comments are missing for the following selected items:\n\n• ${missingNames}\n\nPlease add comments for all selected items before submitting approvals or rejections.`);
       return;
@@ -1965,7 +1976,7 @@ export default function App() {
     for (const group of selectedItems) {
       const flawIdList = group.records.map((f: any) => f.issue_id || f.id).join(",");
       const isSCA = group.type === "SCA";
-      const cveId = isSCA ? (group.records[0]?.title || null) : null;
+      const cveId = isSCA ? group.identifier || group.records[0]?.title || null : null;
 
       const payload = {
         buildId,
@@ -2072,7 +2083,16 @@ export default function App() {
     return [...groups].sort((a, b) => {
       const orderA = severityOrderRenderer[a.severity] || 99;
       const orderB = severityOrderRenderer[b.severity] || 99;
-      return orderA - orderB;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      const titleA = (a.type === 'SCA' 
+        ? (a.records[0]?.title || (a.identifier ? a.identifier.split(" - ")[0] : "")) 
+        : `CWE-${a.cweId}`).toLowerCase();
+      const titleB = (b.type === 'SCA' 
+        ? (b.records[0]?.title || (b.identifier ? b.identifier.split(" - ")[0] : "")) 
+        : `CWE-${b.cweId}`).toLowerCase();
+      return titleA.localeCompare(titleB);
     });
   };
 
@@ -3926,7 +3946,9 @@ export default function App() {
                     <div className="space-y-2 mb-6 max-h-[40vh] overflow-auto">
                       {Object.values(
                         batchModalConfig.selectedItems.reduce((acc, item) => {
-                          const displayKey = item.type === "SCA" && item.identifier ? item.identifier : `CWE-${item.cweId}`;
+                          const displayKey = item.type === "SCA" && item.identifier
+                            ? (item.records[0]?.title || item.identifier.split(" - ")[0])
+                            : `CWE-${item.cweId}`;
                           let gSev = item.severity;
                           if (gSev === "VeryHigh") gSev = "Very High";
                           if (gSev === "Information") gSev = "Info";
