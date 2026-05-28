@@ -1976,7 +1976,7 @@ export default function App() {
     for (const group of selectedItems) {
       const flawIdList = group.records.map((f: any) => f.issue_id || f.id).join(",");
       const isSCA = group.type === "SCA";
-      const cveId = isSCA ? group.identifier || group.records[0]?.title || null : null;
+      const cveId = isSCA ? group.records[0]?.title || null : null;
 
       const payload = {
         buildId,
