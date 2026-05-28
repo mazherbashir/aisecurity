@@ -1412,7 +1412,9 @@ public class VeracodeService {
                             ? scaCveToFindingId.get(cve.toUpperCase())
                             : cve;
 
-                    fDto.id = internalFindingId;
+                    fDto.id = (comp.getComponentId() != null && !comp.getComponentId().isEmpty())
+                            ? comp.getComponentId()
+                            : internalFindingId;
                     fDto.cweid = vuln.getCweId();
                     fDto.title = vuln.getCveId();
                     fDto.severity = getSeverityName(sev);

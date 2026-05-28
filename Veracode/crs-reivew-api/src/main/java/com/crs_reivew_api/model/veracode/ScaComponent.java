@@ -6,6 +6,7 @@ public class ScaComponent {
     @XmlAttribute private String library;
     @XmlAttribute(name = "library_id") private String libraryId;
     @XmlAttribute private String version;
+    @XmlAttribute(name = "component_id") private String componentId;
     @XmlElement(name = "vulnerabilities", namespace = "https://www.veracode.com/schema/reports/export/1.0")
     private ScaVulnerabilityList vulnerabilityList;
 
@@ -13,5 +14,6 @@ public class ScaComponent {
     public String getLibrary() { return library; }
     public String getLibraryId() { return libraryId; }
     public String getVersion() { return version; }
+    public String getComponentId() { return componentId; }
     public ScaVulnerabilityList getVulnerabilityList() { return vulnerabilityList; }
 }

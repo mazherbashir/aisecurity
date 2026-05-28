@@ -1993,8 +1993,11 @@ export default function App() {
           resData = {};
         }
 
-        if (!response.ok) {
-          throw new Error(JSON.stringify(resData));
+        if (!response.ok || resData.status === "error") {
+          throw new Error(JSON.stringify({
+            message: resData.message || "Failed to update mitigation. Please check the server logs.",
+            type: resData.type || "MITIGATION_ERROR"
+          }));
         }
 
         successCount++;
