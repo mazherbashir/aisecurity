@@ -7,7 +7,6 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class CrsReivewApiApplication {
 
 	public static void main(String[] args) {
-		System.setProperty("jdk.httpclient.allowRestrictedHeaders", "proxy-authorization");
 		SpringApplication.run(CrsReivewApiApplication.class, args);
 	}
 

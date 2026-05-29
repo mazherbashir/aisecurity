@@ -3,6 +3,17 @@ package com.crs_reivew_api.controller;
 import com.crs_reivew_api.config.VeracodeConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.io.HttpClientConnectionManager;
+import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
+import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactoryBuilder;
+import org.apache.hc.client5.http.ssl.TrustAllStrategy;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.ssl.SSLContexts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -11,18 +22,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URI;
-import java.net.URL;
-import java.security.cert.X509Certificate;
+import javax.net.ssl.SSLContext;
 import java.util.HashMap;
 import java.util.Map;
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 
 @RestController
 public class IntakeController {
@@ -33,6 +35,28 @@ public class IntakeController {
 
     public IntakeController(VeracodeConfig veracodeConfig) {
         this.veracodeConfig = veracodeConfig;
+    }
+
+    private CloseableHttpClient createHttpClient() {
+        try {
+            SSLContext sslContext = SSLContexts.custom()
+                    .loadTrustMaterial(TrustAllStrategy.INSTANCE)
+                    .build();
+
+            HttpClientConnectionManager cm = PoolingHttpClientConnectionManagerBuilder.create()
+                    .setSSLSocketFactory(SSLConnectionSocketFactoryBuilder.create()
+                            .setSslContext(sslContext)
+                            .setHostnameVerifier(NoopHostnameVerifier.INSTANCE)
+                            .build())
+                    .build();
+
+            return HttpClients.custom()
+                    .setConnectionManager(cm)
+                    .build();
+        } catch (Exception e) {
+            logger.error("Failed to create trust-all Apache HttpClient, falling back to default.", e);
+            return HttpClients.createDefault();
+        }
     }
 
     @GetMapping(value = "/api/intake/requests", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -63,74 +87,37 @@ public class IntakeController {
         logger.info("Fetching GCast intake requests from: {}. Using Proxy-Authorization key: {} (length: {})", 
                 endpoint, maskedKey, secretKey != null ? secretKey.length() : 0);
 
-        try {
-            URL url = new URI(endpoint).toURL();
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        try (CloseableHttpClient httpClient = createHttpClient()) {
+            HttpGet request = new HttpGet(endpoint);
+            request.setHeader("Proxy-Authorization", secretKey);
+            request.setHeader("Content-Type", "application/json");
+            request.setHeader("Accept", "application/json");
 
-            // Set SSL Context if HttpsURLConnection to bypass validation
-            if (conn instanceof HttpsURLConnection) {
-                HttpsURLConnection httpsConn = (HttpsURLConnection) conn;
+            logger.info("Outgoing Request URI: {}", endpoint);
+            logger.info("Outgoing Request Headers: Proxy-Authorization=[{}], Content-Type=[application/json], Accept=[application/json]", secretKey);
 
-                TrustManager[] trustAllCerts = new TrustManager[]{
-                    new X509TrustManager() {
-                        public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-                        public void checkClientTrusted(X509Certificate[] certs, String authType) {}
-                        public void checkServerTrusted(X509Certificate[] certs, String authType) {}
+            try (CloseableHttpResponse response = httpClient.execute(request)) {
+                int responseCode = response.getCode();
+                String responseBody = response.getEntity() != null ? EntityUtils.toString(response.getEntity()) : "";
+
+                if (responseCode != 200) {
+                    logger.error("GCast Intake API returned error code: {}. Response: {}", responseCode, responseBody);
+                    Map<String, Object> errorResponse = new HashMap<>();
+                    errorResponse.put("error", "API Error");
+                    errorResponse.put("status", responseCode);
+                    errorResponse.put("message", "GCast API returned status code " + responseCode);
+                    try {
+                        JsonNode errorDetails = objectMapper.readTree(responseBody);
+                        errorResponse.put("details", errorDetails);
+                    } catch (Exception e) {
+                        errorResponse.put("details", responseBody);
                     }
-                };
-
-                SSLContext sslContext = SSLContext.getInstance("TLS");
-                sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
-                httpsConn.setSSLSocketFactory(sslContext.getSocketFactory());
-                httpsConn.setHostnameVerifier((hostname, session) -> true);
-            }
-
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Proxy-Authorization", secretKey);
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("Accept", "application/json");
-
-            // Log outgoing request headers for verification
-            logger.info("Outgoing Request: URI={}, Headers: Proxy-Authorization={}, Content-Type={}, Accept={}",
-                    endpoint, maskedKey, conn.getRequestProperty("Content-Type"), conn.getRequestProperty("Accept"));
-
-            int responseCode = conn.getResponseCode();
-
-            BufferedReader in;
-            if (responseCode >= 200 && responseCode < 300) {
-                in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-            } else {
-                in = new BufferedReader(new InputStreamReader(conn.getErrorStream() != null ? conn.getErrorStream() : conn.getInputStream()));
-            }
-
-            String inputLine;
-            StringBuilder content = new StringBuilder();
-            while ((inputLine = in.readLine()) != null) {
-                content.append(inputLine);
-            }
-            in.close();
-            conn.disconnect();
-
-            String responseBody = content.toString();
-
-            if (responseCode != 200) {
-                logger.error("GCast Intake API returned error code: {}. Response: {}", responseCode, responseBody);
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("error", "API Error");
-                errorResponse.put("status", responseCode);
-                errorResponse.put("message", "GCast API returned status code " + responseCode);
-                try {
-                    JsonNode errorDetails = objectMapper.readTree(responseBody);
-                    errorResponse.put("details", errorDetails);
-                } catch (Exception e) {
-                    errorResponse.put("details", responseBody);
+                    return ResponseEntity.status(responseCode).body(errorResponse);
                 }
-                return ResponseEntity.status(responseCode).body(errorResponse);
+
+                JsonNode responseJson = objectMapper.readTree(responseBody);
+                return ResponseEntity.ok(responseJson);
             }
-
-            JsonNode responseJson = objectMapper.readTree(responseBody);
-            return ResponseEntity.ok(responseJson);
-
         } catch (Exception e) {
             logger.error("Exception occurred while calling GCast Intake API", e);
             Map<String, String> errorResponse = new HashMap<>();
