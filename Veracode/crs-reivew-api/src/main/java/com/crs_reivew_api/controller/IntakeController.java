@@ -25,6 +25,10 @@ import java.security.cert.X509Certificate;
 @RestController
 public class IntakeController {
 
+    static {
+        System.setProperty("jdk.httpclient.allowRestrictedHeaders", "proxy-authorization");
+    }
+
     private static final Logger logger = LoggerFactory.getLogger(IntakeController.class);
     private final VeracodeConfig veracodeConfig;
     private final ObjectMapper objectMapper = new ObjectMapper();
