@@ -17,6 +17,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.HashMap;
 import java.util.Map;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+import java.security.cert.X509Certificate;
 
 @RestController
 public class IntakeController {
@@ -24,12 +28,36 @@ public class IntakeController {
     private static final Logger logger = LoggerFactory.getLogger(IntakeController.class);
     private final VeracodeConfig veracodeConfig;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .proxy(java.net.ProxySelector.getDefault())
-            .build();
+    private final HttpClient httpClient;
 
     public IntakeController(VeracodeConfig veracodeConfig) {
         this.veracodeConfig = veracodeConfig;
+        this.httpClient = createHttpClient();
+    }
+
+    private HttpClient createHttpClient() {
+        try {
+            TrustManager[] trustAllCerts = new TrustManager[]{
+                new X509TrustManager() {
+                    public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+                    public void checkClientTrusted(X509Certificate[] certs, String authType) {}
+                    public void checkServerTrusted(X509Certificate[] certs, String authType) {}
+                }
+            };
+
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+
+            return HttpClient.newBuilder()
+                    .sslContext(sslContext)
+                    .proxy(java.net.ProxySelector.getDefault())
+                    .build();
+        } catch (Exception e) {
+            logger.error("Failed to create trust-all HttpClient, falling back to default.", e);
+            return HttpClient.newBuilder()
+                    .proxy(java.net.ProxySelector.getDefault())
+                    .build();
+        }
     }
 
     @GetMapping(value = "/api/intake/requests", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -57,7 +85,9 @@ public class IntakeController {
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(endpoint))
+                    .header("Proxy-Authorization", secretKey)
                     .header("Authorization", secretKey)
+                    .header("Content-Type", "application/json")
                     .header("Accept", "application/json")
                     .GET()
                     .build();
