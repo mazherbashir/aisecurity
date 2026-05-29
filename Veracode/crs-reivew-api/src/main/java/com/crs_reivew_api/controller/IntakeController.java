@@ -101,6 +101,9 @@ public class IntakeController {
                     .GET()
                     .build();
 
+            logger.info("Outgoing HTTP Request URI: {}", request.uri());
+            logger.info("Outgoing HTTP Request Headers: {}", request.headers().map());
+
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
