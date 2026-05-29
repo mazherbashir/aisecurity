@@ -153,7 +153,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/snow/intake/records");
+      const response = await fetch("/api/intake/requests");
       if (!response.ok) {
         throw new Error(`Server returned status ${response.status}: ${response.statusText}`);
       }
@@ -351,24 +351,6 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
               <div key={type} className="flex items-center justify-between p-2 bg-slate-950/40 rounded border border-slate-850">
                 <span className="text-[10px] text-slate-300 font-black truncate max-w-[140px]" title={type}>{type}</span>
                 <span className="text-[9px] font-mono text-blue-400 font-black px-1.5 py-0.5 rounded bg-blue-500/5 border border-blue-500/10">
-                  {count}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Widget 4: Target Applications breakdown */}
-        <div className="bento-card p-4 bg-slate-900 border-slate-800 shrink-0">
-          <h3 className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-black mb-3 flex items-center gap-1.5">
-            <Layers size={10} className="text-emerald-500" /> Target Applications
-          </h3>
-
-          <div className="space-y-2">
-            {Object.entries(stats.applications).map(([app, count]) => (
-              <div key={app} className="flex items-center justify-between p-2 bg-slate-950/40 rounded border border-slate-850">
-                <span className="text-[10px] font-mono text-slate-300 truncate max-w-[140px] font-medium" title={app}>{app}</span>
-                <span className="text-[9px] font-mono text-emerald-400 font-black px-1.5 py-0.5 rounded bg-emerald-500/5 border border-emerald-500/10">
                   {count}
                 </span>
               </div>

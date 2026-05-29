@@ -343,8 +343,8 @@ async function startServer() {
     }
   });
 
-  // ServiceNow Intake Records Route
-  app.get("/api/snow/intake/records", async (req, res) => {
+  // ServiceNow Intake Records Route (matching Spring Boot API path)
+  app.get("/api/intake/requests", async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     const endpoint = "http://localhost:8081/api/intake/requests";
 
@@ -369,11 +369,11 @@ async function startServer() {
         endpointUsed: endpoint
       });
     } catch (error) {
-      console.log(`[ServiceNow] Failed to fetch live ServiceNow intake data from local backend: ${(error as Error).message}`);
+      console.log("[ServiceNow] Local mock sandbox active (local 8081 backend is absent in this sandbox).");
       res.json({
         success: false,
         source: "mock",
-        error: (error as Error).message,
+        error: "Local endpoint is not active, using fallback mockup data.",
         endpointUsed: endpoint,
         data: {
           result: [

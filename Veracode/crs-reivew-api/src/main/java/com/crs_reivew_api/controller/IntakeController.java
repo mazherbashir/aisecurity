@@ -81,12 +81,17 @@ public class IntakeController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
 
-        logger.info("Fetching GCast intake requests from: {}", endpoint);
+        String maskedKey = (secretKey != null && secretKey.length() > 8)
+                ? secretKey.substring(0, 4) + "..." + secretKey.substring(secretKey.length() - 4)
+                : (secretKey != null ? secretKey : "null");
+
+        logger.info("Fetching GCast intake requests from: {}. Using Proxy-Authorization key: {} (length: {})", 
+                endpoint, maskedKey, secretKey != null ? secretKey.length() : 0);
+
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(endpoint))
                     .header("Proxy-Authorization", secretKey)
-                    .header("Authorization", secretKey)
                     .header("Content-Type", "application/json")
                     .header("Accept", "application/json")
                     .GET()
