@@ -64,6 +64,8 @@ public class VeracodeConfig {
     private String sharedAuditorRole = "user";
     private String auditorDisagreeFallbackText = "Proposal Rejected please perform a Manual Review as The Evaluator and Auditor model has contradiction!";
     private String auditorPrompt;
+    private String gcastSecretKey;
+    private String gcastRestEndpointIntake;
     private Key key = new Key();
 
     @PostConstruct
@@ -87,7 +89,10 @@ public class VeracodeConfig {
                 this.key.setId(getProp(props, "id", this.key.getId()));
                 this.key.setSecret(getProp(props, "secret", this.key.getSecret()));
                 
-                logger.info("Successfully loaded AI, GitHub, and Veracode credentials from {}", credentialsFile.getAbsolutePath());
+                // GCast API Keys
+                this.gcastSecretKey = props.getProperty("gcast-secret-key");
+                
+                logger.info("Successfully loaded AI, GitHub, Veracode, and GCast credentials from {}", credentialsFile.getAbsolutePath());
             } catch (IOException e) {
                 logger.error("Failed to load credentials file: {}", e.getMessage());
             }
@@ -123,6 +128,14 @@ public class VeracodeConfig {
                 StandardEnvironment env = new StandardEnvironment();
                 env.getPropertySources().addFirst(propertySource);
                 Binder.get(env).bind("veracode.api", Bindable.ofInstance(this));
+                
+                // GCast rest endpoint intake
+                if (this.gcastRestEndpointIntake == null || this.gcastRestEndpointIntake.isEmpty()) {
+                    this.gcastRestEndpointIntake = appProps.getProperty("gcast-rest-endpoint-intake");
+                }
+                if (this.gcastRestEndpointIntake == null || this.gcastRestEndpointIntake.isEmpty()) {
+                    this.gcastRestEndpointIntake = appProps.getProperty("veracode.api.gcast-rest-endpoint-intake");
+                }
                 
                 // Populate tierMappings
                 if (this.tierMappings == null || this.tierMappings.isEmpty()) {
@@ -504,6 +517,22 @@ public class VeracodeConfig {
 
     public void setAuditorPrompt(String auditorPrompt) {
         this.auditorPrompt = auditorPrompt;
+    }
+
+    public String getGcastSecretKey() {
+        return gcastSecretKey;
+    }
+
+    public void setGcastSecretKey(String gcastSecretKey) {
+        this.gcastSecretKey = gcastSecretKey;
+    }
+
+    public String getGcastRestEndpointIntake() {
+        return gcastRestEndpointIntake;
+    }
+
+    public void setGcastRestEndpointIntake(String gcastRestEndpointIntake) {
+        this.gcastRestEndpointIntake = gcastRestEndpointIntake;
     }
 
     public static class Key {
