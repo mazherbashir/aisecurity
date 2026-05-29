@@ -50,6 +50,7 @@ import {
 import { sampleReportData } from "./data";
 import { getAIResponseForComment } from "./services/aiService";
 import { GroupRow } from "./components/GroupRow";
+import { SnowIntakeScreen } from "./components/SnowIntakeScreen";
 import { CWE_BASE_URL } from "./constants";
 import { getEndpoint } from "./config";
 import { calculateIsScanTooOld, updateBackendSummary, updateMitigationProposal } from "./lib/state-update-utils";
@@ -1128,6 +1129,7 @@ export default function App() {
     useState<number>(90);
   const [scaSafeVersionEnabled, setScaSafeVersionEnabled] = useState(false);
   const [isServerOnline, setIsServerOnline] = useState(false);
+  const [showSnowScreen, setShowSnowScreen] = useState(false);
 
   const fetchPrompts = async () => {
     try {
@@ -1278,9 +1280,14 @@ export default function App() {
   };
 
   const toggleTool = (tool: ToolName) => {
-    setSelectedTools((prev) =>
-      prev.includes(tool) ? prev.filter((t) => t !== tool) : [...prev, tool],
-    );
+    setSelectedTools((prev) => {
+      if (prev.includes(tool)) {
+        return [];
+      } else {
+        setShowSnowScreen(false);
+        return [tool];
+      }
+    });
   };
 
   // Restore accidentally removed config fetching logic or ensure it's handled via fetchPrompts
@@ -2162,6 +2169,30 @@ export default function App() {
               >
                 <div className="flex flex-col">
                   <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
+                    SNOW
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextVal = !showSnowScreen;
+                      setShowSnowScreen(nextVal);
+                      if (nextVal) {
+                        setSelectedTools([]);
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 shadow-lg active:scale-95 ${
+                      showSnowScreen
+                        ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40 border-blue-500"
+                        : "bg-slate-800 border-slate-700 text-blue-400 hover:border-slate-600"
+                    }`}
+                  >
+                    <Database size={12} className={showSnowScreen ? "text-white" : "text-blue-500"} />
+                    Intake
+                  </button>
+                </div>
+
+                <div className="flex flex-col">
+                  <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
                     Tool Chain
                   </span>
                   <div className="flex gap-2">
@@ -2267,7 +2298,9 @@ export default function App() {
             </div>
           </div>
 
-          {!resultsLoaded ? (
+          {showSnowScreen ? (
+            <SnowIntakeScreen onClose={() => setShowSnowScreen(false)} />
+          ) : !resultsLoaded ? (
             <div className="col-span-12 flex items-center justify-center">
               <div className="text-center space-y-4 max-w-md">
                 <div className="w-20 h-20 bg-slate-900 rounded-3xl border border-slate-700 flex items-center justify-center mx-auto mb-6 shadow-2xl">

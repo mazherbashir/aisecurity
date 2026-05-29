@@ -4,9 +4,76 @@ import path from "path";
 import fs from "fs/promises";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
+import os from "os";
 import { dryRunJson } from "./src/mockData.js";
 
 dotenv.config();
+
+// SNOW Credentials Parser
+function parseCredentials(content: string) {
+  const trimmed = content.trim();
+  let secretKey: string | null = null;
+  let endpoint: string | null = null;
+
+  // Try JSON first
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      secretKey = parsed["gcast-secret-key"] || parsed["gcast_secret_key"] || parsed["gcastSecretKey"] || null;
+      endpoint = parsed["gcast-rest-endpoint-intake"] || parsed["gcast_rest_endpoint_intake"] || parsed["gcastRestEndpointIntake"] || null;
+    } catch (e) {
+      console.error("Parsed credentials as JSON but failed:", e);
+    }
+  }
+
+  // If not parsed yet or keys missing, parse line-by-line properties format
+  if (!secretKey || !endpoint) {
+    const lines = trimmed.split(/\r?\n/);
+    for (const line of lines) {
+      const cleanLine = line.trim();
+      if (!cleanLine || cleanLine.startsWith("#") || cleanLine.startsWith(";")) continue;
+      
+      const match = cleanLine.match(/^([^=:]+)[=:](.*)$/);
+      if (match) {
+        const key = match[1].trim().toLowerCase();
+        const value = match[2].trim().replace(/^['"]|['"]$/g, "");
+        
+        if (key === "gcast-secret-key" || key === "gcast_secret_key" || key === "gcastsecretkey") {
+          secretKey = value;
+        } else if (key === "gcast-rest-endpoint-intake" || key === "gcast_rest_endpoint_intake" || key === "gcastrestendpointintake") {
+          endpoint = value;
+        }
+      }
+    }
+  }
+
+  return { secretKey, endpoint };
+}
+
+async function readCrsCredentials() {
+  const homeDir = os.homedir();
+  const credPath = path.join(homeDir, ".crs-tool", "credentials");
+  try {
+    // Safely check if the file exists first using fs.stat to prevent standard ENOENT crash logging
+    const exists = await fs.stat(credPath).then(() => true).catch(() => false);
+    if (!exists) {
+      console.log(`[ServiceNow] Credentials file not found at ${credPath}. Using environment variables or fallback values.`);
+      return {
+        secretKey: process.env.GCAST_SECRET_KEY || null,
+        endpoint: process.env.GCAST_REST_ENDPOINT_INTAKE || null
+      };
+    }
+    const data = await fs.readFile(credPath, "utf-8");
+    return parseCredentials(data);
+  } catch (error) {
+    console.log(`[ServiceNow] Could not read credentials from ${credPath}: ${(error as Error).message}`);
+    return {
+      secretKey: process.env.GCAST_SECRET_KEY || null,
+      endpoint: process.env.GCAST_REST_ENDPOINT_INTAKE || null,
+      error: `Could not read credentials file at ${credPath}. Reason: ${(error as Error).message}`
+    };
+  }
+}
 
 async function startServer() {
   const app = express();
@@ -19,6 +86,7 @@ async function startServer() {
 
   // Prompts Config Routes
   let devMemPrompts = { sast: "", sca: "" };
+  let devMemFullConfig: any = null;
 
   // Config info Route
   app.get("/api/config/info", async (req, res) => {
@@ -67,8 +135,11 @@ async function startServer() {
   app.get("/api/config/prompts", async (req, res) => {
     if (useMocks) {
        try {
+         if (devMemFullConfig) {
+           return res.json(devMemFullConfig);
+         }
          // Return full config if we have it, otherwise just the prompts
-         res.json({
+         const initialConfig = {
            "SAST&SCA Prompts" : {
              "sastPrompt" : "I’m providing information on a First Party Finding for an application in JSON format.\n\nDefinitions:\n- cwe id: The CWE ID of the finding\n- mitigation information: Actions taken by the application team (may be empty)\n\nYour task:\n1. Determine if this is a real security issue.\n2. Determine if the mitigation sufficiently reduces the risk.\n3. If not mitigated, clearly state why.\n\nInstructions (STRICT):\n- Start with: \"Proposal Approved\" or \"Proposal Rejected\"\n- Provide ONLY ONE short paragraph\n- Maximum 4–5 sentences\n- Maximum 120 words\n- No repetition, no extra explanation\n- Keep reasoning concise and direct\n- Follow Zero-Trust principles in evaluation but don't repeat it in para.\n\nDo not provide bullet points, headings, or long explanations.",
              "scaPrompt" : "I’m providing information on a Third Party (SCA) Finding in JSON format.\n\nDefinitions:\n- name: Vulnerable component name\n- cve id: CVE identifier\n- mitigation information: Actions taken by the application team (may be empty)\n\nYour task:\n1. Identify if a non-vulnerable version exists\n2. Identify if mitigation without upgrade is possible\n3. Assess if the finding could be a false positive\n4. Enforce strict security governance (Zero-Trust)\n\nSTRICT GOVERNANCE RULES:\n- If the vulnerability is still reported by the SCA tool → DO NOT accept false positive claim\n- If the source of the dependency is unclear → REJECT and require investigation\n- Always require validation with Veracode (or tool owner) before closure\n- Never approve based solely on assumption\n\nOUTPUT INSTRUCTIONS (STRICT):\n- Start with ONLY ONE of:\n  \"Proposal Approved\" OR \"Proposal Rejected\" OR \"Check Manually\"\n- Provide ONE paragraph only\n- Maximum 6 sentences\n- Maximum 150 words\n- Keep reasoning concise and direct\n- Do NOT explain CWE background\n- Avoid repetition and filler text\n\nCVE HANDLING:\n- If you are confident about the CVE → include a short reference link:"
@@ -132,13 +203,25 @@ async function startServer() {
                "tier-1" : { "VeryHigh" : 10, "High" : 10, "Medium" : 30, "Low" : 180 }
              },
              "tierDropDown" : [ "tier-1", "tier-2", "tier-3a", "tier-3b", "tier-4" ]
+           },
+           "architecture-mappings" : {
+             "Java" : [ "maven", "gradle", "JAVA", "JVM" ],
+             "JavaScript" : [ "npm", "bower", "JAVASCRIPT" ],
+             "Go" : [ "go", "golang", "GO", "GOLANG" ],
+             "PHP" : [ "composer", "PHP", "Packagist" ],
+             "NET" : [ "nuget", "CIL32", "MSIL" ],
+             "Ruby" : [ "rubygems", "RUBY" ],
+             "Python" : [ "pip", "pypi", "PYTHON" ]
            }
-         });
+         };
+         devMemFullConfig = initialConfig;
+         res.json(initialConfig);
        } catch (error) {
          console.error('Error reading local prompts:', error);
          res.status(500).json({ error: 'Failed to read local prompts' });
        }
        return;
+
     }
 
     try {
@@ -181,6 +264,7 @@ async function startServer() {
         // Save the entire config to mock memory if needed, 
         // but for now we follow the "entire JSON object" policy
         const config = req.body;
+        devMemFullConfig = config;
         // If we still need to preserve prompts specifically for other routes:
         if (config["SAST&SCA Prompts"]) {
           devMemPrompts = { 
@@ -256,6 +340,126 @@ async function startServer() {
     } catch (error) {
       // If the backend at 8081 is down/offline, we handle gracefully and return isServerOnline: false
       return res.json({ isServerOnline: false });
+    }
+  });
+
+  // ServiceNow Intake Records Route
+  app.get("/api/snow/intake/records", async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    const endpoint = "http://localhost:8081/api/intake/requests";
+
+    try {
+      console.log(`Fetching Intake records from: ${endpoint}`);
+      const response = await fetch(endpoint, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      res.json({
+        success: true,
+        source: "live",
+        data: data,
+        endpointUsed: endpoint
+      });
+    } catch (error) {
+      console.log(`[ServiceNow] Failed to fetch live ServiceNow intake data from local backend: ${(error as Error).message}`);
+      res.json({
+        success: false,
+        source: "mock",
+        error: (error as Error).message,
+        endpointUsed: endpoint,
+        data: {
+          result: [
+            {
+              "short_description": "Static Scan Access Request: Advanced Network Monitoring - Enterprise (ThousandEyes) (AMER) (Production) legacy",
+              "assignment_group": {
+                "display_value": "GLOBAL - NIS - CRS Intake",
+                "link": "https://pwcnetworktest.service-now.com/api/now/table/sys_user_group/d7c49a221b8b0c509b6165b9bd4bcb92"
+              },
+              "request_item": {
+                "number": "RITM26124235",
+                "state": "Work in Progress",
+                "cat_item": {
+                  "display_value": "Code Review Services",
+                  "link": "https://pwcnetworktest.service-now.com/api/now/table/sc_cat_item/6382512ddb59bf40dbf414a05b96194e"
+                }
+              },
+              "number": "SCTASK29032898",
+              "state": "Work in Progress",
+              "assigned_to": "",
+              "variables": {
+                "type": "Static Scan Access Request",
+                "application": "CRS-DEMO-APP",
+                "billing_model": "Consumption-based"
+              }
+            },
+            {
+              "short_description": "Static Scan Access Request: Aura Checker",
+              "assignment_group": {
+                "display_value": "GLOBAL - NIS - CRS Intake",
+                "link": "https://pwcnetworktest.service-now.com/api/now/table/sys_user_group/d7c49a221b8b0c509b6165b9bd4bcb92"
+              },
+              "request_item": {
+                "number": "RITM26187889",
+                "state": "Work in Progress",
+                "cat_item": {
+                  "display_value": "Code Review Services",
+                  "link": "https://pwcnetworktest.service-now.com/api/now/table/sc_cat_item/6382512ddb59bf40dbf414a05b96194e"
+                }
+              },
+              "number": "SCTASK29097185",
+              "state": "Work in Progress",
+              "assigned_to": "Suraj Shinde",
+              "variables": {
+                "type": "Static Scan Access Request",
+                "application": "Test Application",
+                "billing_model": "Mandatory BSS"
+              }
+            },
+            {
+              "short_description": "CI/CD Integration Support: Cursor AI",
+              "assignment_group": {
+                "display_value": "GLOBAL - NIS - CRS Intake"
+              },
+              "request_item": {
+                "number": "RITM26124236",
+                "state": "Work in Progress"
+              },
+              "number": "SCTASK29032899",
+              "state": "Work in Progress",
+              "assigned_to": "",
+              "variables": {
+                "type": "CI/CD Integration Support",
+                "application": "CRS-DEMO-APP"
+              }
+            },
+            {
+              "short_description": "Create Application: Advanced Network Monitoring - Enterprise (ThousandEyes)",
+              "assignment_group": {
+                "display_value": "GLOBAL - NIS - CRS Intake"
+              },
+              "request_item": {
+                "number": "RITM26056126",
+                "state": "Work in Progress"
+              },
+              "number": "SCTASK28971656",
+              "state": "Open",
+              "assigned_to": "",
+              "variables": {
+                "type": "Create Scanning Tool Profile",
+                "billing_model": "Mandatory BSS"
+              }
+            }
+          ]
+        }
+      });
     }
   });
 
