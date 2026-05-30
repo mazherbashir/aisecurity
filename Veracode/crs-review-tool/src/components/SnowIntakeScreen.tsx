@@ -153,24 +153,88 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/intake/requests");
+      let response;
+      let usedEndpointUrl = "/api/intake/requests";
+      
+      try {
+        response = await fetch(usedEndpointUrl);
+        if (!response.ok) {
+          throw new Error(`Relative endpoint failed with status ${response.status}`);
+        }
+      } catch (e) {
+        // Fallback or override: Try the absolute http://localhost:8081 endpoint directly
+        console.log("Relative API intake request failed/absent, targeting direct port 8081 URL:", e);
+        usedEndpointUrl = "http://localhost:8081/api/intake/requests";
+        response = await fetch(usedEndpointUrl);
+      }
+
       if (!response.ok) {
         throw new Error(`Server returned status ${response.status}: ${response.statusText}`);
       }
+
       const resData = await response.json();
-      if (resData.success) {
-        setRecords(resData.data.result || []);
+      
+      let parsedRecords: SnowRecord[] | null = null;
+      let isLive = false;
+      let errMsg = "";
+
+      // 1. Array wrapper from proxy: { success: true, data: { result: [...] } }
+      if (resData && resData.success === true && resData.data && Array.isArray(resData.data.result)) {
+        parsedRecords = resData.data.result;
+        isLive = true;
+      }
+      // 2. Proxy wrapped with direct failure or error (but contains data as fallback):
+      else if (resData && resData.success === false && resData.data && Array.isArray(resData.data.result)) {
+        parsedRecords = resData.data.result;
+        isLive = false;
+        errMsg = resData.error || "Fallback backend mock loaded.";
+      }
+      // 3. Direct ServiceNow raw payload: { result: [...] }
+      else if (resData && Array.isArray(resData.result)) {
+        parsedRecords = resData.result;
+        isLive = true;
+      }
+      // 4. Direct JSON Array: [ {...}, {...} ]
+      else if (Array.isArray(resData)) {
+        parsedRecords = resData;
+        isLive = true;
+      }
+      // 5. Raw wrapped success array: { success: true, data: [...] }
+      else if (resData && resData.success === true && Array.isArray(resData.data)) {
+        parsedRecords = resData.data;
+        isLive = true;
+      }
+      // 6. Generic array nested inside data: { data: [...] }
+      else if (resData && Array.isArray(resData.data)) {
+        parsedRecords = resData.data;
+        isLive = true;
+      }
+      // 7. Generic array nested inside data.result: { data: { result: [...] } }
+      else if (resData && resData.data && Array.isArray(resData.data.result)) {
+        parsedRecords = resData.data.result;
+        isLive = true;
+      }
+
+      if (isLive && parsedRecords) {
+        setRecords(parsedRecords);
         setApiSource("live");
       } else {
-        console.warn("Live ServiceNow fetch failed, using fallback mock data:", resData.error);
-        if (resData.data && resData.data.result) {
-          setRecords(resData.data.result);
-        }
+        console.warn("ServiceNow live fetch didn't yield expected record format or returned error:", resData);
         setApiSource("mock");
-        setError(resData.error || "Dynamic live fetch failed, offline workspace backup loaded.");
+        setError(errMsg || "Using offline backup workspace data.");
+        if (parsedRecords) {
+          setRecords(parsedRecords);
+        } else {
+          setRecords(snowData);
+        }
       }
-      if (resData.endpointUsed) setEndpointUsed(resData.endpointUsed);
-      if (resData.credentialsPath) setCredentialsPath(resData.credentialsPath);
+
+      setEndpointUsed(resData.endpointUsed || usedEndpointUrl);
+      if (resData.credentialsPath) {
+        setCredentialsPath(resData.credentialsPath);
+      } else {
+        setCredentialsPath("Integrated Spring Boot static context");
+      }
     } catch (err) {
       console.error("Failed to load ServiceNow intake records:", err);
       setError((err as Error).message);
@@ -459,7 +523,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
         </div>
 
         {/* Connection health & local API status bar */}
-        {(error || endpointUsed) && (
+        {(error || apiSource === 'mock' || apiSource === 'live') && (
           <div className="px-5 py-2 border-b border-slate-800 bg-slate-950/20 text-[10px] flex flex-col md:flex-row md:items-center justify-between gap-3 text-slate-500 font-mono">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="p-0.5 px-1 rounded bg-slate-950 border border-slate-850 text-[8px] uppercase tracking-wider text-slate-500 font-bold shrink-0">
@@ -478,24 +542,6 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                 </span>
               )}
             </div>
-
-            {endpointUsed && (
-              <div className="flex items-center gap-1.5 text-[10px] truncate max-w-sm">
-                <span className="text-[8px] uppercase tracking-wider text-slate-500 font-bold">API:</span>
-                <span className="text-slate-400 truncate font-semibold" title={endpointUsed}>
-                  {endpointUsed}
-                </span>
-                <a 
-                  href={endpointUsed} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="p-1 text-slate-500 hover:text-white transition-colors"
-                  title="Test Endpoint in new tab"
-                >
-                  <ExternalLink size={10} />
-                </a>
-              </div>
-            )}
           </div>
         )}
 
