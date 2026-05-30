@@ -30,7 +30,7 @@ interface CatItem {
 
 interface RequestItem {
   number: string;
-  state: string;
+  state?: string;
   cat_item?: CatItem;
 }
 
@@ -43,12 +43,128 @@ interface Variables {
 interface SnowRecord {
   short_description: string;
   assignment_group: AssignmentGroup;
-  request_item: RequestItem;
+  request_item?: RequestItem;
   number: string;
   state: string;
   assigned_to: string;
   variables: Variables;
 }
+
+// Robust normalization function to map both flat dot-notated keys and nested schemas safely
+const normalizeSnowRecord = (raw: any): SnowRecord => {
+  if (!raw) {
+    return {
+      number: "",
+      short_description: "",
+      state: "",
+      assigned_to: "",
+      assignment_group: { display_value: "N/A" },
+      variables: { type: "Unknown Type" }
+    };
+  }
+
+  const getStr = (v: any): string => {
+    if (v === undefined || v === null) return "";
+    if (typeof v === "object") {
+      if (v.display_value !== undefined && v.display_value !== null) {
+        return String(v.display_value);
+      }
+      return "";
+    }
+    return String(v).trim();
+  };
+
+  const getSubLink = (v: any): string | undefined => {
+    if (v && typeof v === "object") {
+      return v.link || undefined;
+    }
+    return undefined;
+  };
+
+  // Extract base level fields
+  const number = getStr(raw.number);
+  const short_description = getStr(raw.short_description);
+  const state = getStr(raw.state);
+  
+  // Assigned to can be string like "" or object like { display_value: "..." }
+  let assigned_to = "";
+  if (raw.assigned_to) {
+    assigned_to = getStr(raw.assigned_to);
+  }
+
+  // Assignment Group parsing
+  let assignment_group: AssignmentGroup = { display_value: "GLOBAL - NIS - CRS Intake" };
+  if (raw.assignment_group) {
+    if (typeof raw.assignment_group === "object") {
+      assignment_group = {
+        display_value: getStr(raw.assignment_group) || "GLOBAL - NIS - CRS Intake",
+        link: getSubLink(raw.assignment_group)
+      };
+    } else {
+      assignment_group = {
+        display_value: String(raw.assignment_group)
+      };
+    }
+  }
+
+  // Request Item & Nested Cat Item parsing
+  let request_item: RequestItem | undefined = undefined;
+  const ritmNumber = getStr(raw["request_item.number"] || (raw.request_item && raw.request_item.number));
+  const ritmState = getStr(raw["request_item.state"] || (raw.request_item && raw.request_item.state));
+  const rawCatItem = raw["request_item.cat_item"] || (raw.request_item && raw.request_item.cat_item);
+
+  let cat_item: CatItem | undefined = undefined;
+  if (rawCatItem) {
+    if (typeof rawCatItem === "object") {
+      cat_item = {
+        display_value: getStr(rawCatItem) || "Code Review Services",
+        link: getSubLink(rawCatItem)
+      };
+    } else {
+      cat_item = {
+        display_value: String(rawCatItem)
+      };
+    }
+  }
+
+  if (ritmNumber || ritmState || cat_item) {
+    request_item = {
+      number: ritmNumber || "N/A",
+      state: ritmState || undefined,
+      cat_item
+    };
+  }
+
+  // Search through potential variable keys in raw (handling dot-notated dynamic properties)
+  const type = getStr(
+    raw["variables.82113e60db2b08d0dbf414a05b961990"] || 
+    (raw.variables && (raw.variables.type || raw.variables["82113e60db2b08d0dbf414a05b961990"]))
+  ) || "Unknown Type";
+
+  const application = getStr(
+    raw["variables.e1147a86dbdb8854dbf414a05b96198f"] || 
+    (raw.variables && (raw.variables.application || raw.variables["e1147a86dbdb8854dbf414a05b96198f"]))
+  ) || undefined;
+
+  const billing_model = getStr(
+    raw["variables.69cda5ee1bd638104704eacee54bcbea"] || 
+    (raw.variables && (raw.variables.billing_model || raw.variables["69cda5ee1bd638104704eacee54bcbea"]))
+  ) || undefined;
+
+  return {
+    number,
+    short_description,
+    state,
+    assigned_to,
+    assignment_group,
+    request_item,
+    variables: {
+      type,
+      application,
+      billing_model
+    }
+  };
+};
 
 interface SnowIntakeScreenProps {
   onClose: () => void;
@@ -142,7 +258,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
   const [stateFilter, setStateFilter] = useState<string>("ALL");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
 
-  const [records, setRecords] = useState<SnowRecord[]>(snowData);
+  const [records, setRecords] = useState<SnowRecord[]>(() => snowData.map(normalizeSnowRecord));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiSource, setApiSource] = useState<"live" | "mock" | null>(null);
@@ -174,58 +290,58 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
 
       const resData = await response.json();
       
-      let parsedRecords: SnowRecord[] | null = null;
+      let parsedRawRecords: any[] | null = null;
       let isLive = false;
       let errMsg = "";
 
       // 1. Array wrapper from proxy: { success: true, data: { result: [...] } }
       if (resData && resData.success === true && resData.data && Array.isArray(resData.data.result)) {
-        parsedRecords = resData.data.result;
+        parsedRawRecords = resData.data.result;
         isLive = true;
       }
       // 2. Proxy wrapped with direct failure or error (but contains data as fallback):
       else if (resData && resData.success === false && resData.data && Array.isArray(resData.data.result)) {
-        parsedRecords = resData.data.result;
+        parsedRawRecords = resData.data.result;
         isLive = false;
         errMsg = resData.error || "Fallback backend mock loaded.";
       }
       // 3. Direct ServiceNow raw payload: { result: [...] }
       else if (resData && Array.isArray(resData.result)) {
-        parsedRecords = resData.result;
+        parsedRawRecords = resData.result;
         isLive = true;
       }
       // 4. Direct JSON Array: [ {...}, {...} ]
       else if (Array.isArray(resData)) {
-        parsedRecords = resData;
+        parsedRawRecords = resData;
         isLive = true;
       }
       // 5. Raw wrapped success array: { success: true, data: [...] }
       else if (resData && resData.success === true && Array.isArray(resData.data)) {
-        parsedRecords = resData.data;
+        parsedRawRecords = resData.data;
         isLive = true;
       }
       // 6. Generic array nested inside data: { data: [...] }
       else if (resData && Array.isArray(resData.data)) {
-        parsedRecords = resData.data;
+        parsedRawRecords = resData.data;
         isLive = true;
       }
       // 7. Generic array nested inside data.result: { data: { result: [...] } }
       else if (resData && resData.data && Array.isArray(resData.data.result)) {
-        parsedRecords = resData.data.result;
+        parsedRawRecords = resData.data.result;
         isLive = true;
       }
 
-      if (isLive && parsedRecords) {
-        setRecords(parsedRecords);
+      if (isLive && parsedRawRecords) {
+        setRecords(parsedRawRecords.map(normalizeSnowRecord));
         setApiSource("live");
       } else {
         console.warn("ServiceNow live fetch didn't yield expected record format or returned error:", resData);
         setApiSource("mock");
         setError(errMsg || "Using offline backup workspace data.");
-        if (parsedRecords) {
-          setRecords(parsedRecords);
+        if (parsedRawRecords) {
+          setRecords(parsedRawRecords.map(normalizeSnowRecord));
         } else {
-          setRecords(snowData);
+          setRecords(snowData.map(normalizeSnowRecord));
         }
       }
 
@@ -239,7 +355,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
       console.error("Failed to load ServiceNow intake records:", err);
       setError((err as Error).message);
       setApiSource("mock");
-      setRecords(snowData);
+      setRecords(snowData.map(normalizeSnowRecord));
     } finally {
       setLoading(false);
     }
@@ -252,14 +368,22 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
   // Filter records
   const filteredRecords = useMemo(() => {
     return records.filter((record) => {
+      const numberStr = record.number;
+      const shortDescStr = record.short_description;
+      const assignedToStr = record.assigned_to;
+      const ritmStr = record.request_item ? record.request_item.number : "";
+
       const matchSearch = 
-        record.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        record.short_description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (record.request_item && record.request_item.number.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (record.assigned_to && record.assigned_to.toLowerCase().includes(searchTerm.toLowerCase()));
+        numberStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        shortDescStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        ritmStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        assignedToStr.toLowerCase().includes(searchTerm.toLowerCase());
       
-      const matchState = stateFilter === "ALL" || record.state === stateFilter;
-      const matchType = typeFilter === "ALL" || record.variables.type === typeFilter;
+      const stateStr = record.state;
+      const matchState = stateFilter === "ALL" || stateStr === stateFilter;
+      
+      const varTypeStr = record.variables.type;
+      const matchType = typeFilter === "ALL" || varTypeStr === typeFilter;
 
       return matchSearch && matchState && matchType;
     });
@@ -278,17 +402,23 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
     const assignedUsers: Record<string, number> = {};
 
     records.forEach((r) => {
-      types[r.variables.type] = (types[r.variables.type] || 0) + 1;
-      if (r.variables.application) {
-        applications[r.variables.application] = (applications[r.variables.application] || 0) + 1;
+      const type = r.variables.type || "Unknown Type";
+      types[type] = (types[type] || 0) + 1;
+      
+      const app = r.variables.application;
+      if (app) {
+        applications[app] = (applications[app] || 0) + 1;
       } else {
         applications["N/A"] = (applications["N/A"] || 0) + 1;
       }
-      if (r.variables.billing_model) {
-        billingModels[r.variables.billing_model] = (billingModels[r.variables.billing_model] || 0) + 1;
+      
+      const billing = r.variables.billing_model;
+      if (billing) {
+        billingModels[billing] = (billingModels[billing] || 0) + 1;
       } else {
         billingModels["Unspecified"] = (billingModels["Unspecified"] || 0) + 1;
       }
+      
       const user = r.assigned_to || "Unassigned";
       assignedUsers[user] = (assignedUsers[user] || 0) + 1;
     });
@@ -558,113 +688,132 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/30">
-              {filteredRecords.map((record) => (
-                <tr 
-                  key={record.number} 
-                  className="hover:bg-slate-800/20 transition-all border-b border-slate-800/10"
-                >
-                  {/* TASK / RITM numbers & values */}
-                  <td className="p-4 align-top">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[11px] font-black font-mono text-slate-300 bg-slate-950/80 border border-slate-850 px-2 py-0.5 rounded shadow-sm w-fit">
-                        {record.number}
-                      </span>
-                      {record.request_item && (
-                        <div className="flex flex-col gap-0.5 pl-0.5">
-                          <span className="text-[9px] font-extrabold font-mono text-slate-500">
-                            {record.request_item.number}
-                          </span>
-                          {record.request_item.cat_item && (
-                            <div className="text-[8px] mt-0.5">
-                              {renderCellWithLink(
-                                record.request_item.cat_item.display_value,
-                                record.request_item.cat_item.link
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </td>
+              {filteredRecords.map((record) => {
+                const recNum = record.number;
+                const recState = record.state;
+                const recAssigned = record.assigned_to;
+                const recShortDesc = record.short_description;
+                const hasReqItem = !!record.request_item;
+                
+                let reqItemNum = "";
+                let reqItemCatDis = "";
+                let reqItemCatLink: string | undefined = undefined;
+                if (record.request_item) {
+                  reqItemNum = record.request_item.number;
+                  if (record.request_item.cat_item) {
+                    reqItemCatDis = record.request_item.cat_item.display_value;
+                    reqItemCatLink = record.request_item.cat_item.link;
+                  }
+                }
 
-                  {/* Assignment Group */}
-                  <td className="p-4 align-top">
-                    <div className="flex flex-col gap-1 max-w-[160px]">
-                      {renderCellWithLink(
-                        record.assignment_group.display_value,
-                        record.assignment_group.link
-                      )}
-                      <span className="text-[9px] text-slate-600 font-bold uppercase tracking-widest block font-mono">
-                        Intake Node
-                      </span>
-                    </div>
-                  </td>
+                return (
+                  <tr 
+                    key={recNum || Math.random().toString()} 
+                    className="hover:bg-slate-800/20 transition-all border-b border-slate-800/10"
+                  >
+                    {/* TASK / RITM numbers & values */}
+                    <td className="p-4 align-top">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[11px] font-black font-mono text-slate-300 bg-slate-950/80 border border-slate-850 px-2 py-0.5 rounded shadow-sm w-fit">
+                          {recNum}
+                        </span>
+                        {hasReqItem && (
+                          <div className="flex flex-col gap-0.5 pl-0.5">
+                            <span className="text-[9px] font-extrabold font-mono text-slate-500">
+                              {reqItemNum}
+                            </span>
+                            {reqItemCatDis && (
+                              <div className="text-[8px] mt-0.5">
+                                {renderCellWithLink(
+                                  reqItemCatDis,
+                                  reqItemCatLink
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </td>
 
-                  {/* Short Description */}
-                  <td className="p-4 align-top">
-                    <div className="text-xs text-slate-300 font-medium leading-relaxed max-w-md break-words whitespace-pre-wrap">
-                      {record.short_description}
-                    </div>
-                  </td>
-
-                  {/* Variables */}
-                  <td className="p-4 align-top">
-                    <div className="flex flex-col gap-1.5 max-w-[220px]">
-                      {/* Variable Type Badge */}
-                      <div className="flex items-start gap-1">
-                        <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider shrink-0 mt-0.5">Type:</span>
-                        <span className="inline-flex px-1.5 py-0.5 rounded border text-[8px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-400 border-blue-500/20 leading-none">
-                          {record.variables.type}
+                    {/* Assignment Group */}
+                    <td className="p-4 align-top">
+                      <div className="flex flex-col gap-1 max-w-[160px]">
+                        {renderCellWithLink(
+                          record.assignment_group.display_value,
+                          record.assignment_group.link
+                        )}
+                        <span className="text-[9px] text-slate-600 font-bold uppercase tracking-widest block font-mono">
+                          Intake Node
                         </span>
                       </div>
-                      
-                      {/* Application Badge */}
-                      {record.variables.application && (
-                        <div className="flex items-center gap-1">
-                          <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider shrink-0">App:</span>
-                          <span className="font-mono text-[9px] font-bold text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 px-1.5 py-0.5 rounded flex items-center gap-1">
-                            <Layers size={8} />
-                            {record.variables.application}
-                          </span>
-                        </div>
-                      )}
+                    </td>
 
-                      {/* Billing model Badge */}
-                      {record.variables.billing_model && (
-                        <div className="flex items-center gap-1">
-                          <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider shrink-0">Billing:</span>
-                          <span className="text-[8px] font-black text-amber-400 bg-amber-500/5 border border-amber-500/10 px-1.5 py-0.5 rounded uppercase tracking-widest">
-                            {record.variables.billing_model}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-
-                  {/* Assigned User / Task State */}
-                  <td className="p-4 align-top">
-                    <div className="flex flex-col gap-2">
-                      {/* State badge */}
-                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest border leading-none shadow-sm w-fit ${
-                        record.state === "Work in Progress" 
-                          ? "bg-amber-500/10 text-amber-400 border-amber-500/20" 
-                          : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                      }`}>
-                        <span className={`w-1 h-1 rounded-full ${record.state === "Work in Progress" ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
-                        {record.state}
-                      </span>
-
-                      {/* Assigned to */}
-                      <div className="flex items-center gap-1 text-[10px]">
-                        <User size={10} className="text-slate-600 shrink-0" />
-                        <span className={record.assigned_to ? "text-slate-300 font-bold" : "text-slate-600 italic font-semibold"}>
-                          {record.assigned_to || "Unassigned"}
-                        </span>
+                    {/* Short Description */}
+                    <td className="p-4 align-top">
+                      <div className="text-xs text-slate-300 font-medium leading-relaxed max-w-md break-words whitespace-pre-wrap">
+                        {recShortDesc}
                       </div>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+
+                    {/* Variables */}
+                    <td className="p-4 align-top">
+                      <div className="flex flex-col gap-1.5 max-w-[220px]">
+                        {/* Variable Type Badge */}
+                        <div className="flex items-start gap-1">
+                          <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider shrink-0 mt-0.5">Type:</span>
+                          <span className="inline-flex px-1.5 py-0.5 rounded border text-[8px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-400 border-blue-500/20 leading-none">
+                            {record.variables.type}
+                          </span>
+                        </div>
+                        
+                        {/* Application Badge */}
+                        {record.variables.application && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider shrink-0">App:</span>
+                            <span className="font-mono text-[9px] font-bold text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 px-1.5 py-0.5 rounded flex items-center gap-1">
+                              <Layers size={8} />
+                              {record.variables.application}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Billing model Badge */}
+                        {record.variables.billing_model && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider shrink-0">Billing:</span>
+                            <span className="text-[8px] font-black text-amber-400 bg-amber-500/5 border border-amber-500/10 px-1.5 py-0.5 rounded uppercase tracking-widest">
+                              {record.variables.billing_model}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Assigned User / Task State */}
+                    <td className="p-4 align-top">
+                      <div className="flex flex-col gap-2">
+                        {/* State badge */}
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest border leading-none shadow-sm w-fit ${
+                          recState === "Work in Progress" 
+                            ? "bg-amber-500/10 text-amber-400 border-amber-500/20" 
+                            : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        }`}>
+                          <span className={`w-1 h-1 rounded-full ${recState === "Work in Progress" ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
+                          {recState}
+                        </span>
+
+                        {/* Assigned to */}
+                        <div className="flex items-center gap-1 text-[10px]">
+                          <User size={10} className="text-slate-600 shrink-0" />
+                          <span className={recAssigned ? "text-slate-300 font-bold" : "text-slate-600 italic font-semibold"}>
+                            {recAssigned || "Unassigned"}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
 
               {filteredRecords.length === 0 && (
                 <tr>

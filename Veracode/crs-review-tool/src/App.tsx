@@ -1241,7 +1241,7 @@ export default function App() {
       }
       setIsServerOnline(true);
     } catch (err) {
-      console.error("Failed to fetch config", err);
+      console.warn("Failed to fetch config (using fallback defaults since server is starting up):", err);
       setIsServerOnline(false);
     }
   };
@@ -1305,7 +1305,7 @@ export default function App() {
           setIsServerOnline(data.isServerOnline === true || data.isServerOnline === 'true');
         })
         .catch((err) => {
-          console.error("Heartbeat check failed:", err.message || err);
+          console.warn("Heartbeat check: server not yet fully online, using fallback offline mode:", err.message || err);
           setIsServerOnline(false);
         });
     };
@@ -1326,7 +1326,7 @@ export default function App() {
           if (Array.isArray(data.noSca)) setConfigNoSca(data.noSca);
         })
         .catch((err) => {
-          console.error("Failed to fetch initial config info:", err.message || err);
+          console.warn("Failed to fetch initial config info (using local default config info):", err.message || err);
         });
     };
 
