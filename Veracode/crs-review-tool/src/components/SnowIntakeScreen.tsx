@@ -578,7 +578,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                 {loading 
                   ? "FETCHING..." 
                   : apiSource === 'live' 
-                    ? "CONNECT: ESCAPE_LIVE" 
+                    ? "CONNECTED" 
                     : error 
                       ? "CONNECT: OFFLINE_ERROR" 
                       : "CONNECT: OFFLINE"
