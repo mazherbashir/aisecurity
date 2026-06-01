@@ -4,7 +4,6 @@ import {
   ExternalLink, 
   Database, 
   Search, 
-  Activity, 
   User, 
   Tag, 
   Info,
@@ -489,43 +488,6 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
             <div className="flex items-center gap-1.5 text-slate-400">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               <span>OPEN: {stats.open}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Widget 2: Status Progress indicators */}
-        <div className="bento-card p-4 bg-slate-900 border-slate-800 shrink-0">
-          <h3 className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-black mb-3.5 flex items-center gap-1.5">
-            <Activity size={10} className="text-blue-500" /> Ticket States
-          </h3>
-
-          <div className="space-y-3 font-mono text-[11px]">
-            {/* Work in Progress Progress */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 font-bold uppercase tracking-tight">Work In Progress</span>
-                <span className="text-amber-400 font-black">{stats.workInProgress}</span>
-              </div>
-              <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
-                <div 
-                  className="h-full bg-amber-500/80 shadow-[0_0_8px_rgba(245,158,11,0.5)] rounded-full" 
-                  style={{ width: `${(stats.workInProgress / stats.total) * 100}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Open Progress */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 font-bold uppercase tracking-tight">Open</span>
-                <span className="text-emerald-400 font-black">{stats.open}</span>
-              </div>
-              <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
-                <div 
-                  className="h-full bg-emerald-500/80 shadow-[0_0_8px_rgba(16,185,129,0.5)] rounded-full" 
-                  style={{ width: `${(stats.open / stats.total) * 100}%` }}
-                />
-              </div>
             </div>
           </div>
         </div>
