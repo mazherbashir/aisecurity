@@ -258,7 +258,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
   const [stateFilter, setStateFilter] = useState<string>("ALL");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
 
-  const [records, setRecords] = useState<SnowRecord[]>(() => snowData.map(normalizeSnowRecord));
+  const [records, setRecords] = useState<SnowRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiSource, setApiSource] = useState<"live" | "mock" | null>(null);
@@ -336,26 +336,22 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
         setApiSource("live");
       } else {
         console.warn("ServiceNow live fetch didn't yield expected record format or returned error:", resData);
-        setApiSource("mock");
-        setError(errMsg || "Using offline backup workspace data.");
-        if (parsedRawRecords) {
-          setRecords(parsedRawRecords.map(normalizeSnowRecord));
-        } else {
-          setRecords(snowData.map(normalizeSnowRecord));
-        }
+        setApiSource(null);
+        setError(errMsg || "Live ServiceNow intake interface could not parse expected ticket response. Please contact system admin.");
+        setRecords([]);
       }
 
-      setEndpointUsed(resData.endpointUsed || usedEndpointUrl);
-      if (resData.credentialsPath) {
+      setEndpointUsed(resData ? (resData.endpointUsed || usedEndpointUrl) : usedEndpointUrl);
+      if (resData && resData.credentialsPath) {
         setCredentialsPath(resData.credentialsPath);
       } else {
         setCredentialsPath("Integrated Spring Boot static context");
       }
     } catch (err) {
       console.error("Failed to load ServiceNow intake records:", err);
-      setError((err as Error).message);
-      setApiSource("mock");
-      setRecords(snowData.map(normalizeSnowRecord));
+      setError("Failed to fetch live tickets from ServiceNow: " + (err as Error).message);
+      setApiSource(null);
+      setRecords([]);
     } finally {
       setLoading(false);
     }
@@ -607,9 +603,24 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
             
             {/* Live / Mock status indicator */}
             <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-950 border border-slate-850 rounded-lg shrink-0">
-              <span className={`h-1.5 w-1.5 rounded-full ${apiSource === 'live' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-amber-500 shadow-[0_0_8px_#f59e0b]'} ${loading ? 'animate-ping' : ''}`} />
+              <span className={`h-1.5 w-1.5 rounded-full ${
+                loading 
+                  ? 'bg-blue-400 shadow-[0_0_8px_#60a5fa]' 
+                  : apiSource === 'live' 
+                    ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' 
+                    : error 
+                      ? 'bg-red-500 shadow-[0_0_8px_#ef4444]' 
+                      : 'bg-amber-400 shadow-[0_0_8px_#fbbf24]'
+              } ${loading ? 'animate-ping' : ''}`} />
               <span className="text-[8px] font-black tracking-widest uppercase text-slate-500">
-                {loading ? "FETCHING..." : apiSource === 'live' ? "CONNECT: ESCAPE_LIVE" : "CONNECT: LOCAL_BACKUP"}
+                {loading 
+                  ? "FETCHING..." 
+                  : apiSource === 'live' 
+                    ? "CONNECT: ESCAPE_LIVE" 
+                    : error 
+                      ? "CONNECT: OFFLINE_ERROR" 
+                      : "CONNECT: OFFLINE"
+                }
               </span>
             </div>
 
@@ -653,22 +664,22 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
         </div>
 
         {/* Connection health & local API status bar */}
-        {(error || apiSource === 'mock' || apiSource === 'live') && (
+        {(error || apiSource === 'live') && (
           <div className="px-5 py-2 border-b border-slate-800 bg-slate-950/20 text-[10px] flex flex-col md:flex-row md:items-center justify-between gap-3 text-slate-500 font-mono">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="p-0.5 px-1 rounded bg-slate-950 border border-slate-850 text-[8px] uppercase tracking-wider text-slate-500 font-bold shrink-0">
                 Connection Status:
               </span>
-              {apiSource === 'mock' && (
-                <span className="text-amber-500 text-[8px] uppercase font-black flex items-center gap-1 shrink-0">
-                  <AlertTriangle size={11} className="text-amber-500" />
-                  Offline Sandbox Backup ({error || "backend offline"})
-                </span>
-              )}
               {apiSource === 'live' && (
                 <span className="text-emerald-500 text-[8px] uppercase font-black flex items-center gap-1 shrink-0">
                   <CheckCircle2 size={11} className="text-emerald-500" />
                   Connected to Local Intake Service
+                </span>
+              )}
+              {error && (
+                <span className="text-red-400 text-[8px] uppercase font-black flex items-center gap-1 shrink-0">
+                  <AlertTriangle size={11} className="text-red-400" />
+                  Service Connection Offline ({error.length > 80 ? `${error.slice(0, 80)}...` : error})
                 </span>
               )}
             </div>
@@ -688,134 +699,193 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/30">
-              {filteredRecords.map((record) => {
-                const recNum = record.number;
-                const recState = record.state;
-                const recAssigned = record.assigned_to;
-                const recShortDesc = record.short_description;
-                const hasReqItem = !!record.request_item;
-                
-                let reqItemNum = "";
-                let reqItemCatDis = "";
-                let reqItemCatLink: string | undefined = undefined;
-                if (record.request_item) {
-                  reqItemNum = record.request_item.number;
-                  if (record.request_item.cat_item) {
-                    reqItemCatDis = record.request_item.cat_item.display_value;
-                    reqItemCatLink = record.request_item.cat_item.link;
-                  }
-                }
-
-                return (
-                  <tr 
-                    key={recNum || Math.random().toString()} 
-                    className="hover:bg-slate-800/20 transition-all border-b border-slate-800/10"
-                  >
-                    {/* TASK / RITM numbers & values */}
+              {loading ? (
+                Array.from({ length: 5 }).map((_, idx) => (
+                  <tr key={`skeleton-${idx}`} className="animate-pulse border-b border-slate-800/10">
+                    {/* TASK / RITM skeleton */}
                     <td className="p-4 align-top">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[11px] font-black font-mono text-slate-300 bg-slate-950/80 border border-slate-850 px-2 py-0.5 rounded shadow-sm w-fit">
-                          {recNum}
-                        </span>
-                        {hasReqItem && (
-                          <div className="flex flex-col gap-0.5 pl-0.5">
-                            <span className="text-[9px] font-extrabold font-mono text-slate-500">
-                              {reqItemNum}
-                            </span>
-                            {reqItemCatDis && (
-                              <div className="text-[8px] mt-0.5">
-                                {renderCellWithLink(
-                                  reqItemCatDis,
-                                  reqItemCatLink
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="h-5 bg-slate-800 rounded-md w-24"></div>
+                        <div className="h-3 bg-slate-800/60 rounded-md w-16"></div>
                       </div>
                     </td>
-
-                    {/* Assignment Group */}
+                    {/* Assignment Group skeleton */}
                     <td className="p-4 align-top">
-                      <div className="flex flex-col gap-1 max-w-[160px]">
-                        {renderCellWithLink(
-                          record.assignment_group.display_value,
-                          record.assignment_group.link
-                        )}
-                        <span className="text-[9px] text-slate-600 font-bold uppercase tracking-widest block font-mono">
-                          Intake Node
-                        </span>
+                      <div className="h-5 bg-slate-800 rounded-md w-36"></div>
+                    </td>
+                    {/* Short Description skeleton */}
+                    <td className="p-4 align-top">
+                      <div className="space-y-1.5 max-w-md">
+                        <div className="h-4 bg-slate-800 rounded-md w-full"></div>
+                        <div className="h-3.5 bg-slate-850 rounded-md w-3/4"></div>
                       </div>
                     </td>
-
-                    {/* Short Description */}
-                    <td className="p-4 align-top">
-                      <div className="text-xs text-slate-300 font-medium leading-relaxed max-w-md break-words whitespace-pre-wrap">
-                        {recShortDesc}
-                      </div>
-                    </td>
-
-                    {/* Variables */}
-                    <td className="p-4 align-top">
-                      <div className="flex flex-col gap-1.5 max-w-[220px]">
-                        {/* Variable Type Badge */}
-                        <div className="flex items-start gap-1">
-                          <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider shrink-0 mt-0.5">Type:</span>
-                          <span className="inline-flex px-1.5 py-0.5 rounded border text-[8px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-400 border-blue-500/20 leading-none">
-                            {record.variables.type}
-                          </span>
-                        </div>
-                        
-                        {/* Application Badge */}
-                        {record.variables.application && (
-                          <div className="flex items-center gap-1">
-                            <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider shrink-0">App:</span>
-                            <span className="font-mono text-[9px] font-bold text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 px-1.5 py-0.5 rounded flex items-center gap-1">
-                              <Layers size={8} />
-                              {record.variables.application}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Billing model Badge */}
-                        {record.variables.billing_model && (
-                          <div className="flex items-center gap-1">
-                            <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider shrink-0">Billing:</span>
-                            <span className="text-[8px] font-black text-amber-400 bg-amber-500/5 border border-amber-500/10 px-1.5 py-0.5 rounded uppercase tracking-widest">
-                              {record.variables.billing_model}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Assigned User / Task State */}
+                    {/* Variables Info skeleton */}
                     <td className="p-4 align-top">
                       <div className="flex flex-col gap-2">
-                        {/* State badge */}
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest border leading-none shadow-sm w-fit ${
-                          recState === "Work in Progress" 
-                            ? "bg-amber-500/10 text-amber-400 border-amber-500/20" 
-                            : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                        }`}>
-                          <span className={`w-1 h-1 rounded-full ${recState === "Work in Progress" ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
-                          {recState}
-                        </span>
-
-                        {/* Assigned to */}
-                        <div className="flex items-center gap-1 text-[10px]">
-                          <User size={10} className="text-slate-600 shrink-0" />
-                          <span className={recAssigned ? "text-slate-300 font-bold" : "text-slate-600 italic font-semibold"}>
-                            {recAssigned || "Unassigned"}
-                          </span>
-                        </div>
+                        <div className="h-4 bg-slate-800 rounded-md w-24"></div>
+                        <div className="h-3 bg-slate-850 rounded-md w-16"></div>
+                      </div>
+                    </td>
+                    {/* Assigned / State skeleton */}
+                    <td className="p-4 align-top">
+                      <div className="flex flex-col gap-2">
+                        <div className="h-5 bg-slate-800 rounded-md w-20"></div>
+                        <div className="h-3.5 bg-slate-850 rounded-md w-24"></div>
                       </div>
                     </td>
                   </tr>
-                );
-              })}
+                ))
+              ) : (
+                filteredRecords.map((record) => {
+                  const recNum = record.number;
+                  const recState = record.state;
+                  const recAssigned = record.assigned_to;
+                  const recShortDesc = record.short_description;
+                  const hasReqItem = !!record.request_item;
+                  
+                  let reqItemNum = "";
+                  let reqItemCatDis = "";
+                  let reqItemCatLink: string | undefined = undefined;
+                  if (record.request_item) {
+                    reqItemNum = record.request_item.number;
+                    if (record.request_item.cat_item) {
+                      reqItemCatDis = record.request_item.cat_item.display_value;
+                      reqItemCatLink = record.request_item.cat_item.link;
+                    }
+                  }
 
-              {filteredRecords.length === 0 && (
+                  return (
+                    <tr 
+                      key={recNum || Math.random().toString()} 
+                      className="hover:bg-slate-800/20 transition-all border-b border-slate-800/10"
+                    >
+                      {/* TASK / RITM numbers & values */}
+                      <td className="p-4 align-top">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[11px] font-black font-mono text-slate-300 bg-slate-950/80 border border-slate-850 px-2 py-0.5 rounded shadow-sm w-fit">
+                            {recNum}
+                          </span>
+                          {hasReqItem && (
+                            <div className="flex flex-col gap-0.5 pl-0.5">
+                              <span className="text-[9px] font-extrabold font-mono text-slate-500">
+                                {reqItemNum}
+                              </span>
+                              {reqItemCatDis && (
+                                <div className="text-[8px] mt-0.5">
+                                  {renderCellWithLink(
+                                    reqItemCatDis,
+                                    reqItemCatLink
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Assignment Group */}
+                      <td className="p-4 align-top">
+                        <div className="flex flex-col gap-1 max-w-[160px]">
+                          {renderCellWithLink(
+                            record.assignment_group.display_value,
+                            record.assignment_group.link
+                          )}
+                          <span className="text-[9px] text-slate-600 font-bold uppercase tracking-widest block font-mono">
+                            Intake Node
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Short Description */}
+                      <td className="p-4 align-top">
+                        <div className="text-xs text-slate-300 font-medium leading-relaxed max-w-md break-words whitespace-pre-wrap">
+                          {recShortDesc}
+                        </div>
+                      </td>
+
+                      {/* Variables */}
+                      <td className="p-4 align-top">
+                        <div className="flex flex-col gap-1.5 max-w-[220px]">
+                          {/* Variable Type Badge */}
+                          <div className="flex items-start gap-1">
+                            <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider shrink-0 mt-0.5">Type:</span>
+                            <span className="inline-flex px-1.5 py-0.5 rounded border text-[8px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-400 border-blue-500/20 leading-none">
+                              {record.variables.type}
+                            </span>
+                          </div>
+                          
+                          {/* Application Badge */}
+                          {record.variables.application && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider shrink-0">App:</span>
+                              <span className="font-mono text-[9px] font-bold text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                <Layers size={8} />
+                                {record.variables.application}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Billing model Badge */}
+                          {record.variables.billing_model && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-[9px] font-black text-slate-600 uppercase tracking-wider shrink-0">Billing:</span>
+                              <span className="text-[8px] font-black text-amber-400 bg-amber-500/5 border border-amber-500/10 px-1.5 py-0.5 rounded uppercase tracking-widest">
+                                {record.variables.billing_model}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Assigned User / Task State */}
+                      <td className="p-4 align-top">
+                        <div className="flex flex-col gap-2">
+                          {/* State badge */}
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest border leading-none shadow-sm w-fit ${
+                            recState === "Work in Progress" 
+                              ? "bg-amber-500/10 text-amber-400 border-amber-500/20" 
+                              : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                          }`}>
+                            <span className={`w-1 h-1 rounded-full ${recState === "Work in Progress" ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
+                            {recState}
+                          </span>
+
+                          {/* Assigned to */}
+                          <div className="flex items-center gap-1 text-[10px]">
+                            <User size={10} className="text-slate-600 shrink-0" />
+                            <span className={recAssigned ? "text-slate-300 font-bold" : "text-slate-600 italic font-semibold"}>
+                              {recAssigned || "Unassigned"}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+
+              {!loading && error && (
+                <tr>
+                  <td colSpan={5} className="py-20 text-center px-4">
+                    <AlertTriangle size={42} className="mx-auto text-red-500 mb-4 animate-bounce" />
+                    <p className="text-red-400 font-black uppercase tracking-widest text-xs">
+                      ServiceNow Integration Error
+                    </p>
+                    <p className="text-slate-400 text-xs mt-2.5 max-w-lg mx-auto font-mono bg-slate-950/60 p-4 border border-red-500/10 rounded-lg shadow-sm whitespace-pre-wrap break-all leading-relaxed">
+                      {error}
+                    </p>
+                    <button 
+                      onClick={fetchRecords}
+                      className="mt-6 px-4 py-2 bg-slate-800 hover:bg-slate-750 font-bold uppercase tracking-wider text-xs text-slate-200 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95"
+                    >
+                      Retry Connection
+                    </button>
+                  </td>
+                </tr>
+              )}
+
+              {!loading && !error && filteredRecords.length === 0 && (
                 <tr>
                   <td colSpan={5} className="py-24 text-center">
                     <FileText size={36} className="mx-auto text-slate-800 mb-3" />
