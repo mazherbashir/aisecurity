@@ -249,6 +249,42 @@ const snowData: SnowRecord[] = [
       type: "Create Scanning Tool Profile",
       billing_model: "Mandatory BSS"
     }
+  },
+  {
+    short_description: "Static Scan Onboarding: Legacy CRM Platform Integration Check",
+    assignment_group: {
+      display_value: "GLOBAL - NIS - CRS Intake"
+    },
+    request_item: {
+      number: "RITM26056130",
+      state: "No Response"
+    },
+    number: "SCTASK28971699",
+    state: "No Response",
+    assigned_to: "John Miller",
+    variables: {
+      type: "Static Scan Access Request",
+      application: "CorpCRM-Legacy",
+      billing_model: "Consumption-based"
+    }
+  },
+  {
+    short_description: "SCA Integration Deferral Request: FinTech Transaction Core",
+    assignment_group: {
+      display_value: "GLOBAL - NIS - CRS Intake"
+    },
+    request_item: {
+      number: "RITM26056145",
+      state: "Responded"
+    },
+    number: "SCTASK28971710",
+    state: "Responded",
+    assigned_to: "Sarah Jenkins",
+    variables: {
+      type: "CI/CD Integration Support",
+      application: "FinTx-Core",
+      billing_model: "Mandatory BSS"
+    }
   }
 ];
 
@@ -263,6 +299,12 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
   const [apiSource, setApiSource] = useState<"live" | "mock" | null>(null);
   const [endpointUsed, setEndpointUsed] = useState<string>("");
   const [credentialsPath, setCredentialsPath] = useState<string>("");
+
+  const loadOfflineMockData = () => {
+    setError(null);
+    setApiSource("mock");
+    setRecords(snowData.map(normalizeSnowRecord));
+  };
 
   const fetchRecords = async () => {
     setLoading(true);
@@ -386,9 +428,15 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
 
   // Total statistics for the right side panel
   const stats = useMemo(() => {
-    const total = records.length;
-    const workInProgress = records.filter(r => r.state === "Work in Progress").length;
-    const open = records.filter(r => r.state === "Open").length;
+    const targetRecords = typeFilter === "ALL" 
+      ? records 
+      : records.filter(r => r.variables.type === typeFilter);
+
+    const total = targetRecords.length;
+    const workInProgress = targetRecords.filter(r => r.state === "Work in Progress").length;
+    const open = targetRecords.filter(r => r.state === "Open").length;
+    const noResponse = targetRecords.filter(r => r.state === "No Response").length;
+    const responded = targetRecords.filter(r => r.state === "Responded").length;
 
     // Type counts
     const types: Record<string, number> = {};
@@ -399,7 +447,9 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
     records.forEach((r) => {
       const type = r.variables.type || "Unknown Type";
       types[type] = (types[type] || 0) + 1;
-      
+    });
+
+    targetRecords.forEach((r) => {
       const app = r.variables.application;
       if (app) {
         applications[app] = (applications[app] || 0) + 1;
@@ -422,12 +472,14 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
       total,
       workInProgress,
       open,
+      noResponse,
+      responded,
       types,
       applications,
       billingModels,
       assignedUsers
     };
-  }, [records]);
+  }, [records, typeFilter]);
 
   // Helper to render values that have links, else falling back to normal text
   const renderCellWithLink = (value?: string, link?: string) => {
@@ -464,7 +516,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
           
           <div className="flex justify-between items-start mb-4">
             <h3 className="text-[10px] uppercase tracking-[0.25em] text-slate-500 font-black">
-              Total Intake Tasks
+              {typeFilter !== "ALL" ? "Intake Filter Stats" : "Total Intake Tasks"}
             </h3>
             <span className="p-1.5 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20">
               <Database size={14} className="animate-pulse" />
@@ -475,21 +527,49 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
             <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 font-mono tracking-tight leading-none">
               {stats.total.toString().padStart(2, "0")}
             </span>
-            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-black mt-2">
-              ACTIVE SERVICE-NOW TICKETS
-            </p>
+            {typeFilter !== "ALL" ? (
+              <div className="mt-2.5">
+                <span className="text-[8px] px-1 bg-blue-500/10 border border-blue-500/20 text-blue-400 font-black tracking-widest uppercase rounded">
+                  FILTER ACTIVE
+                </span>
+                <p className="text-[10px] text-slate-300 font-bold tracking-tight mt-1 truncate" title={typeFilter}>
+                  {typeFilter}
+                </p>
+              </div>
+            ) : (
+              <p className="text-[9px] text-slate-500 uppercase tracking-widest font-black mt-2">
+                ACTIVE SERVICE-NOW TICKETS
+              </p>
+            )}
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-800 flex justify-between text-[10px] font-mono">
+          <div className="mt-4 pt-3 border-t border-slate-800 grid grid-cols-2 gap-y-2 gap-x-1.5 text-[10px] font-mono">
             <div className="flex items-center gap-1.5 text-slate-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              <span>WIP: {stats.workInProgress}</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+              <span className="truncate">WIP: {stats.workInProgress}</span>
             </div>
             <div className="flex items-center gap-1.5 text-slate-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>OPEN: {stats.open}</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+              <span className="truncate">OPEN: {stats.open}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-slate-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+              <span className="truncate">NO RESP: {stats.noResponse}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-slate-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+              <span className="truncate">RESP: {stats.responded}</span>
             </div>
           </div>
+
+          {typeFilter !== "ALL" && (
+            <button
+              onClick={() => setTypeFilter("ALL")}
+              className="mt-3.5 w-full py-2 bg-slate-950 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white rounded-lg text-[9px] uppercase tracking-[0.1em] font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
+            >
+              <span>← Show All Types</span>
+            </button>
+          )}
         </div>
 
         {/* Widget 3: Ticket types distributions */}
@@ -499,14 +579,42 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
           </h3>
 
           <div className="space-y-2">
-            {Object.entries(stats.types).map(([type, count]) => (
-              <div key={type} className="flex items-center justify-between p-2 bg-slate-950/40 rounded border border-slate-850">
-                <span className="text-[10px] text-slate-300 font-black truncate max-w-[140px]" title={type}>{type}</span>
-                <span className="text-[9px] font-mono text-blue-400 font-black px-1.5 py-0.5 rounded bg-blue-500/5 border border-blue-500/10">
-                  {count}
-                </span>
-              </div>
-            ))}
+            {Object.entries(stats.types).map(([type, count]) => {
+              const isSelected = typeFilter === type;
+              return (
+                <button
+                  key={type}
+                  onClick={() => setTypeFilter(isSelected ? "ALL" : type)}
+                  className={`w-full flex items-center justify-between p-2 rounded border transition-all text-left group cursor-pointer ${
+                    isSelected 
+                      ? "bg-blue-500/10 border-blue-500/40 hover:bg-blue-500/15" 
+                      : "bg-slate-950/40 border-slate-850 hover:bg-slate-800/40 hover:border-slate-800"
+                  }`}
+                >
+                  <span className={`text-[10px] truncate max-w-[140px] font-black transition-all ${
+                    isSelected ? "text-blue-400" : "text-slate-300 group-hover:text-slate-200"
+                  }`} title={type}>
+                    {type}
+                  </span>
+                  <span className={`text-[9px] font-mono font-black px-1.5 py-0.5 rounded transition-all ${
+                    isSelected 
+                      ? "text-blue-300 bg-blue-500/20 border border-blue-500/30" 
+                      : "text-blue-400 bg-blue-500/5 border border-blue-500/10 group-hover:bg-blue-500/10"
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+
+            {typeFilter !== "ALL" && (
+              <button
+                onClick={() => setTypeFilter("ALL")}
+                className="w-full flex items-center justify-center gap-1.5 p-2 bg-slate-950/20 hover:bg-slate-950/50 border border-dashed border-slate-800 hover:border-slate-700 rounded text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-all cursor-pointer"
+              >
+                <span>Reset to All Records</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -570,18 +678,22 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                   ? 'bg-blue-400 shadow-[0_0_8px_#60a5fa]' 
                   : apiSource === 'live' 
                     ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' 
-                    : error 
-                      ? 'bg-red-500 shadow-[0_0_8px_#ef4444]' 
-                      : 'bg-amber-400 shadow-[0_0_8px_#fbbf24]'
+                    : apiSource === 'mock'
+                      ? 'bg-amber-400 shadow-[0_0_8px_#fbbf24]'
+                      : error 
+                        ? 'bg-red-500 shadow-[0_0_8px_#ef4444]' 
+                        : 'bg-amber-400 shadow-[0_0_8px_#fbbf24]'
               } ${loading ? 'animate-ping' : ''}`} />
               <span className="text-[8px] font-black tracking-widest uppercase text-slate-500">
                 {loading 
                   ? "FETCHING..." 
                   : apiSource === 'live' 
                     ? "CONNECTED" 
-                    : error 
-                      ? "CONNECT: OFFLINE_ERROR" 
-                      : "CONNECT: OFFLINE"
+                    : apiSource === 'mock'
+                      ? "CONNECT: OFFLINE (MOCK)"
+                      : error 
+                        ? "CONNECT: OFFLINE_ERROR" 
+                        : "CONNECT: OFFLINE"
                 }
               </span>
             </div>
@@ -620,13 +732,15 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                 <option value="ALL" className="bg-slate-950 text-slate-400">[ ALL STATES ]</option>
                 <option value="Work in Progress" className="bg-slate-950 text-slate-400">[ WIP ]</option>
                 <option value="Open" className="bg-slate-950 text-slate-400">[ OPEN ]</option>
+                <option value="No Response" className="bg-slate-950 text-slate-400">[ NO RESPONSE ]</option>
+                <option value="Responded" className="bg-slate-950 text-slate-400">[ RESPONDED ]</option>
               </select>
             </div>
           </div>
         </div>
 
         {/* Connection health & local API status bar */}
-        {(error || apiSource === 'live') && (
+        {(error || apiSource === 'live' || apiSource === 'mock') && (
           <div className="px-5 py-2 border-b border-slate-800 bg-slate-950/20 text-[10px] flex flex-col md:flex-row md:items-center justify-between gap-3 text-slate-500 font-mono">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="p-0.5 px-1 rounded bg-slate-950 border border-slate-850 text-[8px] uppercase tracking-wider text-slate-500 font-bold shrink-0">
@@ -638,7 +752,13 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                   Connected to Local Intake Service
                 </span>
               )}
-              {error && (
+              {apiSource === 'mock' && (
+                <span className="text-amber-500 text-[8px] uppercase font-black flex items-center gap-1 shrink-0">
+                  <AlertTriangle size={11} className="text-amber-500 animate-pulse" />
+                  Loaded Offline Sandbox Backup Mode (Static Mock Data Active)
+                </span>
+              )}
+              {error && !apiSource && (
                 <span className="text-red-400 text-[8px] uppercase font-black flex items-center gap-1 shrink-0">
                   <AlertTriangle size={11} className="text-red-400" />
                   Service Connection Offline ({error.length > 80 ? `${error.slice(0, 80)}...` : error})
@@ -807,9 +927,25 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest border leading-none shadow-sm w-fit ${
                             recState === "Work in Progress" 
                               ? "bg-amber-500/10 text-amber-400 border-amber-500/20" 
-                              : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                              : recState === "Open"
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                : recState === "No Response"
+                                  ? "bg-rose-500/10 text-rose-450 border-rose-500/20"
+                                  : recState === "Responded"
+                                    ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                    : "bg-slate-500/10 text-slate-400 border-slate-500/20"
                           }`}>
-                            <span className={`w-1 h-1 rounded-full ${recState === "Work in Progress" ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
+                            <span className={`w-1 h-1 rounded-full ${
+                              recState === "Work in Progress" 
+                                ? "bg-amber-500 animate-pulse" 
+                                : recState === "Open"
+                                  ? "bg-emerald-500"
+                                  : recState === "No Response"
+                                    ? "bg-rose-500"
+                                    : recState === "Responded"
+                                      ? "bg-blue-500"
+                                      : "bg-slate-500"
+                            }`} />
                             {recState}
                           </span>
 
@@ -830,19 +966,27 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
               {!loading && error && (
                 <tr>
                   <td colSpan={5} className="py-20 text-center px-4">
-                    <AlertTriangle size={42} className="mx-auto text-red-500 mb-4 animate-bounce" />
-                    <p className="text-red-400 font-black uppercase tracking-widest text-xs">
+                    <AlertTriangle size={42} className="mx-auto text-red-500 mb-4" />
+                    <p className="text-red-400 font-black uppercase tracking-widest text-xs animate-pulse">
                       ServiceNow Integration Error
                     </p>
                     <p className="text-slate-400 text-xs mt-2.5 max-w-lg mx-auto font-mono bg-slate-950/60 p-4 border border-red-500/10 rounded-lg shadow-sm whitespace-pre-wrap break-all leading-relaxed">
                       {error}
                     </p>
-                    <button 
-                      onClick={fetchRecords}
-                      className="mt-6 px-4 py-2 bg-slate-800 hover:bg-slate-750 font-bold uppercase tracking-wider text-xs text-slate-200 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95"
-                    >
-                      Retry Connection
-                    </button>
+                    <div className="mt-6 flex flex-wrap justify-center gap-3">
+                      <button 
+                        onClick={fetchRecords}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-750 font-bold uppercase tracking-wider text-xs text-slate-200 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+                      >
+                        Retry Connection
+                      </button>
+                      <button 
+                        onClick={loadOfflineMockData}
+                        className="px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 font-bold uppercase tracking-wider text-xs text-blue-400 hover:text-blue-300 border border-blue-500/25 hover:border-blue-500/45 rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+                      >
+                        Load Local Offline Backup Records
+                      </button>
+                    </div>
                   </td>
                 </tr>
               )}

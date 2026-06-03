@@ -517,6 +517,42 @@ async function startServer() {
                 "type": "Create Scanning Tool Profile",
                 "billing_model": "Mandatory BSS"
               }
+            },
+            {
+              "short_description": "Static Scan Onboarding: Legacy CRM Platform Integration Check",
+              "assignment_group": {
+                "display_value": "GLOBAL - NIS - CRS Intake"
+              },
+              "request_item": {
+                "number": "RITM26056130",
+                "state": "No Response"
+              },
+              "number": "SCTASK28971699",
+              "state": "No Response",
+              "assigned_to": "John Miller",
+              "variables": {
+                "type": "Static Scan Access Request",
+                "application": "CorpCRM-Legacy",
+                "billing_model": "Consumption-based"
+              }
+            },
+            {
+              "short_description": "SCA Integration Deferral Request: FinTech Transaction Core",
+              "assignment_group": {
+                "display_value": "GLOBAL - NIS - CRS Intake"
+              },
+              "request_item": {
+                "number": "RITM26056145",
+                "state": "Responded"
+              },
+              "number": "SCTASK28971710",
+              "state": "Responded",
+              "assigned_to": "Sarah Jenkins",
+              "variables": {
+                "type": "CI/CD Integration Support",
+                "application": "FinTx-Core",
+                "billing_model": "Mandatory BSS"
+              }
             }
           ]
         }
