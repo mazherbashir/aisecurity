@@ -887,7 +887,7 @@ Thank you!`;
 
                   const veracodeRp = `The SAST assessment has been completed successfully with open findings. The remediation plan <code><a target="_blank" href="https://eu.workbench.pwc.com/home/my-reports/IRM-ARR-Dashboard">${rpNumber}</a></code> is in place for the open findings in adherence to the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a>.<br/>
 <br/>
-This can be considered a <b>final</b> sign-off for the static code analysis for this assessed version, scan <code><a target="_blank" href="https://analysiscenter.veracode.com/auth/index.jsp#StaticOverview:${accountId}:${appId}:${buildId}:${analysisId}:${staticAnalysisUnitId}::::${sandboxId}">${rpScanNameInput}</a></code>, of the <code>, of the <code><a target="_blank" href="https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:${accountId}:${appId}:${buildId}">${profileName}</a></code> application. For more details, please see the Veracode report <code><a target="_blank" href="${rpReportUrlInput}">${reportFilename}</a></code> attached to this request. Please note that after this sign off, this request will be closed and will not be tracked anymore.<br/>
+This can be considered a <b>final</b> sign-off for the static code analysis for this assessed version, scan <code><a target="_blank" href="https://analysiscenter.veracode.com/auth/index.jsp#StaticOverview:${accountId}:${appId}:${buildId}:${analysisId}:${staticAnalysisUnitId}::::${sandboxId}">${rpScanNameInput}</a></code>, of the <code><a target="_blank" href="https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:${accountId}:${appId}:${buildId}">${profileName}</a></code> application. For more details, please see the Veracode report <code><a target="_blank" href="${rpReportUrlInput}">${reportFilename}</a></code> attached to this request. Please note that after this sign off, this request will be closed and will not be tracked anymore.<br/>
 <br/>
 Thank you!
 <hr/>
@@ -2588,12 +2588,28 @@ export default function App() {
                     <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
                       Profile
                     </span>
-                    <p
-                      className="text-[11px] font-bold text-white truncate w-full"
-                      title={activeOverview.applicationName}
-                    >
-                      {activeOverview.applicationName}
-                    </p>
+                    {(() => {
+                      const accountId = activeOverview.accountId || "";
+                      const appId = activeOverview.appId || "";
+                      const buildId = activeOverview.buildId || "";
+                      const profileUrl = `https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:${accountId}:${appId}:${buildId}`;
+                      
+                      return (
+                        <p
+                          className="text-[11px] font-bold truncate w-full"
+                          title={activeOverview.applicationName}
+                        >
+                          <a
+                            href={profileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sky-400 hover:text-sky-300 underline transition-colors"
+                          >
+                            {activeOverview.applicationName}
+                          </a>
+                        </p>
+                      );
+                    })()}
                   </div>
                   <div className="flex flex-col mr-8 lg:mr-14">
                     <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">
