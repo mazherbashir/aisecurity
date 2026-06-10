@@ -1,0 +1,16 @@
+package com.crs_reivew_api.controller;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class ChromeDevToolsController {
+
+    // Silences the NoResourceFoundException thrown when browsers request
+    // these files and they are missing.
+    @GetMapping({ "/.well-known/appspecific/com.chrome.devtools.json" })
+    public ResponseEntity<Void> ignoreDevTools() {
+        return ResponseEntity.notFound().build();
+    }
+}

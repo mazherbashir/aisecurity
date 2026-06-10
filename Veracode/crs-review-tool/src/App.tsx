@@ -1127,6 +1127,7 @@ export default function App() {
   const [configHistory, setConfigHistory] = useState<string[]>([]);
   const [configScanValidityDays, setConfigScanValidityDays] =
     useState<number>(90);
+  const [configIntakeRequest, setConfigIntakeRequest] = useState<boolean | undefined>(undefined);
   const [scaSafeVersionEnabled, setScaSafeVersionEnabled] = useState(false);
   const [isServerOnline, setIsServerOnline] = useState(false);
   const [showSnowScreen, setShowSnowScreen] = useState(false);
@@ -1324,6 +1325,9 @@ export default function App() {
           if (Array.isArray(data.engines)) setConfigEngines(data.engines);
           if (data.scanValidityDays) setConfigScanValidityDays(data.scanValidityDays);
           if (Array.isArray(data.noSca)) setConfigNoSca(data.noSca);
+          if (data.intakeRequest !== undefined) {
+            setConfigIntakeRequest(data.intakeRequest);
+          }
         })
         .catch((err) => {
           console.warn("Failed to fetch initial config info (using local default config info):", err.message || err);
@@ -1811,6 +1815,9 @@ export default function App() {
           if (Array.isArray(data.engines)) {
             setConfigEngines(data.engines);
           }
+          if (data.intakeRequest !== undefined) {
+            setConfigIntakeRequest(data.intakeRequest);
+          }
         })
         .catch((err) => console.warn("Failed to refresh history:", err));
     } catch (err: any) {
@@ -2167,29 +2174,31 @@ export default function App() {
                 onSubmit={handleFetchResults}
                 className="flex gap-4 items-end"
               >
-                <div className="flex flex-col">
-                  <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
-                    SNOW
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextVal = !showSnowScreen;
-                      setShowSnowScreen(nextVal);
-                      if (nextVal) {
-                        setSelectedTools([]);
-                      }
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 shadow-lg active:scale-95 ${
-                      showSnowScreen
-                        ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40 border-blue-500"
-                        : "bg-slate-800 border-slate-700 text-blue-400 hover:border-slate-600"
-                    }`}
-                  >
-                    <Database size={12} className={showSnowScreen ? "text-white" : "text-blue-500"} />
-                    Intake
-                  </button>
-                </div>
+                {configIntakeRequest === undefined && (
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
+                      SNOW
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextVal = !showSnowScreen;
+                        setShowSnowScreen(nextVal);
+                        if (nextVal) {
+                          setSelectedTools([]);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 shadow-lg active:scale-95 ${
+                        showSnowScreen
+                          ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40 border-blue-500"
+                          : "bg-slate-800 border-slate-700 text-blue-400 hover:border-slate-600"
+                      }`}
+                    >
+                      <Database size={12} className={showSnowScreen ? "text-white" : "text-blue-500"} />
+                      Intake
+                    </button>
+                  </div>
+                )}
 
                 <div className="flex flex-col">
                   <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">

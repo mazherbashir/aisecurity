@@ -1,0 +1,6 @@
+{
+  "Corporate Mitigation Waiver": "<p><b><u>Corporate Mitigation Exception</u></b><br/>The open findings listed in the static analysis have been analyzed and deemed low active risk. Compensating controls are established at the corporate API firewall and reverse proxy level. Continuous runtime monitoring is active.</p><br/>",
+  "Temporary Release Grace Extension": "<p><b><u>Temporary Release Exception</u></b><br/>A release exception has been authorized by the cybersecurity advisory team for this build, allowing temporary deferral of the remediation schedule due to critical business timelines. Remediation must be resolved in the next scheduled minor release.</p><br/>",
+  "Third-Party SDK Legacy Exception": "<p><b><u>Third-Party Component Advisory</u></b><br/>The identified vulnerabilities reside in pre-compiled binary modules of legacy third-party dependencies that cannot be modified or upgraded without substantial core deprecation. Active network separation restricts runtime visibility of these packages.</p><br/>",
+  "API Sanitization & Safe Boundary Waiver": "<p><b><u>Sufficient Input Validation Sanitization</u></b><br/>The reported cross-site scripting (XSS) and injection findings are mitigated via central routing sanitizers. Input fields are parsed with strict HTML escaping and strict schema decorators at the controller boundary.</p><br/>"
+}
