@@ -9,6 +9,10 @@ public class PrescanModule {
     @XmlAttribute(name = "is_third_party") private boolean isThirdParty;
     @XmlAttribute(name = "has_fatal_errors") private boolean hasFatalErrors;
     @XmlAttribute(name = "status") private String status;
+    @XmlAttribute(name = "platform") private String platform;
+
+    @XmlElement(name = "issue", namespace = "https://analysiscenter.veracode.com/schema/2.0/prescanresults")
+    private java.util.List<PrescanIssue> issues;
 
     public String getName() { return name; }
     public String getFileName() { return fileName; }
@@ -16,4 +20,6 @@ public class PrescanModule {
     public boolean isThirdParty() { return isThirdParty; }
     public boolean hasFatalErrors() { return hasFatalErrors; }
     public String getStatus() { return status; }
+    public String getPlatform() { return platform; }
+    public java.util.List<PrescanIssue> getIssues() { return issues; }
 }

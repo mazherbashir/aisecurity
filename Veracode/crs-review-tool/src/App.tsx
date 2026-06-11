@@ -29,6 +29,7 @@ import {
   Plus,
   Trash2,
   Edit2,
+  HelpCircle,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -456,6 +457,24 @@ function ReviewTabContent({
       );
     }
 
+    let noPrecompileSection = "";
+    if (
+      overview.noPrecompile &&
+      Array.isArray(overview.noPrecompile) &&
+      overview.noPrecompile.length > 0
+    ) {
+      noPrecompileSection = StaticContent.noPrecompileMsg();
+    }
+
+    let minifiedFilesSection = "";
+    if (
+      overview.minifedFiles &&
+      Array.isArray(overview.minifedFiles) &&
+      overview.minifedFiles.length > 0
+    ) {
+      minifiedFilesSection = StaticContent.minifiedFilesMsg(overview.minifedFiles);
+    }
+
     return (
       StaticContent.header_style +
       header +
@@ -463,6 +482,8 @@ function ReviewTabContent({
       scaSection +
       missingScaMessages +
       moduleSelectionSection +
+      noPrecompileSection +
+      minifiedFilesSection +
       StaticContent.footerMsg
     );
   }, [
@@ -1632,6 +1653,9 @@ export default function App() {
 
         const packagingAnomalies = getSafeArray("packagingAnomalies");
         const unselectedModules = getSafeArray("unselectedModules");
+        const minifedFiles = getSafeArray("minifedFiles");
+        const noPrecompile = getSafeArray("noPrecompile");
+        const missingSCAForSelectedModules = getSafeArray("missingSCAForSelectedModules");
         
         // Merge configNoSca into scaEcosystems
         let currentScaEcosystems = data.scaEcosystems || "";
@@ -1655,6 +1679,9 @@ export default function App() {
           scaEcosystems: ecosArray.length > 0 ? `[${ecosArray.join(", ")}]` : "",
           packagingAnomalies,
           unselectedModules,
+          minifedFiles,
+          noPrecompile,
+          missingSCAForSelectedModules,
           selectedModules: data.selectedModules || [],
           scanLanguages:
             languages && languages.length > 0
@@ -2437,7 +2464,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="bento-card bg-slate-900/40 p-3 flex flex-col shrink-0">
+                <div className="bento-card bg-slate-900/40 p-3 flex flex-col shrink-0 !overflow-visible">
                   <h3 className="text-xs uppercase tracking-[0.2em] text-slate-500 font-black mb-2">
                     Scan Analysis
                   </h3>
@@ -2547,6 +2574,92 @@ export default function App() {
                           : "Partial"}
                       </span>
                     </div>
+
+                    {/* Minified Files Status */}
+                    <div id="scan-analysis-minified" className="flex justify-between items-center py-1 border-t border-slate-800/50 gap-2 flex-wrap relative group">
+                      <span className="text-[10px] text-slate-500 uppercase font-black shrink-0">
+                        MINIFIED FILES
+                      </span>
+                      <div className="flex items-center gap-1.5 cursor-pointer leading-none">
+                        <div
+                          className={`w-2 h-2 rounded-full ${
+                            ((activeOverview as any).minifedFiles || []).length === 0
+                              ? "bg-emerald-500 shadow-[0_0_8px_#10b981]"
+                              : "bg-red-500 shadow-[0_0_8px_#ef4444] animate-pulse"
+                          }`}
+                        />
+                        <span
+                          className={`text-[10px] font-black uppercase ${
+                            ((activeOverview as any).minifedFiles || []).length === 0
+                              ? "text-emerald-400"
+                              : "text-red-400"
+                          }`}
+                        >
+                          {((activeOverview as any).minifedFiles || []).length === 0
+                            ? "None"
+                            : `${((activeOverview as any).minifedFiles || []).length} Found`}
+                        </span>
+                      </div>
+                      {((activeOverview as any).minifedFiles || []).length > 0 && (
+                        <div id="scan-analysis-minified-tooltip" className="absolute right-0 bottom-full mb-1.5 z-50 hidden group-hover:block w-72 bg-slate-950 border border-slate-800 rounded-lg p-2.5 shadow-2xl transition-all duration-150">
+                          <div className="text-[9px] uppercase font-black text-red-400 mb-1 border-b border-slate-800/60 pb-0.5 font-mono">
+                            Minified Files ({((activeOverview as any).minifedFiles || []).length})
+                          </div>
+                          <ul className="text-[8px] font-mono text-slate-300 space-y-1 max-h-36 overflow-y-auto scrollbar-thin">
+                            {((activeOverview as any).minifedFiles || []).map((file: string, idx: number) => (
+                              <li key={idx} className="flex items-start gap-1">
+                                <span className="text-red-400 select-none shrink-0">•</span>
+                                <span className="break-all">{file}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Precompile Status */}
+                    <div id="scan-analysis-precompile" className="flex justify-between items-center py-1 border-t border-slate-800/50 gap-2 flex-wrap relative group">
+                      <span className="text-[10px] text-slate-500 uppercase font-black shrink-0">
+                        PRECOMPILE
+                      </span>
+                      <div className="flex items-center gap-1.5 cursor-pointer leading-none">
+                        <div
+                          className={`w-2 h-2 rounded-full ${
+                            ((activeOverview as any).noPrecompile || []).length === 0
+                              ? "bg-emerald-500 shadow-[0_0_8px_#10b981]"
+                              : "bg-red-500 shadow-[0_0_8px_#ef4444] animate-pulse"
+                          }`}
+                        />
+                        <span
+                          className={`text-[10px] font-black uppercase ${
+                            ((activeOverview as any).noPrecompile || []).length === 0
+                              ? "text-emerald-400"
+                              : "text-red-400"
+                          }`}
+                        >
+                          {((activeOverview as any).noPrecompile || []).length === 0
+                            ? "None"
+                            : `${((activeOverview as any).noPrecompile || []).length} Missing`}
+                        </span>
+                      </div>
+                      {((activeOverview as any).noPrecompile || []).length > 0 && (
+                        <div id="scan-analysis-precompile-tooltip" className="absolute right-0 bottom-full mb-1.5 z-50 hidden group-hover:block w-72 bg-slate-950 border border-slate-800 rounded-lg p-2.5 shadow-2xl transition-all duration-150">
+                          <div className="text-[9px] uppercase font-black text-red-400 mb-1 border-b border-slate-800/60 pb-0.5 font-mono">
+                            Unprecompiled Modules ({((activeOverview as any).noPrecompile || []).length})
+                          </div>
+                          <ul className="text-[8px] font-mono text-slate-300 space-y-1 max-h-36 overflow-y-auto scrollbar-thin">
+                            {((activeOverview as any).noPrecompile || []).map((file: string, idx: number) => (
+                              <li key={idx} className="flex items-start gap-1">
+                                <span className="text-red-400 select-none shrink-0">•</span>
+                                <span className="break-all">{file}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+
                   </div>
                 </div>
 

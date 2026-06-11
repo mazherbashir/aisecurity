@@ -16,7 +16,29 @@ export const mockOverview = {
   "scanLanguages": ["JavaScript", ".NET"],
   "packagingAnomalies": [],
   "unselectedModules": ["FusionCommonLib.dll"],
-  "gracePeriod": "veryhigh/high:60 , Medium:90 , Low:180"
+  "gracePeriod": "veryhigh/high:60 , Medium:90 , Low:180",
+  "minifedFiles": [],
+  "noPrecompile": [
+    "Pwc.Cde.Junction.Core.Benchmarking.Api.dll",
+    "PwC.Cde.Junction.Core.Grunt.Library.Api.dll",
+    "PwC.Cde.Junction.Core.Rtc.Headless.Api.dll",
+    "PwC.Cde.Junction.Error.Code.Api.dll",
+    "PwC.Cde.Junction.Html.File.Upload.Func.dll",
+    "Pwc.Cde.DVtT.Diagnostics.Api.dll"
+  ],
+  "missingSCAForSelectedModules": [
+    "Python files within Veracode_cde-junction-genai-qna-api.zip",
+    "Python files within Veracode_cde-junction-genai-agent-discovery-api.zip",
+    "Python files within Veracode_cde-workflows-engine-exportjunction-api.zip",
+    "Python files within Veracode_cde-workflows-engine-excelformatter-api.zip",
+    "Python files within Veracode_cde-workflows-engine-alphasense-api.zip",
+    "Python files within Veracode_cde-workflows-engine-publicdocs-api.zip",
+    "Python files within Veracode_cde-junction-genai-langflow.zip",
+    "Python files within Veracode_cde-workflows-engine-ddvcarveout-api.zip",
+    "Python files within Veracode_eclipse-advisory-fdd-data-science.zip",
+    "Python files within Veracode_cde-workflows-publicdocs-data-refinery-api.zip",
+    "Python files within Veracode_cde-junction-genai-support-api.zip"
+  ]
 };
 
 export const mockSastSummary = {

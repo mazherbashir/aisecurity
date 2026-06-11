@@ -21,6 +21,8 @@ public class VeracodeReportDTO {
     public List<String> unselectedModules = new ArrayList<>();
     public List<String> selectedModules = new ArrayList<>();
     public List<String> architectures = new ArrayList<>();
+    public List<String> noPrecompile = new ArrayList<>();
+    public List<String> minifedFiles = new ArrayList<>();
     public String scaEcosystems;
     public boolean scaSafeVersionEnabled;
     public List<String> packagingAnomalies = new ArrayList<>();

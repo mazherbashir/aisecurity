@@ -899,6 +899,25 @@ public class VeracodeService {
 
                     if (isAlreadySelected) {
                         debugLog("DEBUG: Skipping unselected module (Already Selected): " + moduleName);
+                        if (m.getIssues() != null) {
+                            for (com.crs_reivew_api.model.veracode.PrescanIssue issue : m.getIssues()) {
+                                if (issue.getDetails() != null) {
+                                    String details = issue.getDetails();
+                                    String platform = m.getPlatform() != null ? m.getPlatform().toLowerCase() : "";
+                                    
+                                    if (details.toLowerCase().contains("no precompiled")) {
+                                        if (!dto.noPrecompile.contains(moduleName)) {
+                                            dto.noPrecompile.add(moduleName);
+                                        }
+                                    }
+                                    if (details.toLowerCase().contains("minified")) {
+                                        if (!dto.minifedFiles.contains(moduleName)) {
+                                            dto.minifedFiles.add(moduleName);
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         continue;
                     }
 
