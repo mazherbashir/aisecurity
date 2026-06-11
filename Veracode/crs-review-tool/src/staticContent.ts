@@ -121,4 +121,31 @@ Code Review Services will only take action on full application policy scans in V
 <br/>
 Additionally, CRS does not require periodic sign-off unless material production changes (see page 9 of the <a target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/PwC%20ISP%20Terms%20and%20Definitions.pdf">PwC Information Security Policy Terms and Definitions</a>) are made. However, during the development process it is required that scans are run during all development activities to identify current risks that require remediation.`;
   }
+
+  public static noPrecompileMsg() {
+    return `
+<hr/>
+<h3 class="heading bg-red">Missing Precompiled Files</h3></br>
+The scan reported <i>Support Issue: No precompiled files were found for this .NET web application</i> in the uploaded modules. If your application has any ASP.NET front-end code, then the application must be precompiled to include the front-end code for scanning.<br/>
+<br/>
+Confirm if this application has ASP.NET front-end code, and <b>if so, precompile and rescan</b>. See Veracode's documentation on <a target="_blank" href="https://docs.veracode.com/r/compilation_ASPnet">Packaging ASP.NET Web Applications</a> for more information.`;
+  }
+
+  public static minifiedFilesMsg(minifedFiles: string[]) {
+    const listItems = minifedFiles.map(file => `\t<li><code>${file}</code></li>`).join("\n");
+    return `
+<hr/>
+<h3 class="heading bg-red">Minified Files</h3></br>
+The scan reported <i>Support Issue: Ignored file [filename] because we think it is minified</i> in the uploaded modules selected as entry points. Code Review Services can only take action on full application policy scans and ignored files can affect the completeness of the scan.<br/>
+<br/>
+Ensure that all application-specific files are uploaded unminified in a single policy scan. <b>Only application-specific files must be unminified</b>, i.e. third-party files can be minified if they are explicitly stated to be third-party.<br/>
+<br/>
+Confirm if the file(s) below are required for production, and <b>if so, unminify the file(s) and rescan</b>:<br/>
+<br/>
+<b> Minified files exists in the following module(s)</b>
+<ul>
+${listItems}
+</ul>
+<b>Note:</b> The Veracode scan engine uses line length in determining if a file is minified. If the file is not minified but is reported as such, ensure that there are no lines with a length of 500 or more characters.`;
+  }
 }
