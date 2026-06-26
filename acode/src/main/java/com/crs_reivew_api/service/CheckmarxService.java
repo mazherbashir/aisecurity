@@ -97,6 +97,7 @@ public class CheckmarxService {
 
     private com.crs_reivew_api.dto.VeracodeReportDTO parseCheckmarxReport(Path filePath, String tierValue, String token, String projectId, String scanId) throws Exception {
         com.crs_reivew_api.dto.VeracodeReportDTO dto = new com.crs_reivew_api.dto.VeracodeReportDTO();
+        dto.scaSafeVersionEnabled = veracodeConfig.isScaSafeVersionEnabled();
         JsonNode root = mapper.readTree(filePath.toFile());
 
         String tenantId = "";
@@ -917,6 +918,9 @@ public class CheckmarxService {
 
             String json = Files.readString(targetFile);
             com.crs_reivew_api.dto.VeracodeReportDTO dto = mapper.readValue(json, com.crs_reivew_api.dto.VeracodeReportDTO.class);
+            if (dto != null) {
+                dto.scaSafeVersionEnabled = veracodeConfig.isScaSafeVersionEnabled();
+            }
             
             // Fix buildId if it contains the projectId (appId) instead of the scanId
             if (dto != null && dto.overview != null && dto.overview.buildId != null && dto.overview.buildId.equals(dto.overview.appId)) {
@@ -1063,7 +1067,7 @@ public class CheckmarxService {
             }
 
             String requestBody = mapper.writeValueAsString(predicateList);
-            String url = apiUrl + "/sast-results-predicates/";
+            String url = apiUrl + "/sast-results-predicates";
 
             System.out.println("====== CHECKMARX SAST PREDICATE API REQUEST ======");
             System.out.println("URL: " + url);
@@ -1150,7 +1154,7 @@ public class CheckmarxService {
             }
 
             String requestBody = mapper.writeValueAsString(predicateList);
-            String url = apiUrl + "/sast-results-predicates/";
+            String url = apiUrl + "/sast-results-predicates";
 
             System.out.println("====== CHECKMARX SAST PREDICATES BATCH API REQUEST ======");
             System.out.println("URL: " + url);

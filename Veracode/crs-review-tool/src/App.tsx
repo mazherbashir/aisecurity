@@ -513,7 +513,8 @@ function ReviewTabContent({
     aggregatedData,
     configNoSca,
     configScanValidityDays,
-    selectedTools
+    selectedTools,
+    scaSafeVersionEnabled
   ]);
 
 
@@ -1329,6 +1330,9 @@ export default function App() {
         // Update local derived states
         if (fullConfig["System"]) {
           setConfigScanValidityDays(fullConfig["System"].scanValidityDays || 90);
+          if (fullConfig["System"].safeSCAVERSION && fullConfig["System"].safeSCAVERSION.scaSafeVersionEnabled !== undefined) {
+            setScaSafeVersionEnabled(fullConfig["System"].safeSCAVERSION.scaSafeVersionEnabled);
+          }
         }
       } else {
         console.error("Failed to save config");
@@ -1400,6 +1404,9 @@ export default function App() {
           if (data.scanValidityDays) setConfigScanValidityDays(data.scanValidityDays);
           if (Array.isArray(data.noSca)) setConfigNoSca(data.noSca);
           if (Array.isArray(data.tiers)) setConfigTiers(data.tiers);
+          if (data.scaSafeVersionEnabled !== undefined) {
+            setScaSafeVersionEnabled(data.scaSafeVersionEnabled);
+          }
           if (data.intakeRequest !== undefined) {
             setConfigIntakeRequest(data.intakeRequest);
           }
@@ -1660,9 +1667,8 @@ export default function App() {
     console.log("CRITICAL: processImportedData called with:", data);
     try {
       setLastRawResponse(data);
-      if (data.scaSafeVersionEnabled !== undefined) {
-        setScaSafeVersionEnabled(data.scaSafeVersionEnabled);
-      }
+      // The Recommended Version(s) column depends strictly on "scaSafeVersionEnabled" : true inside the JSON response of the scan
+      setScaSafeVersionEnabled(data && data.scaSafeVersionEnabled === true);
       
       // Update fullConfig if these fields are present in the imported data (e.g. from dry-run JSON)
       if (fullConfig) {
@@ -1901,27 +1907,6 @@ export default function App() {
 
       const data = await response.json();
       processImportedData(data);
-
-      fetch(getEndpoint('configInfo'))
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data.history)) {
-            setVeracodeHistory(data.history);
-          }
-          if (Array.isArray(data["history-checkmarx"])) {
-            setCheckmarxHistory(data["history-checkmarx"]);
-          }
-          if (Array.isArray(data.engines)) {
-            setConfigEngines(data.engines);
-          }
-          if (Array.isArray(data.tiers)) {
-            setConfigTiers(data.tiers);
-          }
-          if (data.intakeRequest !== undefined) {
-            setConfigIntakeRequest(data.intakeRequest);
-          }
-        })
-        .catch((err) => console.warn("Failed to refresh history:", err));
     } catch (err: any) {
       if (handled) return;
 

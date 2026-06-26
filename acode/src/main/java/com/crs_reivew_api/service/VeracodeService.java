@@ -1063,7 +1063,11 @@ public class VeracodeService {
 
             String json = java.nio.file.Files.readString(targetFile);
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            return mapper.readValue(json, VeracodeReportDTO.class);
+            VeracodeReportDTO dto = mapper.readValue(json, VeracodeReportDTO.class);
+            if (dto != null) {
+                dto.scaSafeVersionEnabled = veracodeConfig.isScaSafeVersionEnabled();
+            }
+            return dto;
         } catch (Exception e) {
             throw new RuntimeException("Failed to load history file " + fileName + ": " + e.getMessage(), e);
         }
