@@ -53,7 +53,6 @@ import { sampleReportData } from "./data";
 import { getAIResponseForComment } from "./services/aiService";
 import { GroupRow } from "./components/GroupRow";
 import { SnowIntakeScreen } from "./components/SnowIntakeScreen";
-import { FinancialDashboard } from "./components/FinancialDashboard";
 import { CWE_BASE_URL } from "./constants";
 import { getEndpoint } from "./config";
 import { calculateIsScanTooOld, updateBackendSummary, updateMitigationProposal } from "./lib/state-update-utils";
@@ -1188,7 +1187,6 @@ export default function App() {
   const [scaSafeVersionEnabled, setScaSafeVersionEnabled] = useState(false);
   const [isServerOnline, setIsServerOnline] = useState(false);
   const [showSnowScreen, setShowSnowScreen] = useState(false);
-  const [showFinancialDashboard, setShowFinancialDashboard] = useState(false);
   const [branch, setBranch] = useState<string>("");
   const [selectedTier, setSelectedTier] = useState<string>("tier-1");
   const [configTiers, setConfigTiers] = useState<string[]>(["tier-1", "tier-2", "tier-3a", "tier-3b"]);
@@ -1355,7 +1353,6 @@ export default function App() {
         return [];
       } else {
         setShowSnowScreen(false);
-        setShowFinancialDashboard(false);
         if (tool === "Checkmarx") {
           const tierVal = (activeOverview as any)?.tier;
           if (tierVal && configTiers.includes(tierVal)) {
@@ -2311,7 +2308,6 @@ export default function App() {
                           const nextVal = !showSnowScreen;
                           setShowSnowScreen(nextVal);
                           if (nextVal) {
-                            setShowFinancialDashboard(false);
                             setSelectedTools([]);
                           }
                         }}
@@ -2323,32 +2319,6 @@ export default function App() {
                       >
                         <Database size={12} className={showSnowScreen ? "text-white" : "text-blue-500"} />
                         Intake
-                      </button>
-                    </div>
-
-                    <div className="flex flex-col">
-                      <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
-                        FINANCE
-                      </span>
-                      <button
-                        type="button"
-                        id="financial-nav-button"
-                        onClick={() => {
-                          const nextVal = !showFinancialDashboard;
-                          setShowFinancialDashboard(nextVal);
-                          if (nextVal) {
-                            setShowSnowScreen(false);
-                            setSelectedTools([]);
-                          }
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 shadow-lg active:scale-95 ${
-                          showFinancialDashboard
-                            ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40 border-blue-500"
-                            : "bg-slate-800 border-slate-700 text-blue-400 hover:border-slate-600"
-                        }`}
-                      >
-                        <DollarSign size={12} className={showFinancialDashboard ? "text-white" : "text-blue-500"} />
-                        Financial
                       </button>
                     </div>
                   </div>
@@ -2502,8 +2472,6 @@ export default function App() {
 
           {showSnowScreen ? (
             <SnowIntakeScreen onClose={() => setShowSnowScreen(false)} />
-          ) : showFinancialDashboard ? (
-            <FinancialDashboard onClose={() => setShowFinancialDashboard(false)} />
           ) : !resultsLoaded ? (
             <div className="col-span-12 flex items-center justify-center">
               <div className="text-center space-y-4 max-w-md">
