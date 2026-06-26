@@ -58,6 +58,16 @@ public class ConfigService {
         return veracodeConfig.isIntakeRequest();
     }
 
+    public java.util.List<String> getUniqueTiers() {
+        if (veracodeConfig.getTierMappings() == null) return java.util.Collections.emptyList();
+        
+        return veracodeConfig.getTierMappings().values().stream()
+                .flatMap(map -> map.values().stream())
+                .distinct()
+                .sorted()
+                .collect(java.util.stream.Collectors.toList());
+    }
+
     public java.util.List<String> getLatestHistoryFiles() {
         int limit = veracodeConfig.getHistoryLimit();
         if (limit <= 0) limit = 10;
@@ -82,6 +92,34 @@ public class ConfigService {
             }
         } catch (Exception e) {
             System.err.println("Error listing history files: " + e.getMessage());
+            return java.util.Collections.emptyList();
+        }
+    }
+
+    public java.util.List<String> getLatestCheckmarxHistoryFiles() {
+        int limit = veracodeConfig.getHistoryLimit();
+        if (limit <= 0) limit = 10;
+        
+        java.nio.file.Path historyDir = java.nio.file.Paths.get("checkmarx", "history");
+        
+        try {
+            if (!java.nio.file.Files.exists(historyDir)) return java.util.Collections.emptyList();
+            
+            try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(historyDir)) {
+                return stream
+                    .filter(p -> java.nio.file.Files.isRegularFile(p))
+                    .sorted((p1, p2) -> {
+                        try {
+                            return java.nio.file.Files.getLastModifiedTime(p2)
+                                .compareTo(java.nio.file.Files.getLastModifiedTime(p1));
+                        } catch (Exception e) { return 0; }
+                    })
+                    .limit(limit)
+                    .map(p -> p.getFileName().toString())
+                    .collect(java.util.stream.Collectors.toList());
+            }
+        } catch (Exception e) {
+            System.err.println("Error listing checkmarx history files: " + e.getMessage());
             return java.util.Collections.emptyList();
         }
     }

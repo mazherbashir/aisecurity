@@ -9,7 +9,7 @@ export class StaticContent {
     .low, .bg-gold {background-color: gold; color: black;}
     .medium, .bg-darkorange {background-color: darkorange; color: black;}
     .high, .bg-red {background-color: red; color: white;}
-    .veryhigh, .bg-darkred {background-color: darkred; color: white;}
+    .veryhigh, .critical, .bg-darkred {background-color: darkred; color: white;}
     .heading {border-radius: 5px; display: inline-block; font-weight: bold;
         padding: 5px 25px; text-transform: uppercase;}
     .highlight {padding: 2px 5px 5px;}

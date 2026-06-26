@@ -715,6 +715,7 @@ public class VeracodeService {
         dto.overview.buildId = report.getBuildId();
         dto.overview.analysisId = report.getAnalysisId();
         dto.overview.scanName = report.getScanName();
+        dto.overview.scanType = "veracode";
         dto.overview.generationDate = report.getGenerationDate();
 
         String rawPolicyName = report.getPolicyName();
@@ -848,11 +849,13 @@ public class VeracodeService {
                         continue;
 
                     // Handle Generic Modules separately via balancing logic later
-                    if (moduleName.equalsIgnoreCase("Python Files")) {
+                    if (moduleName.equalsIgnoreCase("Python Files") || moduleName.toLowerCase().startsWith("python files")) {
                         prescanPythonCount++;
                         continue;
                     }
-                    if (moduleName.equalsIgnoreCase("JS Files") || moduleName.equalsIgnoreCase("JavaScript Files")) {
+                    if (moduleName.equalsIgnoreCase("JS Files") || moduleName.equalsIgnoreCase("JavaScript Files")
+                            || moduleName.toLowerCase().startsWith("js files")
+                            || moduleName.toLowerCase().startsWith("javascript files")) {
                         prescanJsCount++;
                         continue;
                     }
@@ -949,8 +952,7 @@ public class VeracodeService {
                     // Rule: Include only if explicitly in include-modules OR if prefix/suffix
                     // matches a selected module
                     if (isExplicitInclude || hasSelectedMatch) {
-                        boolean isIgnored = veracodeConfig.getIgnoreModules().stream()
-                                .anyMatch(ignore -> displayName.toLowerCase().contains(ignore.toLowerCase()));
+                        boolean isIgnored = isModuleIgnored(displayName, null);
 
                         if (!isIgnored) {
                             if (!dto.unselectedModules.contains(displayName)) {
@@ -1186,11 +1188,7 @@ public class VeracodeService {
                                 String moduleName = (nameAttr != null) ? nameAttr.getNodeValue() : "";
                                 String fileName = (fileNameAttr != null) ? fileNameAttr.getNodeValue() : "";
 
-                                boolean isIgnored = veracodeConfig.getIgnoreModules().stream()
-                                        .anyMatch(ignore -> (!moduleName.isEmpty()
-                                                && moduleName.toLowerCase().contains(ignore.toLowerCase())) ||
-                                                (!fileName.isEmpty()
-                                                        && fileName.toLowerCase().contains(ignore.toLowerCase())));
+                                boolean isIgnored = isModuleIgnored(moduleName, fileName);
 
                                 if (isIgnored) {
                                     debugLog("DEBUG: Skipping architecture/selection for ignored module: "
@@ -1218,6 +1216,44 @@ public class VeracodeService {
         } catch (Exception e) {
             System.err.println("Error parsing modules from XML: " + e.getMessage());
         }
+    }
+
+    boolean isModuleIgnored(String name, String fileName) {
+        List<String> ignoreModules = veracodeConfig.getIgnoreModules();
+        if (ignoreModules == null) {
+            return false;
+        }
+        return ignoreModules.stream().anyMatch(ignore -> {
+            String ignoreLower = ignore.toLowerCase();
+            if (ignoreLower.equals("system") || ignoreLower.equals("microsoft") || ignoreLower.equals("azure")) {
+                if (name != null && !name.isEmpty()) {
+                    String nameLower = name.toLowerCase();
+                    if (nameLower.equals(ignoreLower) 
+                            || nameLower.startsWith(ignoreLower + ".") 
+                            || nameLower.endsWith("." + ignoreLower)
+                            || nameLower.contains("." + ignoreLower + ".")) {
+                        return true;
+                    }
+                }
+                if (fileName != null && !fileName.isEmpty()) {
+                    String fileLower = fileName.toLowerCase();
+                    if (fileLower.equals(ignoreLower) 
+                            || fileLower.startsWith(ignoreLower + ".") 
+                            || fileLower.endsWith("." + ignoreLower)
+                            || fileLower.contains("." + ignoreLower + ".")) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            if (name != null && !name.isEmpty() && name.toLowerCase().contains(ignoreLower)) {
+                return true;
+            }
+            if (fileName != null && !fileName.isEmpty() && fileName.toLowerCase().contains(ignoreLower)) {
+                return true;
+            }
+            return false;
+        });
     }
 
     private List<String> extractModulesFromDetailedReport(String xml) {

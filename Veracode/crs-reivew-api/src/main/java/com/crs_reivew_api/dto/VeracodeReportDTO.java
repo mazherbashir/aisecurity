@@ -37,6 +37,7 @@ public class VeracodeReportDTO {
         public String buildId;
         public String analysisId;
         public String scanName;
+        public String scanType; // veracode or checkmarx
         public String generationDate;
         public String policyName;
         public String policyComplianceStatus;
@@ -87,6 +88,8 @@ public class VeracodeReportDTO {
         public List<String> userComments;
         public String remediation_due_date;
         public String fixedVersion;
+        public String state;
+        public String firstFoundDate;
     }
 
     public static class ScaDetailDTO {

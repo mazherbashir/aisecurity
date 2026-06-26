@@ -21,6 +21,7 @@ interface GroupRowProps {
   isPulling: boolean;
   onUpdateAIComment: (val: string) => void;
   onViewFull: () => void;
+  isCheckmarx?: boolean;
 }
 
 export const GroupRow: React.FC<GroupRowProps> = ({ 
@@ -30,7 +31,8 @@ export const GroupRow: React.FC<GroupRowProps> = ({
   onPullAI, 
   isPulling,
   onUpdateAIComment,
-  onViewFull
+  onViewFull,
+  isCheckmarx
 }) => {
   const [isEditing, setIsEditing] = useState(false);
 
@@ -78,13 +80,13 @@ export const GroupRow: React.FC<GroupRowProps> = ({
                 </a>
               )}
               <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[9px] font-black uppercase tracking-widest leading-none shrink-0 ${
-                group.severity === 'Very High' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
+                (group.severity === 'Very High' || group.severity === 'Critical') ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
                 group.severity === 'High' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
                 group.severity === 'Medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
                 group.severity === 'Low' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
                 'bg-slate-800 text-slate-500 border-slate-700'
               }`}>
-                {group.severity}
+                {(group.severity === 'Very High' && isCheckmarx) || group.severity === 'Critical' ? 'CRITICAL' : group.severity}
               </span>
             </div>
           </div>

@@ -5,6 +5,7 @@ export interface AppConfig {
     configPrompts: string;
     getFinalReport: string;
     veracodeMitigation: string;
+    checkmarxMitigation: string;
     aiAnalyze: string;
     heartbeat: string;
   };
@@ -17,6 +18,7 @@ let config: AppConfig = {
     configPrompts: '/api/config/prompts',
     getFinalReport: '/api/getfinalreport',
     veracodeMitigation: '/api/veracode/mitigation',
+    checkmarxMitigation: '/api/checkmarx/mitigation',
     aiAnalyze: '/api/ai',
     heartbeat: '/api/heartbeat'
   }

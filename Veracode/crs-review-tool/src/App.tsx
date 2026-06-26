@@ -30,6 +30,7 @@ import {
   Trash2,
   Edit2,
   HelpCircle,
+  DollarSign,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -52,6 +53,7 @@ import { sampleReportData } from "./data";
 import { getAIResponseForComment } from "./services/aiService";
 import { GroupRow } from "./components/GroupRow";
 import { SnowIntakeScreen } from "./components/SnowIntakeScreen";
+import { FinancialDashboard } from "./components/FinancialDashboard";
 import { CWE_BASE_URL } from "./constants";
 import { getEndpoint } from "./config";
 import { calculateIsScanTooOld, updateBackendSummary, updateMitigationProposal } from "./lib/state-update-utils";
@@ -155,7 +157,7 @@ function aggregateFindings(
     let severity = finding.severity || "Information";
 
     // Normalize severity for consistency with dashboard breakdown
-    if (severity === "VeryHigh") severity = "Very High";
+    if (severity === "VeryHigh" || severity === "Critical") severity = "Very High";
     if (severity === "Info") severity = "Information";
 
     const location = finding.location || "Unknown Location";
@@ -236,11 +238,16 @@ function adaptBreakdown(breakdownObj: any): {
 
   Object.entries(breakdownObj).forEach(([sev, data]: [string, any]) => {
     let normalizedSev = sev;
-    if (sev === "VeryHigh") normalizedSev = "Very High";
+    if (sev === "VeryHigh" || sev === "Very High" || sev === "Critical") normalizedSev = "Very High";
     if (sev === "Information" || sev === "Info") normalizedSev = "Information";
 
     if (normalizedSev in result) {
-      result[normalizedSev as keyof typeof result] = data.total || 0;
+      const value = typeof data === "number" 
+        ? data 
+        : typeof data?.total === "number" 
+          ? data.total 
+          : parseInt(data?.total) || 0;
+      result[normalizedSev as keyof typeof result] += value;
     }
   });
 
@@ -397,21 +404,33 @@ function ReviewTabContent({
   const [isScanTooOld, setIsScanTooOld] = useState(false);
 
   const formattedHeader = React.useMemo(() => {
-    let header = StaticContent.main_header;
-    header = header.replace(/\{\$accountId\}/g, overview.accountId || "---");
-    header = header.replace(/\{\$appId\}/g, overview.appId || "---");
-    header = header.replace(/\{\$buildId\}/g, overview.buildId || "---");
-    header = header.replace(/\{\$analysisId\}/g, overview.analysisId || "---");
-    header = header.replace(
-      /\{\$static_analysis_unit_id\}/g,
-      overview.staticAnalysisUnitId || "---",
-    );
-    header = header.replace(/\{\$sandbox_id\}/g, overview.sandboxId || "---");
-    header = header.replace(/\{\$scanName\}/g, overview.scanName || "---");
-    header = header.replace(
-      /\{\$profile_name\}/g,
-      overview.applicationName || "---",
-    );
+    let header = "";
+    if (overview.scanType === "checkmarx") {
+      const buildId = overview.buildId || "---";
+      const scanId = overview.scanId || overview.analysisId || "---";
+      const scanName = overview.scanName || "---";
+      const applicationName = overview.applicationName || "---";
+      const viewerLink = overview.viewerLink || `https://us.ast.checkmarx.net/projects/${buildId}/overview?branch=${scanName}`;
+
+      header = `\nCode Review Services (CRS) has assessed your latest scan <code><a target="_blank" href="${viewerLink}">${buildId}</a></code> (SAST) and <code><a target="_blank" href="https://us.ast.checkmarx.net/results/${buildId}/${scanId}/sca?internalPath=%2Fpackages">${scanId}</a></code> (SCA) of the <code><a target="_blank" href="https://us.ast.checkmarx.net/projects/${buildId}/overview?branch=${scanName}">${applicationName}</a></code> application from branch <code class="rounded bg-gray">${scanName}</code> for quality and completeness and reviewed the open findings and available mitigation proposals. Please take a look at those findings in the comments below. If more assistance is needed, please schedule a consultation call by selecting the <i><b>Remediation Consultation</b></i> option from the appointment calendar. For more help, refer to the <i><b>Scheduling Consultations</b></i> section, as detailed in the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/:w:/r/sites/GBL-IFS-NIS-Application-Security/AppReadiness/CRS%20Documents/Client-Facing%20Documentation/CRS%20Process%20Overview.docx?d=w60b17b59a86342efa122e0767f68490f">CRS Process Overview</a> document.\n<br/>\n<hr/>\n`;
+    } else {
+      let main_header = StaticContent.main_header;
+      main_header = main_header.replace(/\{\$accountId\}/g, overview.accountId || "---");
+      main_header = main_header.replace(/\{\$appId\}/g, overview.appId || "---");
+      main_header = main_header.replace(/\{\$buildId\}/g, overview.buildId || "---");
+      main_header = main_header.replace(/\{\$analysisId\}/g, overview.analysisId || "---");
+      main_header = main_header.replace(
+        /\{\$static_analysis_unit_id\}/g,
+        overview.staticAnalysisUnitId || "---",
+      );
+      main_header = main_header.replace(/\{\$sandbox_id\}/g, overview.sandboxId || "---");
+      main_header = main_header.replace(/\{\$scanName\}/g, overview.scanName || "---");
+      main_header = main_header.replace(
+        /\{\$profile_name\}/g,
+        overview.applicationName || "---",
+      );
+      header = main_header;
+    }
 
     const getEffectiveScanDate = (ovw: any) => {
       if (ovw?.scanName) {
@@ -904,6 +923,7 @@ Thank you!`;
                     if (mMatch) mediumDays = mMatch[1];
                   }
 
+                  const isCheckmarxActive = selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx";
                   const meetText = rpDoesMeet === "YES" ? "does" : "does not";
 
                   const veracodeRp = `The SAST assessment has been completed successfully with open findings. The remediation plan <code><a target="_blank" href="https://eu.workbench.pwc.com/home/my-reports/IRM-ARR-Dashboard">${rpNumber}</a></code> is in place for the open findings in adherence to the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a>.<br/>
@@ -913,7 +933,7 @@ This can be considered a <b>final</b> sign-off for the static code analysis for 
 Thank you!
 <hr/>
 <p><b><u>Remediation Plan ${rpNumber} Risk Review</u></b><br/>
-The estimated completion date of ${rpEstimatedCompletionDate} <u>${meetText} meet</u> the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a> Vulnerability Remediation Timeframe for <span class="rounded veryhigh">Very High</span> and <span class="rounded high">High</span> findings (within ${veryHighHighDays} days) and <span class="rounded medium">Medium</span> findings (within ${mediumDays} days).</p>`;
+The estimated completion date of ${rpEstimatedCompletionDate} <u>${meetText} meet</u> the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a> Vulnerability Remediation Timeframe for ${isCheckmarxActive ? `<span class="rounded critical">Critical</span>` : `<span class="rounded veryhigh">Very High</span>`} and <span class="rounded high">High</span> findings (within ${veryHighHighDays} days) and <span class="rounded medium">Medium</span> findings (within ${mediumDays} days).</p>`;
 
                   const hasSastVulnerabilities = (sastSummary?.vulnerabilities || 0) > 0;
                   const hasScaVulnerabilities = (backendScaSummary?.vulnerabilities || 0) > 0;
@@ -1146,12 +1166,40 @@ export default function App() {
     "Anthropic",
   ]);
   const [configHistory, setConfigHistory] = useState<string[]>([]);
+  const [veracodeHistory, setVeracodeHistory] = useState<string[]>([
+    "GBL_ASR_NGA_ADMIN_CROSS_BORDERS.json",
+    "GBL_ADV_CDE_Junction_US_2_03.json",
+    "GBL_ADV_CDE_Junction_US_2_02.json",
+    "GBL_ADV_CDE_Junction_US_2_01.json",
+    "GBL_ASR_NGA_OMNI_DOC_VIEWER_03.json",
+    "GBL_ASR_NGA_OMNI_DOC_VIEWER_02.json",
+    "GBL_ASR_NGA_OMNI_DOC_VIEWER_01.json",
+    "GBL_ASR_NGA_OMNI_DOC_VIEWER.json",
+    "USA_IFS_Job_Requisition_Assistant.json",
+    "USA_ADV_Value_Creation_for_CFOs_04.json"
+  ]);
+  const [checkmarxHistory, setCheckmarxHistory] = useState<string[]>([
+    "FIT_Honeybee_develop.json",
+    "FIT_Honeybee_1781906942677.json"
+  ]);
   const [configScanValidityDays, setConfigScanValidityDays] =
     useState<number>(90);
   const [configIntakeRequest, setConfigIntakeRequest] = useState<boolean | undefined>(undefined);
   const [scaSafeVersionEnabled, setScaSafeVersionEnabled] = useState(false);
   const [isServerOnline, setIsServerOnline] = useState(false);
   const [showSnowScreen, setShowSnowScreen] = useState(false);
+  const [showFinancialDashboard, setShowFinancialDashboard] = useState(false);
+  const [branch, setBranch] = useState<string>("");
+  const [selectedTier, setSelectedTier] = useState<string>("tier-1");
+  const [configTiers, setConfigTiers] = useState<string[]>(["tier-1", "tier-2", "tier-3a", "tier-3b"]);
+
+  useEffect(() => {
+    if (selectedTools.includes("Checkmarx")) {
+      setConfigHistory(checkmarxHistory);
+    } else {
+      setConfigHistory(veracodeHistory);
+    }
+  }, [selectedTools, veracodeHistory, checkmarxHistory]);
 
   const fetchPrompts = async () => {
     try {
@@ -1307,6 +1355,13 @@ export default function App() {
         return [];
       } else {
         setShowSnowScreen(false);
+        setShowFinancialDashboard(false);
+        if (tool === "Checkmarx") {
+          const tierVal = (activeOverview as any)?.tier;
+          if (tierVal && configTiers.includes(tierVal)) {
+            setSelectedTier(tierVal);
+          }
+        }
         return [tool];
       }
     });
@@ -1342,10 +1397,12 @@ export default function App() {
           throw new Error(`Response is not valid JSON or status is not OK (Status: ${res.status})`);
         })
         .then((data) => {
-          if (Array.isArray(data.history)) setConfigHistory(data.history);
+          if (Array.isArray(data.history)) setVeracodeHistory(data.history);
+          if (Array.isArray(data["history-checkmarx"])) setCheckmarxHistory(data["history-checkmarx"]);
           if (Array.isArray(data.engines)) setConfigEngines(data.engines);
           if (data.scanValidityDays) setConfigScanValidityDays(data.scanValidityDays);
           if (Array.isArray(data.noSca)) setConfigNoSca(data.noSca);
+          if (Array.isArray(data.tiers)) setConfigTiers(data.tiers);
           if (data.intakeRequest !== undefined) {
             setConfigIntakeRequest(data.intakeRequest);
           }
@@ -1457,7 +1514,7 @@ export default function App() {
           const parts = sc.split(":");
           if (parts.length === 2) {
             let sName = parts[0].trim();
-            if (sName === "VeryHigh") sName = "Very High";
+            if (sName === "VeryHigh" || sName === "Critical") sName = "Very High";
             const count = parseInt(parts[1].trim(), 10) || 0;
             if (parsedCounts[sName] !== undefined) {
               parsedCounts[sName] = count;
@@ -1524,7 +1581,7 @@ export default function App() {
                   });
                   if (match) {
                     let sName = match.severity || "Medium";
-                    if (sName === "VeryHigh") sName = "Very High";
+                    if (sName === "VeryHigh" || sName === "Critical") sName = "Very High";
                     cveSeverity = sName;
                     foundInGroup = true;
                     break;
@@ -1675,6 +1732,7 @@ export default function App() {
         const mergedOverview = {
           ...mockOverview,
           ...data.overview,
+          scanType: data.overview?.scanType || (selectedTools.includes("Checkmarx") ? "checkmarx" : "veracode"),
           architectures: data.architectures || [],
           scaEcosystems: ecosArray.length > 0 ? `[${ecosArray.join(", ")}]` : "",
           packagingAnomalies,
@@ -1769,7 +1827,17 @@ export default function App() {
 
   const handleFetchResults = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedTools.length === 0 || !appProfile) return;
+    if (selectedTools.length === 0) return;
+    
+    if (selectedTools.includes("Checkmarx")) {
+      const isJsonFile = appProfile.toLowerCase().endsWith(".json");
+      if (!appProfile || (!isJsonFile && (!branch || !selectedTier))) {
+        setBackendError("Profile, Branch and Tier are all mandatory for Checkmarx analysis.");
+        return;
+      }
+    } else {
+      if (!appProfile) return;
+    }
 
     setIsSubmitting(true);
     setBackendError(null);
@@ -1780,9 +1848,13 @@ export default function App() {
 
     let handled = false;
     try {
-      const response = await fetch(
-        `${getEndpoint('getFinalReport')}?application-name=${encodeURIComponent(appProfile)}`,
-      );
+      let reportUrl;
+      if (selectedTools.includes("Checkmarx")) {
+        reportUrl = `/api/checkmarx/getreport?application-name=${encodeURIComponent(appProfile)}&branch-name=${encodeURIComponent(branch)}&tierValue=${encodeURIComponent(selectedTier)}`;
+      } else {
+        reportUrl = `${getEndpoint('getFinalReport')}?application-name=${encodeURIComponent(appProfile)}`;
+      }
+      const response = await fetch(reportUrl);
 
       if (!response.ok) {
         let errorData;
@@ -1837,10 +1909,16 @@ export default function App() {
         .then((res) => res.json())
         .then((data) => {
           if (Array.isArray(data.history)) {
-            setConfigHistory(data.history);
+            setVeracodeHistory(data.history);
+          }
+          if (Array.isArray(data["history-checkmarx"])) {
+            setCheckmarxHistory(data["history-checkmarx"]);
           }
           if (Array.isArray(data.engines)) {
             setConfigEngines(data.engines);
+          }
+          if (Array.isArray(data.tiers)) {
+            setConfigTiers(data.tiers);
           }
           if (data.intakeRequest !== undefined) {
             setConfigIntakeRequest(data.intakeRequest);
@@ -2019,7 +2097,17 @@ export default function App() {
       const isSCA = group.type === "SCA";
       const cveId = isSCA ? group.records[0]?.title || null : null;
 
-      const payload = {
+      const isCheckmarxFlow = selectedTools.includes("Checkmarx") || activeOverview.scanType === "checkmarx";
+      const useCheckmarxApi = isCheckmarxFlow && group.type === "SAST";
+
+      const payload = useCheckmarxApi ? {
+        appId: activeOverview.appId || "",
+        scanId: buildId,
+        flawIdList,
+        action: actionStr,
+        comment: group.aiComment,
+        type: "SAST"
+      } : {
         buildId,
         appId: activeOverview.appId || "",
         flawIdList,
@@ -2030,7 +2118,10 @@ export default function App() {
       };
 
       try {
-        const response = await fetch(getEndpoint('veracodeMitigation'), {
+        const endpoint = useCheckmarxApi 
+          ? getEndpoint('checkmarxMitigation') 
+          : getEndpoint('veracodeMitigation');
+        const response = await fetch(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -2174,25 +2265,32 @@ export default function App() {
     return resultsLoaded ? overview : mockOverview;
   }, [resultsLoaded, overview]);
 
+  useEffect(() => {
+    const tierVal = (activeOverview as any)?.tier;
+    if (tierVal && configTiers.includes(tierVal)) {
+      setSelectedTier(tierVal);
+    }
+  }, [activeOverview, configTiers]);
+
   return (
     <ErrorBoundary
       onError={(err) => setBackendError(`Render Crash: ${err.message}`)}
     >
-      <div className="h-screen overflow-hidden bg-slate-950 text-slate-200 font-sans p-6 selection:bg-blue-500/30">
-        <div className="max-w-[1400px] mx-auto grid grid-cols-12 grid-rows-[auto_minmax(0,1fr)] gap-5 h-full">
+      <div className="h-screen overflow-hidden bg-slate-950 text-slate-200 font-sans p-4 selection:bg-blue-500/30">
+        <div className="max-w-[1450px] mx-auto grid grid-cols-12 grid-rows-[auto_minmax(0,1fr)] gap-4 h-full">
           {/* TOP BAR: Controls */}
-          <div className="col-span-12 bento-card p-4 flex items-center justify-start gap-8 bg-slate-900/50 backdrop-blur-xl flex-shrink-0">
-            <div className="flex gap-8 items-center flex-1">
-              <div className="flex items-center gap-3">
-                <div className="bg-blue-600 p-2 rounded-lg text-white">
-                  <Shield size={24} />
+          <div className="col-span-12 bento-card p-2.5 flex items-center justify-start gap-4 bg-slate-900/50 backdrop-blur-xl flex-shrink-0">
+            <div className="flex gap-4 items-center flex-1">
+              <div className="flex items-center gap-2.5">
+                <div className="bg-blue-600 p-1.5 rounded-lg text-white">
+                  <Shield size={20} />
                 </div>
                 <div className="hidden sm:block">
-                  <h1 className="text-lg font-black tracking-tight leading-tight">
-                    CRS
+                  <h1 className="text-sm font-black tracking-tight leading-tight">
+                    CRS Review Tool
                   </h1>
-                  <p className="text-[10px] text-slate-500 font-mono tracking-widest uppercase">
-                    REVIEW TOOL // v1.0.0
+                  <p className="text-[9px] text-slate-500 font-mono tracking-widest uppercase mt-0.5">
+                    v1.0.0
                   </p>
                 </div>
               </div>
@@ -2202,28 +2300,57 @@ export default function App() {
                 className="flex gap-4 items-end"
               >
                 {configIntakeRequest === undefined && (
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
-                      SNOW
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextVal = !showSnowScreen;
-                        setShowSnowScreen(nextVal);
-                        if (nextVal) {
-                          setSelectedTools([]);
-                        }
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 shadow-lg active:scale-95 ${
-                        showSnowScreen
-                          ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40 border-blue-500"
-                          : "bg-slate-800 border-slate-700 text-blue-400 hover:border-slate-600"
-                      }`}
-                    >
-                      <Database size={12} className={showSnowScreen ? "text-white" : "text-blue-500"} />
-                      Intake
-                    </button>
+                  <div className="flex gap-4">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
+                        SNOW
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextVal = !showSnowScreen;
+                          setShowSnowScreen(nextVal);
+                          if (nextVal) {
+                            setShowFinancialDashboard(false);
+                            setSelectedTools([]);
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 shadow-lg active:scale-95 ${
+                          showSnowScreen
+                            ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40 border-blue-500"
+                            : "bg-slate-800 border-slate-700 text-blue-400 hover:border-slate-600"
+                        }`}
+                      >
+                        <Database size={12} className={showSnowScreen ? "text-white" : "text-blue-500"} />
+                        Intake
+                      </button>
+                    </div>
+
+                    <div className="flex flex-col">
+                      <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
+                        FINANCE
+                      </span>
+                      <button
+                        type="button"
+                        id="financial-nav-button"
+                        onClick={() => {
+                          const nextVal = !showFinancialDashboard;
+                          setShowFinancialDashboard(nextVal);
+                          if (nextVal) {
+                            setShowSnowScreen(false);
+                            setSelectedTools([]);
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 shadow-lg active:scale-95 ${
+                          showFinancialDashboard
+                            ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40 border-blue-500"
+                            : "bg-slate-800 border-slate-700 text-blue-400 hover:border-slate-600"
+                        }`}
+                      >
+                        <DollarSign size={12} className={showFinancialDashboard ? "text-white" : "text-blue-500"} />
+                        Financial
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -2259,7 +2386,7 @@ export default function App() {
                     value={appProfile}
                     onChange={(e) => setAppProfile(e.target.value)}
                     list="app-profiles-list"
-                    className="bento-input w-64 text-[10px] py-1"
+                    className="bento-input w-48 text-[10px] py-1"
                   />
                   <datalist id="app-profiles-list">
                     {configHistory.map((app) => (
@@ -2267,6 +2394,40 @@ export default function App() {
                     ))}
                   </datalist>
                 </div>
+
+                {selectedTools.includes("Checkmarx") && (
+                  <>
+                    <div id="checkmarx-branch-container" className="flex flex-col">
+                      <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
+                        Branch
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="e.g. main, dev"
+                        value={branch}
+                        onChange={(e) => setBranch(e.target.value)}
+                        className="bento-input w-36 text-[10px] py-1 bg-slate-950 border-slate-700"
+                      />
+                    </div>
+                    <div id="checkmarx-tier-container" className="flex flex-col">
+                      <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
+                        Tier
+                      </span>
+                      <select
+                        value={selectedTier}
+                        onChange={(e) => setSelectedTier(e.target.value)}
+                        className="bento-input w-32 text-[10px] py-1 bg-slate-950 border-slate-700 font-bold"
+                      >
+                        {configTiers.map((tier) => (
+                          <option key={tier} value={tier}>
+                            {tier}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+
                 <div className="flex flex-col">
                   <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
                     AI Engine
@@ -2288,7 +2449,12 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={
-                    isSubmitting || selectedTools.length === 0 || !appProfile
+                    isSubmitting ||
+                    selectedTools.length === 0 ||
+                    !appProfile ||
+                    (selectedTools.includes("Checkmarx") &&
+                      !appProfile.toLowerCase().endsWith(".json") &&
+                      (!branch.trim() || !selectedTier))
                   }
                   className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1.5 px-6 rounded-lg text-xs transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50"
                 >
@@ -2336,6 +2502,8 @@ export default function App() {
 
           {showSnowScreen ? (
             <SnowIntakeScreen onClose={() => setShowSnowScreen(false)} />
+          ) : showFinancialDashboard ? (
+            <FinancialDashboard onClose={() => setShowFinancialDashboard(false)} />
           ) : !resultsLoaded ? (
             <div className="col-span-12 flex items-center justify-center">
               <div className="text-center space-y-4 max-w-md">
@@ -2388,7 +2556,7 @@ export default function App() {
                               className="flex-1 min-w-[48px] p-2 rounded-lg border border-slate-800/50 flex flex-col items-center justify-center text-center bg-slate-800/10"
                             >
                               <span className="text-[8px] text-slate-500 uppercase font-black tracking-tighter mb-0.5 select-none">
-                                {sev === "Very High" ? "V. HIGH" : sev === "Information" ? "INFO" : sev}
+                                {sev === "Very High" ? (selectedTools.includes("Checkmarx") ? "CRITICAL" : "V. HIGH") : sev === "Information" ? "INFO" : sev}
                               </span>
                               <span
                                 className={`text-[13px] font-mono font-black ${
@@ -2430,7 +2598,7 @@ export default function App() {
                               className="flex-1 min-w-[48px] p-2 rounded-lg border border-slate-800/50 flex flex-col items-center justify-center text-center bg-slate-800/10"
                             >
                               <span className="text-[8px] text-slate-500 uppercase font-black tracking-tighter mb-0.5 select-none">
-                                {sev}
+                                {sev === "Very High" ? (selectedTools.includes("Checkmarx") ? "CRITICAL" : "V. HIGH") : sev}
                               </span>
                               <span
                                 className={`text-[13px] font-mono font-black ${
@@ -2576,6 +2744,7 @@ export default function App() {
                     </div>
 
                     {/* Minified Files Status */}
+                    {(activeOverview as any).scanType !== "checkmarx" && (
                     <div id="scan-analysis-minified" className="flex justify-between items-center py-1 border-t border-slate-800/50 gap-2 flex-wrap relative group">
                       <span className="text-[10px] text-slate-500 uppercase font-black shrink-0">
                         MINIFIED FILES
@@ -2616,8 +2785,10 @@ export default function App() {
                         </div>
                       )}
                     </div>
+                    )}
 
                     {/* Precompile Status */}
+                    {(activeOverview as any).scanType !== "checkmarx" && (
                     <div id="scan-analysis-precompile" className="flex justify-between items-center py-1 border-t border-slate-800/50 gap-2 flex-wrap relative group">
                       <span className="text-[10px] text-slate-500 uppercase font-black shrink-0">
                         PRECOMPILE
@@ -2658,6 +2829,7 @@ export default function App() {
                         </div>
                       )}
                     </div>
+                    )}
 
 
                   </div>
@@ -2714,7 +2886,11 @@ export default function App() {
                       const accountId = activeOverview.accountId || "";
                       const appId = activeOverview.appId || "";
                       const buildId = activeOverview.buildId || "";
-                      const profileUrl = `https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:${accountId}:${appId}:${buildId}`;
+                      const scanName = activeOverview.scanName || "";
+                      const isCheckmarx = activeOverview.scanType === "checkmarx";
+                      const profileUrl = isCheckmarx
+                        ? `https://us.ast.checkmarx.net/projects/${buildId}/overview?branch=${scanName}`
+                        : `https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:${accountId}:${appId}:${buildId}`;
                       
                       return (
                         <p
@@ -2858,9 +3034,13 @@ export default function App() {
                             if (!count || count <= 0) return null;
                             return (
                               <span key={sev} className="flex gap-1">
-                                <span className="text-slate-500">{sev.replace('Information', 'Info')}</span>
+                                <span className="text-slate-500">
+                                  {sev === "Very High" 
+                                    ? (selectedTools.includes("Checkmarx") ? "Critical" : "V.High") 
+                                    : sev.replace('Information', 'Info')}
+                                </span>
                                 <span className={`${
-                                  sev === "Very High" ? "text-purple-400" :
+                                  (sev === "Very High" || sev === "Critical") ? "text-purple-400" :
                                   sev === "High" ? "text-red-400" :
                                   sev === "Medium" ? "text-orange-400" :
                                   sev === "Low" ? "text-blue-400" :
@@ -2887,9 +3067,13 @@ export default function App() {
                             if (!count || count <= 0) return null;
                             return (
                               <span key={sev} className="flex gap-1">
-                                <span className="text-slate-500">{sev.replace('Information', 'Info')}</span>
+                                <span className="text-slate-500">
+                                  {sev === "Very High" 
+                                    ? (selectedTools.includes("Checkmarx") ? "Critical" : "V.High") 
+                                    : sev.replace('Information', 'Info')}
+                                </span>
                                 <span className={`${
-                                  sev === "Very High" ? "text-purple-400" :
+                                  (sev === "Very High" || sev === "Critical") ? "text-purple-400" :
                                   sev === "High" ? "text-red-400" :
                                   sev === "Medium" ? "text-orange-400" :
                                   sev === "Low" ? "text-blue-400" :
@@ -2971,6 +3155,7 @@ export default function App() {
                                   updateGroupAIComment(group.groupId, val)
                                 }
                                 onViewFull={() => setDetailedGroup(group)}
+                                isCheckmarx={selectedTools.includes("Checkmarx")}
                               />
                             ))}
                           </AnimatePresence>
@@ -3591,7 +3776,7 @@ export default function App() {
                                         <thead>
                                             <tr className="bg-slate-900/50 border-b border-slate-800/50">
                                                 <th className="px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 border-r border-slate-800/50">Asset Tier</th>
-                                                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 text-center">Very High</th>
+                                                <th className="px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 text-center">{selectedTools.includes("Checkmarx") ? "Critical" : "Very High"}</th>
                                                 <th className="px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-amber-500 text-center">High</th>
                                                 <th className="px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-orange-500 text-center">Medium</th>
                                                 <th className="px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Low</th>
@@ -3886,7 +4071,7 @@ export default function App() {
                         </div>
                         <span
                           className={`px-2 py-1 rounded border text-[10px] font-black uppercase tracking-widest leading-none ${
-                            detailedGroup.severity === "Very High"
+                            (detailedGroup.severity === "Very High" || detailedGroup.severity === "Critical")
                               ? "bg-purple-500/10 text-purple-400 border border-purple-500/30"
                               : detailedGroup.severity === "High"
                                 ? "bg-red-500/10 text-red-400 border border-red-500/30"
@@ -3897,7 +4082,7 @@ export default function App() {
                                     : "bg-slate-800 text-slate-500 border border-slate-700"
                           }`}
                         >
-                          {detailedGroup.severity}
+                          {(detailedGroup.severity === "Very High" && selectedTools.includes("Checkmarx")) || detailedGroup.severity === "Critical" ? "CRITICAL" : detailedGroup.severity}
                         </span>
                       </div>
                     </div>
@@ -4144,7 +4329,7 @@ export default function App() {
                             ? (item.records[0]?.title || item.identifier.split(" - ")[0])
                             : `CWE-${item.cweId}`;
                           let gSev = item.severity;
-                          if (gSev === "VeryHigh") gSev = "Very High";
+                          if (gSev === "VeryHigh" || gSev === "Critical") gSev = "Very High";
                           if (gSev === "Information") gSev = "Info";
 
                           const key = `${displayKey}__${gSev}`;
@@ -4159,13 +4344,13 @@ export default function App() {
                           <div className="flex items-center gap-3">
                             <span className="font-mono text-xs font-black text-slate-400 uppercase">{displayKey}</span>
                             <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[9px] font-black uppercase tracking-widest leading-none shrink-0 ${
-                              severity === 'Very High' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
+                              (severity === 'Very High' || severity === 'Critical') ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
                               severity === 'High' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
                               severity === 'Medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
                               severity === 'Low' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
                               'bg-slate-800 text-slate-500 border-slate-700'
                             }`}>
-                              {severity}
+                              {(severity === 'Very High' && selectedTools.includes("Checkmarx")) || severity === 'Critical' ? 'CRITICAL' : severity}
                             </span>
                           </div>
                           <span className="text-xs font-black text-blue-400 bg-blue-500/10 px-2 py-1 rounded shrink-0">{count} {count === 1 ? 'record' : 'records'}</span>

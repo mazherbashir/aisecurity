@@ -41,6 +41,7 @@ public class ConfigController {
         try {
             java.util.Map<String, Object> info = new java.util.HashMap<>();
             info.put("history", configService.getLatestHistoryFiles());
+            info.put("history-checkmarx", configService.getLatestCheckmarxHistoryFiles());
             
             java.util.List<String> combinedEngines = new java.util.ArrayList<>();
             if (configService.getAiEngines() != null) {
@@ -55,6 +56,7 @@ public class ConfigController {
             info.put("noSca", configService.getNoSca());
             info.put("scaSafeVersionEnabled", configService.isScaSafeVersionEnabled());
             info.put("intakeRequest", configService.isIntakeRequest());
+            info.put("tiers", configService.getUniqueTiers());
             return info;
         } catch (Exception e) {
             logger.error("Error retrieving config info: {}", e.getMessage());

@@ -26,6 +26,8 @@ export function generateReviewSummary(input: SummaryInput) {
     selectedTools
   } = input;
 
+  const isCheckmarx = !!(selectedTools?.includes("Checkmarx") || overview?.scanType === "checkmarx");
+
   let rows = "";
   if (backendSastSummary && backendSastSummary.breakdown) {
     Object.entries(backendSastSummary.breakdown).forEach(
@@ -44,11 +46,11 @@ export function generateReviewSummary(input: SummaryInput) {
             for (const g of aggregatedData.sast) {
               // Normalize severity strings to match what comes from backend
               let gSev = g.severity;
-              if (gSev === "VeryHigh") gSev = "Very High";
+              if (gSev === "VeryHigh" || gSev === "Critical") gSev = "Very High";
               if (gSev === "Information") gSev = "Info";
               
               let bSev = severity;
-              if (bSev === "VeryHigh") bSev = "Very High";
+              if (bSev === "VeryHigh" || bSev === "Critical") bSev = "Very High";
               if (bSev === "Information") bSev = "Info";
               
               if (String(g.cweId) === String(extractedCwe) && gSev === bSev) {
@@ -63,12 +65,23 @@ export function generateReviewSummary(input: SummaryInput) {
           }
           
           const noneCount = Math.max(0, originalCount - approvedCount - rejectedCount);
-          const severityClass = severity.toLowerCase().replace(" ", "");
+          let displayedSeverity = severity;
+          let severityClass = severity.toLowerCase().replace(" ", "");
+
+          if (severity === "Very High" || severity === "VeryHigh" || severity === "Critical") {
+            if (isCheckmarx) {
+              displayedSeverity = "Critical";
+              severityClass = "critical";
+            } else {
+              displayedSeverity = "Very High";
+              severityClass = "veryhigh";
+            }
+          }
 
           const buildRow = (count: number, label: string, bgClass: string) => {
             if (count <= 0) return "";
             return `<tr>
-              <td><span class="crs-rounded minwidth ${severityClass}">${severity}</span></td>
+              <td><span class="crs-rounded minwidth ${severityClass}">${displayedSeverity}</span></td>
               <td><a target="_blank" href="https://cwe.mitre.org/data/definitions/${extractedCwe}.html">${finding.cwe}</a></td>
               <td><span class="crs-rounded sev ${bgClass}">${label}</span></td>
               <td>${count}</td>
@@ -109,11 +122,11 @@ export function generateReviewSummary(input: SummaryInput) {
           if (aggregatedData?.sast) {
             for (const g of aggregatedData.sast) {
               let gSev = g.severity;
-              if (gSev === "VeryHigh") gSev = "Very High";
+              if (gSev === "VeryHigh" || gSev === "Critical") gSev = "Very High";
               if (gSev === "Information") gSev = "Info";
               
               let bSev = severity;
-              if (bSev === "VeryHigh") bSev = "Very High";
+              if (bSev === "VeryHigh" || bSev === "Critical") bSev = "Very High";
               if (bSev === "Information") bSev = "Info";
               
               if (String(g.cweId) === String(extractedCwe) && gSev === bSev) {
@@ -132,7 +145,7 @@ export function generateReviewSummary(input: SummaryInput) {
           
           if (outstandingCount > 0) {
             const sevLower = severity.toLowerCase().replace(" ", "");
-            if (["medium", "high", "veryhigh", "very high"].includes(sevLower)) {
+            if (["medium", "high", "veryhigh", "very high", "critical"].includes(sevLower)) {
               hasOutstandingHighOrMediumOrVeryHigh = true;
             } else {
               hasOutstandingLowOrLower = true;
@@ -175,7 +188,7 @@ export function generateReviewSummary(input: SummaryInput) {
       proposalSummaryText += `After reviewing all available flaw mitigation proposals, ${num_rejected} ${verbRej} rejected or require(s) additional information.<br/>`;
     }
 
-    const hasVeracode = !selectedTools || selectedTools.includes("Veracode");
+    const hasVeracode = !isCheckmarx;
     if (hasVeracode) {
       proposalSummaryText += `For approval and rejection details, review the <a target="_blank" href="https://docs.veracode.com/r/improve_mitigation?section=mitigate__team">individual flaws on the Triage Flaws page</a> and the <a target="_blank" href="https://docs.veracode.com/r/Approve_or_Reject_Veracode_SCA_Mitigations">History tab of the individual Component Profiles on the Software Composition Analysis page</a> within the Veracode platform.<br/>`;
     }
@@ -229,7 +242,7 @@ export function generateReviewSummary(input: SummaryInput) {
     if (backendScaSummary?.breakdown) {
       Object.entries(backendScaSummary.breakdown).forEach(([sev, val]: [string, any]) => {
         let normSev = sev;
-        if (sev === "VeryHigh") normSev = "Very High";
+        if (sev === "VeryHigh" || sev === "Critical") normSev = "Very High";
         if (parsedOriginalBreakdown[normSev] !== undefined) {
           parsedOriginalBreakdown[normSev] = typeof val === "number" ? val : (val?.total || 0);
         }
@@ -265,7 +278,7 @@ export function generateReviewSummary(input: SummaryInput) {
           const parts = sc.split(":");
           if (parts.length === 2) {
             let sName = parts[0].trim();
-            if (sName === "VeryHigh") sName = "Very High";
+            if (sName === "VeryHigh" || sName === "Critical") sName = "Very High";
             const count = parseInt(parts[1].trim(), 10) || 0;
             if (parsedCounts[sName] !== undefined) {
               parsedCounts[sName] = count;
@@ -332,7 +345,7 @@ export function generateReviewSummary(input: SummaryInput) {
                   });
                   if (match) {
                     let sName = match.severity || "Medium";
-                    if (sName === "VeryHigh") sName = "Very High";
+                    if (sName === "VeryHigh" || sName === "Critical") sName = "Very High";
                     cveSeverity = sName;
                     foundInGroup = true;
                     break;
@@ -414,9 +427,9 @@ export function generateReviewSummary(input: SummaryInput) {
     const breakdown = backendScaSummary.breakdown || {};
     const severities = [
       {
-        name: "Very High",
+        name: isCheckmarx ? "Critical" : "Very High",
         count: remainingBreakdown["Very High"] || 0,
-        class: "veryhigh",
+        class: isCheckmarx ? "critical" : "veryhigh",
       },
       { name: "High", count: remainingBreakdown["High"] || 0, class: "high" },
       {
@@ -489,7 +502,7 @@ Code Review Services recommends upgrading the third-party component with a vulne
 
     const getHighestSeverity = (cnts: string) => {
       const s = (cnts || "").toLowerCase().replace(" ", "");
-      if (s.includes("veryhigh")) return 1;
+      if (s.includes("veryhigh") || s.includes("critical")) return 1;
       if (s.includes("high")) return 2;
       if (s.includes("medium")) return 3;
       if (s.includes("low")) return 4;
@@ -507,14 +520,14 @@ Code Review Services recommends upgrading the third-party component with a vulne
         let countsStr = detail.severityCounts || "";
         const severityMatches = Array.from(
           countsStr.matchAll(
-            /(Very High|VeryHigh|High|Medium|Low):\s*(\d+)/g,
+            /(Very High|VeryHigh|Critical|High|Medium|Low):\s*(\d+)/g,
           ),
         );
         let parsedSeverities: { sev: string; count: string }[] = [];
 
         if (severityMatches.length > 0) {
           parsedSeverities = severityMatches.map((m) => ({
-            sev: m[1] === "VeryHigh" ? "Very High" : m[1],
+            sev: (m[1] === "VeryHigh" || m[1] === "Critical") ? "Very High" : m[1],
             count: m[2],
           }));
         } else {
@@ -531,6 +544,7 @@ Code Review Services recommends upgrading the third-party component with a vulne
         const severityOrder: Record<string, number> = {
           "Very High": 1,
           VeryHigh: 1,
+          Critical: 1,
           High: 2,
           Medium: 3,
           Low: 4,
@@ -539,7 +553,7 @@ Code Review Services recommends upgrading the third-party component with a vulne
         let totalCounts: Record<string, number> = { "Very High": 0, "High": 0, "Medium": 0, "Low": 0 };
         parsedSeverities.forEach((p) => {
           let s = p.sev.trim();
-          if (s === "VeryHigh") s = "Very High";
+          if (s === "VeryHigh" || s === "Critical") s = "Very High";
           if (s === "Info" || s === "Information") s = "Low";
           if (s !== "Very High" && s !== "High" && s !== "Medium" && s !== "Low") return;
           totalCounts[s] = (totalCounts[s] || 0) + (parseInt(p.count, 10) || 0);
@@ -571,7 +585,7 @@ Code Review Services recommends upgrading the third-party component with a vulne
                 if (locMatch || isCveMatch) {
                   status = g.status || "none";
                   let s = g.severity.trim();
-                  if (s === "VeryHigh") s = "Very High";
+                  if (s === "VeryHigh" || s === "Critical") s = "Very High";
                   if (s === "Info" || s === "Information") s = "Low";
                   if (s !== "Very High" && s !== "High" && s !== "Medium" && s !== "Low") s = "Medium";
                   severity = s;
@@ -605,8 +619,18 @@ Code Review Services recommends upgrading the third-party component with a vulne
             .filter(([sev, c]) => c > 0)
             .sort(([sevA], [sevB]) => (severityOrder[sevA] || 99) - (severityOrder[sevB] || 99))
             .map(([sev, c]) => {
-              const sevClass = sev.toLowerCase().replace(" ", "");
-              return `<span class="crs-rounded minwidth ${sevClass}">${sev}</span>: ${c}`;
+              let displayedSev = sev;
+              let sevClass = sev.toLowerCase().replace(" ", "");
+              if (sev === "Very High" || sev === "VeryHigh" || sev === "Critical") {
+                if (isCheckmarx) {
+                  displayedSev = "Critical";
+                  sevClass = "critical";
+                } else {
+                  displayedSev = "Very High";
+                  sevClass = "veryhigh";
+                }
+              }
+              return `<span class="crs-rounded minwidth ${sevClass}">${displayedSev}</span>: ${c}`;
             });
 
           if (severitiesToRender.length === 0) return "";

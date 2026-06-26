@@ -3,7 +3,7 @@ export function updateMitigationProposal(prev: any, group: any) {
   if (!prev) return prev;
   const updated = { ...prev };
   let sev = group.severity;
-  if (sev === 'VeryHigh') sev = 'Very High';
+  if (sev === 'VeryHigh' || sev === 'Critical') sev = 'Very High';
   
   // Normalization logic
   if (!updated[sev] && updated[sev.replace("Information", "Info")] !== undefined) {
@@ -25,7 +25,7 @@ export function updateBackendSummary(prev: any, group: any) {
   if (!prev || !prev.breakdown) return prev;
   const breakdown = { ...prev.breakdown };
   let sevKey = group.severity;
-  if (sevKey === 'VeryHigh') sevKey = 'Very High';
+  if (sevKey === 'VeryHigh' || sevKey === 'Critical') sevKey = 'Very High';
   
   if (!breakdown[sevKey] && breakdown[sevKey.replace("Information", "Info")]) {
     sevKey = sevKey.replace("Information", "Info");

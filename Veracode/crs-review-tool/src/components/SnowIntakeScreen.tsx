@@ -13,9 +13,13 @@ import {
   Hash,
   RefreshCw,
   AlertTriangle,
-  CheckCircle2
+  CheckCircle2,
+  Plus,
+  X,
+  Edit2,
+  Loader2
 } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 
 interface AssignmentGroup {
   display_value: string;
@@ -300,6 +304,100 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
   const [endpointUsed, setEndpointUsed] = useState<string>("");
   const [credentialsPath, setCredentialsPath] = useState<string>("");
 
+  // Drawer & Form State for Create/Update Task
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<SnowRecord | null>(null);
+
+  const [formShortDesc, setFormShortDesc] = useState("");
+  const [formAssignmentGroup, setFormAssignmentGroup] = useState("");
+  const [formAssignedTo, setFormAssignedTo] = useState("");
+  const [formState, setFormState] = useState("Open");
+  const [formType, setFormType] = useState("Static Scan Access Request");
+  const [formApplication, setFormApplication] = useState("");
+  const [formBillingModel, setFormBillingModel] = useState("Consumption-based");
+
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  const openCreateDrawer = () => {
+    setEditingRecord(null);
+    setFormShortDesc("");
+    setFormAssignmentGroup("GLOBAL - NIS - CRS Intake");
+    setFormAssignedTo("");
+    setFormState("Open");
+    setFormType("Static Scan Access Request");
+    setFormApplication("");
+    setFormBillingModel("Consumption-based");
+    setFormError("");
+    setIsDrawerOpen(true);
+  };
+
+  const openEditDrawer = (record: SnowRecord) => {
+    setEditingRecord(record);
+    setFormShortDesc(record.short_description || "");
+    setFormAssignmentGroup(record.assignment_group?.display_value || "GLOBAL - NIS - CRS Intake");
+    setFormAssignedTo(record.assigned_to || "");
+    setFormState(record.state || "Open");
+    setFormType(record.variables?.type || "Static Scan Access Request");
+    setFormApplication(record.variables?.application || "");
+    setFormBillingModel(record.variables?.billing_model || "Consumption-based");
+    setFormError("");
+    setIsDrawerOpen(true);
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormSubmitting(true);
+    setFormError("");
+
+    const bodyData = {
+      number: editingRecord ? editingRecord.number : undefined,
+      short_description: formShortDesc,
+      state: formState,
+      assigned_to: formAssignedTo,
+      assignment_group: {
+        display_value: formAssignmentGroup || "GLOBAL - NIS - CRS Intake"
+      },
+      request_item: {
+        number: editingRecord?.request_item?.number || undefined,
+        state: formState,
+        cat_item: {
+          display_value: editingRecord?.request_item?.cat_item?.display_value || "Code Review Services"
+        }
+      },
+      variables: {
+        type: formType,
+        application: formApplication || undefined,
+        billing_model: formBillingModel
+      }
+    };
+
+    try {
+      const response = await fetch("/api/intake/requests", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(bodyData)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server returned status ${response.status}`);
+      }
+
+      // Refresh the task list by calling the task list API
+      await fetchRecords();
+
+      // Close the drawer on success
+      setIsDrawerOpen(false);
+    } catch (err) {
+      console.error("Error creating/updating task:", err);
+      setFormError((err as Error).message || "Failed to save the task. Please try again.");
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
+
   const loadOfflineMockData = () => {
     setError(null);
     setApiSource("mock");
@@ -375,6 +473,9 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
       if (isLive && parsedRawRecords) {
         setRecords(parsedRawRecords.map(normalizeSnowRecord));
         setApiSource("live");
+      } else if (parsedRawRecords && resData && resData.source === "mock") {
+        setRecords(parsedRawRecords.map(normalizeSnowRecord));
+        setApiSource("mock");
       } else {
         console.warn("ServiceNow live fetch didn't yield expected record format or returned error:", resData);
         setApiSource(null);
@@ -710,6 +811,16 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
               <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
             </button>
 
+            {/* Create Task Button */}
+            <button
+              onClick={openCreateDrawer}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 border border-blue-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer shrink-0"
+              title="Create a new ServiceNow Task"
+            >
+              <Plus size={12} />
+              <span>Create Task</span>
+            </button>
+
             <div className="relative w-44 sm:w-52 max-w-full">
               <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-slate-500">
                 <Search size={12} />
@@ -778,6 +889,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                 <th className="p-4 font-black">Short Description</th>
                 <th className="p-4 w-60 font-black">Variables Info</th>
                 <th className="p-4 w-32 font-black">Assigned / State</th>
+                <th className="p-4 w-24 font-black text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/30">
@@ -815,6 +927,10 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                         <div className="h-5 bg-slate-800 rounded-md w-20"></div>
                         <div className="h-3.5 bg-slate-850 rounded-md w-24"></div>
                       </div>
+                    </td>
+                    {/* Actions skeleton */}
+                    <td className="p-4 align-top text-right">
+                      <div className="h-7 bg-slate-800 rounded-md w-16 ml-auto"></div>
                     </td>
                   </tr>
                 ))
@@ -959,6 +1075,18 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                           </div>
                         </div>
                       </td>
+
+                      {/* Actions */}
+                      <td className="p-4 align-top text-right">
+                        <button
+                          onClick={() => openEditDrawer(record)}
+                          className="px-2 py-1 bg-slate-800 hover:bg-slate-750 border border-slate-700 hover:border-slate-500 rounded text-[9px] font-black uppercase tracking-wider text-blue-400 hover:text-white transition-all active:scale-95 cursor-pointer inline-flex items-center gap-1 shadow-sm"
+                          title="Edit Task"
+                        >
+                          <Edit2 size={9} />
+                          <span>Edit</span>
+                        </button>
+                      </td>
                     </tr>
                   );
                 })
@@ -966,7 +1094,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
 
               {!loading && error && (
                 <tr>
-                  <td colSpan={5} className="py-20 text-center px-4">
+                  <td colSpan={6} className="py-20 text-center px-4">
                     <AlertTriangle size={42} className="mx-auto text-red-500 mb-4" />
                     <p className="text-red-400 font-black uppercase tracking-widest text-xs animate-pulse">
                       ServiceNow Integration Error
@@ -994,7 +1122,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
 
               {!loading && !error && filteredRecords.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-24 text-center">
+                  <td colSpan={6} className="py-24 text-center">
                     <FileText size={36} className="mx-auto text-slate-800 mb-3" />
                     <p className="text-slate-500 font-black uppercase tracking-widest text-xs">
                       No tickets match the active search/filters
@@ -1016,6 +1144,195 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
           </div>
         </div>
       </div>
+
+      {/* Create Task / Slide-over Drawer */}
+      <AnimatePresence>
+        {isDrawerOpen && (
+          <div className="fixed inset-0 z-50 flex justify-end">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsDrawerOpen(false)}
+              className="absolute inset-0 bg-slate-950 cursor-pointer"
+            />
+
+            {/* Drawer content */}
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="relative w-full max-w-md bg-slate-900 border-l border-slate-800 h-full shadow-2xl flex flex-col z-50 overflow-hidden"
+            >
+              {/* Drawer Header */}
+              <div className="p-6 border-b border-slate-800 bg-slate-950/40 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-200">
+                    {editingRecord ? "Update ServiceNow Task" : "Create ServiceNow Task"}
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-widest mt-0.5">
+                    {editingRecord ? `Modifying ${editingRecord.number}` : "Provision a new intake task"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsDrawerOpen(false)}
+                  className="p-1.5 bg-slate-800/80 hover:bg-slate-850 border border-slate-700/60 rounded-lg text-slate-400 hover:text-white transition-all active:scale-95 cursor-pointer"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* Drawer Form Body */}
+              <form onSubmit={handleFormSubmit} className="flex-1 overflow-auto p-6 space-y-5">
+                {formError && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs font-medium">
+                    {formError}
+                  </div>
+                )}
+
+                {/* Short Description */}
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] uppercase tracking-wider text-slate-400 font-black">
+                    Short Description <span className="text-blue-500">*</span>
+                  </label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={formShortDesc}
+                    onChange={(e) => setFormShortDesc(e.target.value)}
+                    placeholder="e.g. Static Scan Access Request: Service API Onboarding"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs outline-none text-slate-300 placeholder-slate-600 focus:border-blue-500/50 transition-all font-medium resize-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Assignment Group */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-400 font-black">
+                      Assignment Group
+                    </label>
+                    <input
+                      type="text"
+                      value={formAssignmentGroup}
+                      onChange={(e) => setFormAssignmentGroup(e.target.value)}
+                      placeholder="GLOBAL - NIS - CRS Intake"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs outline-none text-slate-300 placeholder-slate-600 focus:border-blue-500/50 transition-all font-medium"
+                    />
+                  </div>
+
+                  {/* Assigned To */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-400 font-black">
+                      Assigned To
+                    </label>
+                    <input
+                      type="text"
+                      value={formAssignedTo}
+                      onChange={(e) => setFormAssignedTo(e.target.value)}
+                      placeholder="e.g. Suraj Shinde"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs outline-none text-slate-300 placeholder-slate-600 focus:border-blue-500/50 transition-all font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Task State */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-400 font-black">
+                      Task State
+                    </label>
+                    <select
+                      value={formState}
+                      onChange={(e) => setFormState(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs outline-none text-slate-400 focus:border-blue-500/50 transition-all font-black uppercase"
+                    >
+                      <option value="Open">Open</option>
+                      <option value="Work in Progress">Work in Progress</option>
+                      <option value="No Response">No Response</option>
+                      <option value="Responded">Responded</option>
+                    </select>
+                  </div>
+
+                  {/* Variable: Type */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-400 font-black">
+                      Intake Type
+                    </label>
+                    <select
+                      value={formType}
+                      onChange={(e) => setFormType(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs outline-none text-slate-400 focus:border-blue-500/50 transition-all font-black uppercase"
+                    >
+                      <option value="Static Scan Access Request">Static Scan Access Request</option>
+                      <option value="CI/CD Integration Support">CI/CD Integration Support</option>
+                      <option value="Create Scanning Tool Profile">Create Scanning Tool Profile</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 border-t border-slate-800/40 pt-4">
+                  {/* Variable: Application */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-400 font-black">
+                      Application Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formApplication}
+                      onChange={(e) => setFormApplication(e.target.value)}
+                      placeholder="e.g. CRS-DEMO-APP"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs outline-none text-slate-300 placeholder-slate-600 focus:border-blue-500/50 transition-all font-medium"
+                    />
+                  </div>
+
+                  {/* Variable: Billing Model */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-400 font-black">
+                      Billing Model
+                    </label>
+                    <select
+                      value={formBillingModel}
+                      onChange={(e) => setFormBillingModel(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs outline-none text-slate-400 focus:border-blue-500/50 transition-all font-black uppercase"
+                    >
+                      <option value="Consumption-based">Consumption-based</option>
+                      <option value="Mandatory BSS">Mandatory BSS</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Drawer Form Actions Footer */}
+                <div className="pt-6 border-t border-slate-800 flex items-center justify-end gap-3 bg-slate-900 sticky bottom-0 z-10 mt-auto">
+                  <button
+                    type="button"
+                    onClick={() => setIsDrawerOpen(false)}
+                    className="px-4 py-2 bg-slate-950 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={formSubmitting}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 border border-blue-500 text-white rounded-lg text-xs font-black uppercase tracking-wider shadow-lg shadow-blue-900/40 transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {formSubmitting ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>{editingRecord ? "Update Task" : "Create Task"}</>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </motion.div>
   );
