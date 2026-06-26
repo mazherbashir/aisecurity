@@ -2296,7 +2296,7 @@ export default function App() {
                 onSubmit={handleFetchResults}
                 className="flex gap-4 items-end"
               >
-                {configIntakeRequest === undefined && (
+                {configIntakeRequest !== false && (
                   <div className="flex gap-4">
                     <div className="flex flex-col">
                       <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
