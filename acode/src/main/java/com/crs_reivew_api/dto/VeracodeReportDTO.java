@@ -64,6 +64,7 @@ public class VeracodeReportDTO {
 
     public static class CweFindingDTO {
         public String cwe;
+        public String categoryname;
         public int count;
         public String date_first_occurrence;
         public String remediation_due_date;

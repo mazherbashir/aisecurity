@@ -1383,6 +1383,7 @@ public class VeracodeService {
 
                     var finding = new VeracodeReportDTO.CweFindingDTO();
                     finding.cwe = cwe;
+                    finding.categoryname = list.isEmpty() ? "" : list.get(0).getCategoryName();
                     finding.count = list.size();
                     finding.date_first_occurrence = oldestDate;
                     finding.remediation_due_date = calculateDueDate(oldestDate, dto.overview.tier,

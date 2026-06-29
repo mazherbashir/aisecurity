@@ -226,6 +226,7 @@ public class CheckmarxService {
                             if (cweDto == null) {
                                 cweDto = new com.crs_reivew_api.dto.VeracodeReportDTO.CweFindingDTO();
                                 cweDto.cwe = cweKey;
+                                cweDto.categoryname = queryName;
                                 cweDto.count = 0;
                                 cweDto.date_first_occurrence = firstFoundDate;
                                 cweDto.remediation_due_date = calculateDueDate(firstFoundDate, tierValue, severityStr);

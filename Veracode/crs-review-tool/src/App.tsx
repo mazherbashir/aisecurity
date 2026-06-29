@@ -1511,18 +1511,27 @@ export default function App() {
 
         let unapprovedCvesInPkg = 0;
 
-        // Parse severityCounts for this package: e.g. "High: 1, Low: 2"
+        // Parse severityCounts for this package: e.g. "High: 4 Critical: 2"
         const parsedCounts: Record<string, number> = { "Very High": 0, High: 0, Medium: 0, Low: 0 };
-        const sevCounts = (detail.severityCounts || "").split(",").map((s: string) => s.trim()).filter(Boolean);
-        sevCounts.forEach((sc: string) => {
-          const parts = sc.split(":");
-          if (parts.length === 2) {
-            let sName = parts[0].trim();
-            if (sName === "VeryHigh" || sName === "Critical") sName = "Very High";
-            const count = parseInt(parts[1].trim(), 10) || 0;
-            if (parsedCounts[sName] !== undefined) {
-              parsedCounts[sName] = count;
-            }
+        const severityMatches = Array.from(
+          (detail.severityCounts || "").matchAll(
+            /(Very\s*High|VeryHigh|Critical|High|Medium|Low):\s*(\d+)/gi
+          )
+        );
+        severityMatches.forEach((match) => {
+          let sName = match[1].trim();
+          if (/^Very\s*High$/i.test(sName) || /^VeryHigh$/i.test(sName) || /^Critical$/i.test(sName)) {
+            sName = "Very High";
+          } else if (/^High$/i.test(sName)) {
+            sName = "High";
+          } else if (/^Medium$/i.test(sName)) {
+            sName = "Medium";
+          } else if (/^Low$/i.test(sName)) {
+            sName = "Low";
+          }
+          const count = parseInt(match[2], 10) || 0;
+          if (parsedCounts[sName] !== undefined) {
+            parsedCounts[sName] = count;
           }
         });
 
@@ -2878,11 +2887,10 @@ export default function App() {
                       Date
                     </span>
                     <p className="text-[11px] font-mono text-slate-400" title={activeOverview.submitted_date || activeOverview.generationDate || ""}>
-                      {
-                        String(activeOverview.submitted_date || activeOverview.generationDate || "---").split(
-                          " ",
-                        )[0]
-                      }
+                      {(() => {
+                        const raw = String(activeOverview.submitted_date || activeOverview.generationDate || "---");
+                        return raw.includes("T") ? raw.split("T")[0] : raw.split(" ")[0];
+                      })()}
                     </p>
                   </div>
                   {(() => {
