@@ -405,13 +405,14 @@ function ReviewTabContent({
   const formattedHeader = React.useMemo(() => {
     let header = "";
     if (overview.scanType === "checkmarx") {
+      const appId = overview.appId || "---";
       const buildId = overview.buildId || "---";
       const scanId = overview.scanId || overview.analysisId || "---";
       const scanName = overview.scanName || "---";
       const applicationName = overview.applicationName || "---";
-      const viewerLink = overview.viewerLink || `https://us.ast.checkmarx.net/projects/${buildId}/overview?branch=${scanName}`;
+      const viewerLink = overview.viewerLink || `https://us.ast.checkmarx.net/projects/${appId}/overview?branch=${scanName}`;
 
-      header = `\nCode Review Services (CRS) has assessed your latest scan <code><a target="_blank" href="${viewerLink}">${buildId}</a></code> (SAST) and <code><a target="_blank" href="https://us.ast.checkmarx.net/results/${buildId}/${scanId}/sca?internalPath=%2Fpackages">${scanId}</a></code> (SCA) of the <code><a target="_blank" href="https://us.ast.checkmarx.net/projects/${buildId}/overview?branch=${scanName}">${applicationName}</a></code> application from branch <code class="rounded bg-gray">${scanName}</code> for quality and completeness and reviewed the open findings and available mitigation proposals. Please take a look at those findings in the comments below. If more assistance is needed, please schedule a consultation call by selecting the <i><b>Remediation Consultation</b></i> option from the appointment calendar. For more help, refer to the <i><b>Scheduling Consultations</b></i> section, as detailed in the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/:w:/r/sites/GBL-IFS-NIS-Application-Security/AppReadiness/CRS%20Documents/Client-Facing%20Documentation/CRS%20Process%20Overview.docx?d=w60b17b59a86342efa122e0767f68490f">CRS Process Overview</a> document.\n<br/>\n<hr/>\n`;
+      header = `\nCode Review Services (CRS) has assessed your latest scan <code><a target="_blank" href="${viewerLink}">${appId}</a></code> (SAST) and <code><a target="_blank" href="https://us.ast.checkmarx.net/results/${appId}/${scanId}/sca?internalPath=%2Fpackages">${scanId}</a></code> (SCA) of the <code><a target="_blank" href="https://us.ast.checkmarx.net/projects/${appId}/overview?branch=${scanName}">${applicationName}</a></code> application from branch <code class="rounded bg-gray">${scanName}</code> for quality and completeness and reviewed the open findings and available mitigation proposals. Please take a look at those findings in the comments below. If more assistance is needed, please schedule a consultation call by selecting the <i><b>Remediation Consultation</b></i> option from the appointment calendar. For more help, refer to the <i><b>Scheduling Consultations</b></i> section, as detailed in the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/:w:/r/sites/GBL-IFS-NIS-Application-Security/AppReadiness/CRS%20Documents/Client-Facing%20Documentation/CRS%20Process%20Overview.docx?d=w60b17b59a86342efa122e0767f68490f">CRS Process Overview</a> document.\n<br/>\n<hr/>\n`;
     } else {
       let main_header = StaticContent.main_header;
       main_header = main_header.replace(/\{\$accountId\}/g, overview.accountId || "---");
@@ -2851,7 +2852,7 @@ export default function App() {
                       const scanName = activeOverview.scanName || "";
                       const isCheckmarx = activeOverview.scanType === "checkmarx";
                       const profileUrl = isCheckmarx
-                        ? `https://us.ast.checkmarx.net/projects/${buildId}/overview?branch=${scanName}`
+                        ? `https://us.ast.checkmarx.net/projects/${appId}/overview?branch=${scanName}`
                         : `https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:${accountId}:${appId}:${buildId}`;
                       
                       return (
