@@ -224,6 +224,32 @@ function aggregateFindings(
   return result;
 }
 
+function restorePersistedComments(groups: AggregatedGroup[]): AggregatedGroup[] {
+  let persistedComments: Record<string, { aiComment: string; aiMetrics?: any; status?: 'approved' | 'rejected' }> = {};
+  try {
+    const raw = localStorage.getItem("crs_persisted_comments");
+    if (raw) {
+      persistedComments = JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn("Failed to parse persisted comments:", e);
+  }
+
+  return groups.map((g) => {
+    const saved = persistedComments[g.groupId];
+    if (saved) {
+      return {
+        ...g,
+        aiComment: saved.aiComment || g.aiComment,
+        aiMetrics: saved.aiMetrics || g.aiMetrics,
+        status: saved.status || g.status,
+      };
+    }
+    return g;
+  });
+}
+
+
 function adaptBreakdown(breakdownObj: any): {
   "Very High": number;
   High: number;
@@ -1155,6 +1181,42 @@ export default function App() {
   const [detailedGroup, setDetailedGroup] = useState<AggregatedGroup | null>(
     null,
   );
+
+  // Persist pulled AI recommendations and status to localStorage so they are not lost on page reload/back navigation
+  useEffect(() => {
+    if (aggregatedData.sast.length > 0 || aggregatedData.sca.length > 0) {
+      const persisted: Record<string, { aiComment: string; aiMetrics?: any; status?: 'approved' | 'rejected' }> = {};
+      
+      // Load current persisted comments from localStorage to avoid overwriting unrelated scans' data
+      try {
+        const existingRaw = localStorage.getItem("crs_persisted_comments");
+        if (existingRaw) {
+          Object.assign(persisted, JSON.parse(existingRaw));
+        }
+      } catch (e) {
+        console.warn("Failed to parse existing persisted comments:", e);
+      }
+
+      let hasUpdates = false;
+      [...aggregatedData.sast, ...aggregatedData.sca].forEach((g) => {
+        if (g.aiComment || g.status) {
+          persisted[g.groupId] = {
+            aiComment: g.aiComment,
+            aiMetrics: g.aiMetrics,
+            status: g.status,
+          };
+          hasUpdates = true;
+        }
+      });
+
+      if (hasUpdates) {
+        localStorage.setItem("crs_persisted_comments", JSON.stringify(persisted));
+      }
+    }
+  }, [aggregatedData]);
+
+
+
   const [sensitiveGroupToBypass, setSensitiveGroupToBypass] = useState<AggregatedGroup | null>(null);
   const [loadingAIGroups, setLoadingAIGroups] = useState<Set<string>>(new Set());
 
@@ -1816,7 +1878,10 @@ export default function App() {
       const scaGroups = aggregateFindings(scaFindings, "SCA");
 
       console.log("Setting Final States.");
-      setAggregatedData({ sast: sastGroups, sca: scaGroups });
+      setAggregatedData({
+        sast: restorePersistedComments(sastGroups),
+        sca: restorePersistedComments(scaGroups)
+      });
 
       // Auto-switch to appropriate tab based on findings
       if (sastGroups.length > 0) {
@@ -1942,7 +2007,10 @@ export default function App() {
         setSastMitigationProposal({ Total: 17, Medium: 16, Info: 1 });
         setScaMitigationProposal({ Total: 0, Medium: 0, Info: 0 });
         setOverview(mockOverview);
-        setAggregatedData({ sast: sastGroups, sca: scaGroups });
+        setAggregatedData({
+          sast: restorePersistedComments(sastGroups),
+          sca: restorePersistedComments(scaGroups)
+        });
 
         // Auto-switch to appropriate tab based on findings
         if (sastGroups.length > 0) {
