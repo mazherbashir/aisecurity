@@ -1350,6 +1350,12 @@ export default function App() {
           "NET": ["nuget", "CIL32", "MSIL"],
           "Ruby": ["rubygems", "RUBY"],
           "Python": ["pip", "pypi", "PYTHON"]
+        },
+        "Checkmarx": data["Checkmarx"] || {
+          "authUrl": "https://us.iam.checkmarx.net/auth/realms/pwc-tax/protocol/openid-connect/token",
+          "apiUrl": "https://us.ast.checkmarx.net/api",
+          "pollingInterval": 5000,
+          "pollingRetry": 15
         }
       };
 
@@ -1416,6 +1422,7 @@ export default function App() {
 
   const toggleTool = (tool: ToolName) => {
     setSelectedTools((prev) => {
+      setAppProfile(""); // Clear the Profile input when switching between scanners
       if (prev.includes(tool)) {
         return [];
       } else {
@@ -3275,7 +3282,7 @@ export default function App() {
                 </div>
 
                 <div className="flex gap-2 p-3 border-b border-slate-800 bg-slate-900/30 overflow-x-auto scrollbar-hide">
-                  {["SAST&SCA Prompts", "System", "AiEngine", "SecondaryAudit", "Compliance", "Exclusions", "Architecture Mapping"].filter(tab => {
+                  {["SAST&SCA Prompts", "System", "AiEngine", "SecondaryAudit", "Compliance", "Exclusions", "Architecture Mapping", "Checkmarx"].filter(tab => {
                     if (tab === "SecondaryAudit") {
                       return fullConfig["System"]?.secondaryAuditEnabled;
                     }
@@ -4006,6 +4013,98 @@ export default function App() {
                               </div>
                             );
                           })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Checkmarx Tab */}
+                    {settingsTab === "Checkmarx" && fullConfig["Checkmarx"] && (
+                      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <section className="space-y-1">
+                          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]" /> Checkmarx Integration Config
+                          </h3>
+                          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest leading-relaxed">
+                            Configure credentials, endpoints, and polling parameters for the Checkmarx AST integration
+                          </p>
+                        </section>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-900/10 border border-slate-800/80 p-6 rounded-2xl">
+                          <div className="space-y-2 col-span-1 md:col-span-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                              Authentication Token URL
+                            </label>
+                            <input
+                              type="text"
+                              value={fullConfig["Checkmarx"].authUrl || ""}
+                              onChange={(e) => setFullConfig({
+                                ...fullConfig,
+                                "Checkmarx": { ...fullConfig["Checkmarx"], authUrl: e.target.value }
+                              })}
+                              className="w-full bento-input py-3 px-4 text-xs font-mono bg-slate-950 border border-slate-800 text-slate-100 rounded-xl outline-none"
+                              placeholder="https://..."
+                            />
+                            <p className="text-[9px] text-slate-500 lowercase">
+                              OAuth2 / OIDC endpoint used for retrieving authentication tokens
+                            </p>
+                          </div>
+
+                          <div className="space-y-2 col-span-1 md:col-span-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                              Checkmarx API Base URL
+                            </label>
+                            <input
+                              type="text"
+                              value={fullConfig["Checkmarx"].apiUrl || ""}
+                              onChange={(e) => setFullConfig({
+                                ...fullConfig,
+                                "Checkmarx": { ...fullConfig["Checkmarx"], apiUrl: e.target.value }
+                              })}
+                              className="w-full bento-input py-3 px-4 text-xs font-mono bg-slate-950 border border-slate-800 text-slate-100 rounded-xl outline-none"
+                              placeholder="https://..."
+                            />
+                            <p className="text-[9px] text-slate-500 lowercase">
+                              Base endpoint path for API resource queries and submissions
+                            </p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                              Polling Interval (ms)
+                            </label>
+                            <input
+                              type="number"
+                              value={fullConfig["Checkmarx"].pollingInterval ?? 5000}
+                              onChange={(e) => setFullConfig({
+                                ...fullConfig,
+                                "Checkmarx": { ...fullConfig["Checkmarx"], pollingInterval: parseInt(e.target.value, 10) || 0 }
+                              })}
+                              className="w-full bento-input py-3 px-4 text-xs font-mono bg-slate-950 border border-slate-800 text-slate-100 rounded-xl outline-none"
+                              min={100}
+                            />
+                            <p className="text-[9px] text-slate-500 lowercase">
+                              Delay in milliseconds between successive status check requests
+                            </p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                              Polling Retry Limit
+                            </label>
+                            <input
+                              type="number"
+                              value={fullConfig["Checkmarx"].pollingRetry ?? 15}
+                              onChange={(e) => setFullConfig({
+                                ...fullConfig,
+                                "Checkmarx": { ...fullConfig["Checkmarx"], pollingRetry: parseInt(e.target.value, 10) || 0 }
+                              })}
+                              className="w-full bento-input py-3 px-4 text-xs font-mono bg-slate-950 border border-slate-800 text-slate-100 rounded-xl outline-none"
+                              min={1}
+                            />
+                            <p className="text-[9px] text-slate-500 lowercase">
+                              Maximum number of poll requests before giving up or timing out
+                            </p>
+                          </div>
                         </div>
                       </div>
                     )}
