@@ -66,6 +66,7 @@ public class VeracodeConfig {
     private String auditorPrompt;
     private String gcaasSecretKey;
     private String gcaasRestEndpointIntake;
+    private String gcaasRestEndpointRemediation;
     private boolean intakeRequest = false;
     private Key key = new Key();
 
@@ -136,6 +137,14 @@ public class VeracodeConfig {
                 }
                 if (this.gcaasRestEndpointIntake == null || this.gcaasRestEndpointIntake.isEmpty()) {
                     this.gcaasRestEndpointIntake = appProps.getProperty("veracode.api.gcaas-rest-endpoint-intake");
+                }
+
+                // GCaaS rest endpoint remediation
+                if (this.gcaasRestEndpointRemediation == null || this.gcaasRestEndpointRemediation.isEmpty()) {
+                    this.gcaasRestEndpointRemediation = appProps.getProperty("veracode.api.gcaas.rest-endpoint-remediation");
+                }
+                if (this.gcaasRestEndpointRemediation == null || this.gcaasRestEndpointRemediation.isEmpty()) {
+                    this.gcaasRestEndpointRemediation = appProps.getProperty("gcaas.rest-endpoint-remediation");
                 }
                 
                 // Populate tierMappings
@@ -534,6 +543,14 @@ public class VeracodeConfig {
 
     public void setGcaasRestEndpointIntake(String gcaasRestEndpointIntake) {
         this.gcaasRestEndpointIntake = gcaasRestEndpointIntake;
+    }
+
+    public String getGcaasRestEndpointRemediation() {
+        return gcaasRestEndpointRemediation;
+    }
+
+    public void setGcaasRestEndpointRemediation(String gcaasRestEndpointRemediation) {
+        this.gcaasRestEndpointRemediation = gcaasRestEndpointRemediation;
     }
 
     public boolean isIntakeRequest() {

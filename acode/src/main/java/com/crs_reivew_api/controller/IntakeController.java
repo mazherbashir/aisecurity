@@ -59,12 +59,42 @@ public class IntakeController {
         }
     }
 
+    private JsonNode fetchEndpointData(CloseableHttpClient httpClient, String endpoint, String secretKey) throws Exception {
+        String maskedKey = (secretKey != null && secretKey.length() > 8)
+                ? secretKey.substring(0, 4) + "..." + secretKey.substring(secretKey.length() - 4)
+                : (secretKey != null ? secretKey : "null");
+
+        logger.info("Fetching GCaaS requests from: {}. Using Proxy-Authorization key: {} (length: {})", 
+                endpoint, maskedKey, secretKey != null ? secretKey.length() : 0);
+
+        HttpGet request = new HttpGet(endpoint);
+        request.setHeader("Proxy-Authorization", secretKey);
+        request.setHeader("Content-Type", "application/json");
+        request.setHeader("Accept", "application/json");
+
+        logger.info("Outgoing Request URI: {}", endpoint);
+        logger.info("Outgoing Request Headers: Proxy-Authorization=[{}], Content-Type=[application/json], Accept=[application/json]", secretKey);
+
+        try (CloseableHttpResponse response = httpClient.execute(request)) {
+            int responseCode = response.getCode();
+            String responseBody = response.getEntity() != null ? EntityUtils.toString(response.getEntity()) : "";
+
+            if (responseCode != 200) {
+                logger.error("GCaaS API returned error code: {}. Response: {}", responseCode, responseBody);
+                throw new RuntimeException("GCaaS API returned status code " + responseCode + ": " + responseBody);
+            }
+
+            return objectMapper.readTree(responseBody);
+        }
+    }
+
     @GetMapping(value = "/api/intake/requests", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> getIntakeRequests() {
-        String endpoint = veracodeConfig.getGcaasRestEndpointIntake();
+        String intakeEndpoint = veracodeConfig.getGcaasRestEndpointIntake();
+        String remediationEndpoint = veracodeConfig.getGcaasRestEndpointRemediation();
         String secretKey = veracodeConfig.getGcaasSecretKey();
 
-        if (endpoint == null || endpoint.isEmpty()) {
+        if (intakeEndpoint == null || intakeEndpoint.isEmpty()) {
             logger.error("GCaaS Intake rest endpoint is not configured in credentials file.");
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("error", "Configuration Error");
@@ -80,49 +110,53 @@ public class IntakeController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
 
-        String maskedKey = (secretKey != null && secretKey.length() > 8)
-                ? secretKey.substring(0, 4) + "..." + secretKey.substring(secretKey.length() - 4)
-                : (secretKey != null ? secretKey : "null");
-
-        logger.info("Fetching GCaaS intake requests from: {}. Using Proxy-Authorization key: {} (length: {})", 
-                endpoint, maskedKey, secretKey != null ? secretKey.length() : 0);
+        com.fasterxml.jackson.databind.node.ArrayNode combinedArray = objectMapper.createArrayNode();
 
         try (CloseableHttpClient httpClient = createHttpClient()) {
-            HttpGet request = new HttpGet(endpoint);
-            request.setHeader("Proxy-Authorization", secretKey);
-            request.setHeader("Content-Type", "application/json");
-            request.setHeader("Accept", "application/json");
-
-            logger.info("Outgoing Request URI: {}", endpoint);
-            logger.info("Outgoing Request Headers: Proxy-Authorization=[{}], Content-Type=[application/json], Accept=[application/json]", secretKey);
-
-            try (CloseableHttpResponse response = httpClient.execute(request)) {
-                int responseCode = response.getCode();
-                String responseBody = response.getEntity() != null ? EntityUtils.toString(response.getEntity()) : "";
-
-                if (responseCode != 200) {
-                    logger.error("GCaaS Intake API returned error code: {}. Response: {}", responseCode, responseBody);
-                    Map<String, Object> errorResponse = new HashMap<>();
-                    errorResponse.put("error", "API Error");
-                    errorResponse.put("status", responseCode);
-                    errorResponse.put("message", "GCaaS API returned status code " + responseCode);
-                    try {
-                        JsonNode errorDetails = objectMapper.readTree(responseBody);
-                        errorResponse.put("details", errorDetails);
-                    } catch (Exception e) {
-                        errorResponse.put("details", responseBody);
+            // 1. Fetch Intake
+            try {
+                JsonNode intakeJson = fetchEndpointData(httpClient, intakeEndpoint, secretKey);
+                JsonNode intakeList = intakeJson.has("result") ? intakeJson.get("result") : intakeJson;
+                if (intakeList.isArray()) {
+                    for (JsonNode node : intakeList) {
+                        combinedArray.add(node);
                     }
-                    return ResponseEntity.status(responseCode).body(errorResponse);
+                } else {
+                    combinedArray.add(intakeList);
                 }
-
-                JsonNode responseJson = objectMapper.readTree(responseBody);
-                return ResponseEntity.ok(responseJson);
+            } catch (Exception e) {
+                logger.error("Error fetching intake requests from {}: {}", intakeEndpoint, e.getMessage());
             }
+
+            // 2. Fetch Remediation (if configured)
+            if (remediationEndpoint != null && !remediationEndpoint.isEmpty()) {
+                try {
+                    JsonNode remediationJson = fetchEndpointData(httpClient, remediationEndpoint, secretKey);
+                    JsonNode remediationList = remediationJson.has("result") ? remediationJson.get("result") : remediationJson;
+                    if (remediationList.isArray()) {
+                        for (JsonNode node : remediationList) {
+                            combinedArray.add(node);
+                        }
+                    } else {
+                        combinedArray.add(remediationList);
+                    }
+                } catch (Exception e) {
+                    logger.error("Error fetching remediation requests from {}: {}", remediationEndpoint, e.getMessage());
+                }
+            } else {
+                logger.warn("GCaaS Remediation rest endpoint is not configured, skipping.");
+            }
+
+            // Wrap the combined array in a root object under the "result" key to maintain original structure
+            com.fasterxml.jackson.databind.node.ObjectNode rootResponse = objectMapper.createObjectNode();
+            rootResponse.set("result", combinedArray);
+
+            return ResponseEntity.ok(rootResponse);
         } catch (Exception e) {
-            logger.error("Exception occurred while calling GCaaS Intake API", e);
+            logger.error("Exception occurred while calling GCaaS APIs", e);
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("error", "Connection Error");
-            errorResponse.put("message", "Failed to retrieve intake requests: " + e.getMessage());
+            errorResponse.put("message", "Failed to retrieve requests: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
