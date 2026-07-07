@@ -459,11 +459,9 @@ function ReviewTabContent({
     }
 
     const getEffectiveScanDate = (ovw: any) => {
-      if (ovw?.scanName) {
-        const match = ovw.scanName.match(/^\d{4}-\d{2}-\d{2}/);
-        if (match) return match[0];
-      }
-      return ovw?.submitted_date || ovw?.generationDate || null;
+      if (ovw?.submitted_date) return ovw.submitted_date;
+      if (ovw?.generationDate) return ovw.generationDate;
+      return null;
     };
     const effectiveDate = getEffectiveScanDate(overview);
     const isActuallyTooOld = calculateIsScanTooOld(effectiveDate, configScanValidityDays);
@@ -2971,11 +2969,9 @@ export default function App() {
                   </div>
                   {(() => {
                     const getEffectiveScanDate = (ovw: any) => {
-                      if (ovw?.scanName) {
-                        const match = ovw.scanName.match(/^\d{4}-\d{2}-\d{2}/);
-                        if (match) return match[0];
-                      }
-                      return ovw?.submitted_date || ovw?.generationDate || null;
+                      if (ovw?.submitted_date) return ovw.submitted_date;
+                      if (ovw?.generationDate) return ovw.generationDate;
+                      return null;
                     };
                     const effectiveDate = getEffectiveScanDate(activeOverview);
                     if (calculateIsScanTooOld(effectiveDate, configScanValidityDays)) {

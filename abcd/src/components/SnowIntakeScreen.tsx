@@ -296,6 +296,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
   const [searchTerm, setSearchTerm] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("ALL");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
+  const [assignedFilter, setAssignedFilter] = useState<string>("ALL");
 
   const [records, setRecords] = useState<SnowRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -523,15 +524,39 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
       const varTypeStr = record.variables.type;
       const matchType = typeFilter === "ALL" || varTypeStr === typeFilter;
 
-      return matchSearch && matchState && matchType;
-    });
-  }, [records, searchTerm, stateFilter, typeFilter]);
+      const assignedToVal = record.assigned_to || "Unassigned";
+      const matchAssigned = assignedFilter === "ALL" || assignedToVal === assignedFilter;
 
-  // Total statistics for the right side panel
+      return matchSearch && matchState && matchType && matchAssigned;
+    });
+  }, [records, searchTerm, stateFilter, typeFilter, assignedFilter]);
+
+  // Total statistics for the panels and hero
   const stats = useMemo(() => {
-    const targetRecords = typeFilter === "ALL" 
-      ? records 
-      : records.filter(r => r.variables.type === typeFilter);
+    // 1. targetRecords for overall Hero stats & State breakdowns: respects ALL current filters
+    const targetRecords = records.filter((r) => {
+      const numberStr = r.number;
+      const shortDescStr = r.short_description;
+      const assignedToStr = r.assigned_to;
+      const ritmStr = r.request_item ? r.request_item.number : "";
+
+      const matchSearch = 
+        numberStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        shortDescStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        ritmStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        assignedToStr.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const stateStr = r.state;
+      const matchState = stateFilter === "ALL" || stateStr === stateFilter;
+      
+      const varTypeStr = r.variables.type;
+      const matchType = typeFilter === "ALL" || varTypeStr === typeFilter;
+
+      const assignedToVal = r.assigned_to || "Unassigned";
+      const matchAssigned = assignedFilter === "ALL" || assignedToVal === assignedFilter;
+
+      return matchSearch && matchState && matchType && matchAssigned;
+    });
 
     const total = targetRecords.length;
     const workInProgress = targetRecords.filter(r => r.state === "Work in Progress").length;
@@ -539,16 +564,69 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
     const noResponse = targetRecords.filter(r => r.state === "No Response").length;
     const responded = targetRecords.filter(r => r.state === "Responded").length;
 
-    // Type counts
+    // Initialize counts for all possible types and users present in full records
     const types: Record<string, number> = {};
-    const applications: Record<string, number> = {};
-    const billingModels: Record<string, number> = {};
     const assignedUsers: Record<string, number> = {};
 
     records.forEach((r) => {
       const type = r.variables.type || "Unknown Type";
-      types[type] = (types[type] || 0) + 1;
+      types[type] = 0;
+      const user = r.assigned_to || "Unassigned";
+      assignedUsers[user] = 0;
     });
+
+    // Populate type counts: respect stateFilter, searchTerm, and assignedFilter (but ignore typeFilter)
+    records.forEach((r) => {
+      const numberStr = r.number;
+      const shortDescStr = r.short_description;
+      const assignedToStr = r.assigned_to;
+      const ritmStr = r.request_item ? r.request_item.number : "";
+
+      const matchSearch = 
+        numberStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        shortDescStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        ritmStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        assignedToStr.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const stateStr = r.state;
+      const matchState = stateFilter === "ALL" || stateStr === stateFilter;
+
+      const assignedToVal = r.assigned_to || "Unassigned";
+      const matchAssigned = assignedFilter === "ALL" || assignedToVal === assignedFilter;
+
+      if (matchSearch && matchState && matchAssigned) {
+        const type = r.variables.type || "Unknown Type";
+        types[type] = (types[type] || 0) + 1;
+      }
+    });
+
+    // Populate assigned user counts: respect stateFilter, searchTerm, and typeFilter (but ignore assignedFilter)
+    records.forEach((r) => {
+      const numberStr = r.number;
+      const shortDescStr = r.short_description;
+      const assignedToStr = r.assigned_to;
+      const ritmStr = r.request_item ? r.request_item.number : "";
+
+      const matchSearch = 
+        numberStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        shortDescStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        ritmStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        assignedToStr.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const stateStr = r.state;
+      const matchState = stateFilter === "ALL" || stateStr === stateFilter;
+      
+      const varTypeStr = r.variables.type;
+      const matchType = typeFilter === "ALL" || varTypeStr === typeFilter;
+
+      if (matchSearch && matchState && matchType) {
+        const user = r.assigned_to || "Unassigned";
+        assignedUsers[user] = (assignedUsers[user] || 0) + 1;
+      }
+    });
+
+    const applications: Record<string, number> = {};
+    const billingModels: Record<string, number> = {};
 
     targetRecords.forEach((r) => {
       const app = r.variables.application;
@@ -564,9 +642,6 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
       } else {
         billingModels["Unspecified"] = (billingModels["Unspecified"] || 0) + 1;
       }
-      
-      const user = r.assigned_to || "Unassigned";
-      assignedUsers[user] = (assignedUsers[user] || 0) + 1;
     });
 
     return {
@@ -580,7 +655,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
       billingModels,
       assignedUsers
     };
-  }, [records, typeFilter]);
+  }, [records, searchTerm, stateFilter, typeFilter, assignedFilter]);
 
   // Helper to render values that have links, else falling back to normal text
   const renderCellWithLink = (value?: string, link?: string, customClassName?: string) => {
@@ -617,7 +692,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
           
           <div className="flex justify-between items-start mb-4">
             <h3 className="text-[10px] uppercase tracking-[0.25em] text-slate-500 font-black">
-              {typeFilter !== "ALL" ? "Intake Filter Stats" : "Total Intake Tasks"}
+              {typeFilter !== "ALL" || assignedFilter !== "ALL" ? "Intake Filter Stats" : "Total Intake Tasks"}
             </h3>
             <span className="p-1.5 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20">
               <Database size={14} className="animate-pulse" />
@@ -628,14 +703,21 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
             <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 font-mono tracking-tight leading-none">
               {stats.total.toString().padStart(2, "0")}
             </span>
-            {typeFilter !== "ALL" ? (
-              <div className="mt-2.5">
+            {typeFilter !== "ALL" || assignedFilter !== "ALL" ? (
+              <div className="mt-2.5 space-y-1.5">
                 <span className="text-[8px] px-1 bg-blue-500/10 border border-blue-500/20 text-blue-400 font-black tracking-widest uppercase rounded">
-                  FILTER ACTIVE
+                  FILTERS ACTIVE
                 </span>
-                <p className="text-[10px] text-slate-300 font-bold tracking-tight mt-1 truncate" title={typeFilter}>
-                  {typeFilter}
-                </p>
+                {typeFilter !== "ALL" && (
+                  <p className="text-[10px] text-slate-300 font-bold tracking-tight truncate" title={`Type: ${typeFilter}`}>
+                    <span className="text-slate-500">Type:</span> {typeFilter}
+                  </p>
+                )}
+                {assignedFilter !== "ALL" && (
+                  <p className="text-[10px] text-slate-300 font-bold tracking-tight truncate" title={`Assigned: ${assignedFilter}`}>
+                    <span className="text-slate-500">Assigned:</span> {assignedFilter}
+                  </p>
+                )}
               </div>
             ) : (
               <p className="text-[9px] text-slate-500 uppercase tracking-widest font-black mt-2">
@@ -663,12 +745,15 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
             </div>
           </div>
 
-          {typeFilter !== "ALL" && (
+          {(typeFilter !== "ALL" || assignedFilter !== "ALL") && (
             <button
-              onClick={() => setTypeFilter("ALL")}
+              onClick={() => {
+                setTypeFilter("ALL");
+                setAssignedFilter("ALL");
+              }}
               className="mt-3.5 w-full py-2 bg-slate-950 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white rounded-lg text-[9px] uppercase tracking-[0.1em] font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
             >
-              <span>← Show All Types</span>
+              <span>← Clear All Filters</span>
             </button>
           )}
         </div>
@@ -726,18 +811,44 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
           </h3>
 
           <div className="space-y-2">
-            {Object.entries(stats.assignedUsers).map(([user, count]) => (
-              <div key={user} className="flex items-center justify-between p-2 bg-slate-950/40 rounded border border-slate-850">
-                <span className="text-[10px] text-slate-400 truncate max-w-[140px] font-bold" title={user}>{user}</span>
-                <span className={`text-[9px] font-mono font-black px-1.5 py-0.5 rounded ${
-                  user !== "Unassigned" 
-                    ? "text-purple-400 bg-purple-500/5 border border-purple-500/10"
-                    : "text-slate-600 bg-slate-805 border border-slate-800"
-                }`}>
-                  {count}
-                </span>
-              </div>
-            ))}
+            {Object.entries(stats.assignedUsers).map(([user, count]) => {
+              const isSelected = assignedFilter === user;
+              return (
+                <button
+                  key={user}
+                  onClick={() => setAssignedFilter(isSelected ? "ALL" : user)}
+                  className={`w-full flex items-center justify-between p-2 rounded border transition-all text-left group cursor-pointer ${
+                    isSelected 
+                      ? "bg-purple-500/10 border-purple-500/40 hover:bg-purple-500/15" 
+                      : "bg-slate-950/40 border-slate-850 hover:bg-slate-800/40 hover:border-slate-800"
+                  }`}
+                >
+                  <span className={`text-[10px] truncate max-w-[140px] font-black transition-all ${
+                    isSelected ? "text-purple-400" : "text-slate-300 group-hover:text-slate-200"
+                  }`} title={user}>
+                    {user}
+                  </span>
+                  <span className={`text-[9px] font-mono font-black px-1.5 py-0.5 rounded transition-all ${
+                    isSelected 
+                      ? "text-purple-300 bg-purple-500/20 border border-purple-500/30" 
+                      : user !== "Unassigned"
+                        ? "text-purple-400 bg-purple-500/5 border border-purple-500/10 group-hover:bg-purple-500/10"
+                        : "text-slate-500 bg-slate-800/30 border border-slate-800/50 group-hover:bg-slate-800/50"
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+
+            {assignedFilter !== "ALL" && (
+              <button
+                onClick={() => setAssignedFilter("ALL")}
+                className="w-full flex items-center justify-center gap-1.5 p-2 bg-slate-950/20 hover:bg-slate-950/50 border border-dashed border-slate-800 hover:border-slate-700 rounded text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-all cursor-pointer"
+              >
+                <span>Reset Assignment Filter</span>
+              </button>
+            )}
           </div>
         </div>
 
