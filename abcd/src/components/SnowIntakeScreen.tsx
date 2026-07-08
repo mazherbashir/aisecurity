@@ -922,16 +922,6 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
               <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
             </button>
 
-            {/* Create Task Button */}
-            <button
-              onClick={openCreateDrawer}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 border border-blue-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer shrink-0"
-              title="Create a new ServiceNow Task"
-            >
-              <Plus size={12} />
-              <span>Create Task</span>
-            </button>
-
             <div className="relative w-44 sm:w-52 max-w-full">
               <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-slate-500">
                 <Search size={12} />

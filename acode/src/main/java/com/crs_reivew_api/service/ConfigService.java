@@ -313,6 +313,20 @@ public class ConfigService {
                     updates.put("crs.checkmarx.polling.retry", String.valueOf(payload.getCheckmarx().getPollingRetry()));
                 }
             }
+            if (payload.getIntake() != null) {
+                if (payload.getIntake().getGcaasRestEndpointRemediation() != null) {
+                    veracodeConfig.setGcaasRestEndpointRemediation(payload.getIntake().getGcaasRestEndpointRemediation());
+                    updates.put("veracode.api.gcaas-rest-endpoint-remediation", payload.getIntake().getGcaasRestEndpointRemediation());
+                }
+                if (payload.getIntake().getGcaasRestEndpointIntake() != null) {
+                    veracodeConfig.setGcaasRestEndpointIntake(payload.getIntake().getGcaasRestEndpointIntake());
+                    updates.put("veracode.api.gcaas-rest-endpoint-intake", payload.getIntake().getGcaasRestEndpointIntake());
+                }
+                if (payload.getIntake().getGcaasRestBaseURL() != null) {
+                    veracodeConfig.setGcaasRestBaseURL(payload.getIntake().getGcaasRestBaseURL());
+                    updates.put("veracode.api.gcaas-rest-baseURL", payload.getIntake().getGcaasRestBaseURL());
+                }
+            }
         }
 
         if (updates.isEmpty()) return;
@@ -461,6 +475,13 @@ public class ConfigService {
         checkmarx.put("pollingRetry", checkmarxService.getPollingRetry());
         config.put("Checkmarx", checkmarx);
 
+        // Group 8: Intake Settings
+        java.util.Map<String, Object> intake = new java.util.HashMap<>();
+        intake.put("gcaasRestEndpointRemediation", veracodeConfig.getGcaasRestEndpointRemediation());
+        intake.put("gcaasRestEndpointIntake", veracodeConfig.getGcaasRestEndpointIntake());
+        intake.put("gcaasRestBaseURL", veracodeConfig.getGcaasRestBaseURL());
+        config.put("Intake", intake);
+
         return config;
     }
 
@@ -557,6 +578,13 @@ public class ConfigService {
         checkmarx.setPollingInterval(checkmarxService.getPollingInterval());
         checkmarx.setPollingRetry(checkmarxService.getPollingRetry());
         dto.setCheckmarx(checkmarx);
+
+        // Intake Settings
+        GroupedSystemConfigDTO.IntakeSettings intake = new GroupedSystemConfigDTO.IntakeSettings();
+        intake.setGcaasRestEndpointRemediation(veracodeConfig.getGcaasRestEndpointRemediation());
+        intake.setGcaasRestEndpointIntake(veracodeConfig.getGcaasRestEndpointIntake());
+        intake.setGcaasRestBaseURL(veracodeConfig.getGcaasRestBaseURL());
+        dto.setIntake(intake);
 
         return dto;
     }

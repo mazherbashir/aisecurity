@@ -26,6 +26,9 @@ public class GroupedSystemConfigDTO {
 
     @JsonProperty("Compliance")
     private ComplianceSettings compliance;
+    
+    @JsonProperty("Intake")
+    private IntakeSettings intake;
 
     @JsonProperty("architecture-mappings")
     private Map<String, List<String>> architectureMappings;
@@ -53,6 +56,9 @@ public class GroupedSystemConfigDTO {
 
     public CheckmarxSettings getCheckmarx() { return checkmarx; }
     public void setCheckmarx(CheckmarxSettings checkmarx) { this.checkmarx = checkmarx; }
+
+    public IntakeSettings getIntake() { return intake; }
+    public void setIntake(IntakeSettings intake) { this.intake = intake; }
 
     // Nested Classes
     public static class SastAndScaPrompts {
@@ -227,5 +233,20 @@ public class GroupedSystemConfigDTO {
 
         public Integer getPollingRetry() { return pollingRetry; }
         public void setPollingRetry(Integer pollingRetry) { this.pollingRetry = pollingRetry; }
+    }
+
+    public static class IntakeSettings {
+        private String gcaasRestEndpointRemediation;
+        private String gcaasRestEndpointIntake;
+        private String gcaasRestBaseURL;
+
+        public String getGcaasRestEndpointRemediation() { return gcaasRestEndpointRemediation; }
+        public void setGcaasRestEndpointRemediation(String gcaasRestEndpointRemediation) { this.gcaasRestEndpointRemediation = gcaasRestEndpointRemediation; }
+
+        public String getGcaasRestEndpointIntake() { return gcaasRestEndpointIntake; }
+        public void setGcaasRestEndpointIntake(String gcaasRestEndpointIntake) { this.gcaasRestEndpointIntake = gcaasRestEndpointIntake; }
+
+        public String getGcaasRestBaseURL() { return gcaasRestBaseURL; }
+        public void setGcaasRestBaseURL(String gcaasRestBaseURL) { this.gcaasRestBaseURL = gcaasRestBaseURL; }
     }
 }

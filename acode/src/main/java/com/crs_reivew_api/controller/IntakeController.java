@@ -88,10 +88,29 @@ public class IntakeController {
         }
     }
 
+    private String combineUrls(String baseUrl, String endpoint) {
+        if (baseUrl == null || baseUrl.isEmpty()) {
+            return endpoint;
+        }
+        if (endpoint == null || endpoint.isEmpty()) {
+            return baseUrl;
+        }
+        boolean baseEnds = baseUrl.endsWith("/");
+        boolean endStarts = endpoint.startsWith("/");
+        if (baseEnds && endStarts) {
+            return baseUrl + endpoint.substring(1);
+        } else if (!baseEnds && !endStarts) {
+            return baseUrl + "/" + endpoint;
+        } else {
+            return baseUrl + endpoint;
+        }
+    }
+
     @GetMapping(value = "/api/intake/requests", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> getIntakeRequests() {
-        String intakeEndpoint = veracodeConfig.getGcaasRestEndpointIntake();
-        String remediationEndpoint = veracodeConfig.getGcaasRestEndpointRemediation();
+        String baseUrl = veracodeConfig.getGcaasRestBaseURL();
+        String intakeEndpoint = combineUrls(baseUrl, veracodeConfig.getGcaasRestEndpointIntake());
+        String remediationEndpoint = combineUrls(baseUrl, veracodeConfig.getGcaasRestEndpointRemediation());
         String secretKey = veracodeConfig.getGcaasSecretKey();
 
         if (intakeEndpoint == null || intakeEndpoint.isEmpty()) {

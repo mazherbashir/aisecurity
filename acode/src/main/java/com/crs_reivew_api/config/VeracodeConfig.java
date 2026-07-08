@@ -65,6 +65,7 @@ public class VeracodeConfig {
     private String auditorDisagreeFallbackText = "Proposal Rejected please perform a Manual Review as The Evaluator and Auditor model has contradiction!";
     private String auditorPrompt;
     private String gcaasSecretKey;
+    private String gcaasRestBaseURL;
     private String gcaasRestEndpointIntake;
     private String gcaasRestEndpointRemediation;
     private boolean intakeRequest = false;
@@ -131,6 +132,14 @@ public class VeracodeConfig {
                 env.getPropertySources().addFirst(propertySource);
                 Binder.get(env).bind("veracode.api", Bindable.ofInstance(this));
                 
+                // GCaaS rest baseURL
+                if (this.gcaasRestBaseURL == null || this.gcaasRestBaseURL.isEmpty()) {
+                    this.gcaasRestBaseURL = appProps.getProperty("veracode.api.gcaas-rest-baseURL");
+                }
+                if (this.gcaasRestBaseURL == null || this.gcaasRestBaseURL.isEmpty()) {
+                    this.gcaasRestBaseURL = appProps.getProperty("gcaas-rest-baseURL");
+                }
+
                 // GCaaS rest endpoint intake
                 if (this.gcaasRestEndpointIntake == null || this.gcaasRestEndpointIntake.isEmpty()) {
                     this.gcaasRestEndpointIntake = appProps.getProperty("gcaas-rest-endpoint-intake");
@@ -140,6 +149,12 @@ public class VeracodeConfig {
                 }
 
                 // GCaaS rest endpoint remediation
+                if (this.gcaasRestEndpointRemediation == null || this.gcaasRestEndpointRemediation.isEmpty()) {
+                    this.gcaasRestEndpointRemediation = appProps.getProperty("veracode.api.gcaas-rest-endpoint-remediation");
+                }
+                if (this.gcaasRestEndpointRemediation == null || this.gcaasRestEndpointRemediation.isEmpty()) {
+                    this.gcaasRestEndpointRemediation = appProps.getProperty("gcaas-rest-endpoint-remediation");
+                }
                 if (this.gcaasRestEndpointRemediation == null || this.gcaasRestEndpointRemediation.isEmpty()) {
                     this.gcaasRestEndpointRemediation = appProps.getProperty("veracode.api.gcaas.rest-endpoint-remediation");
                 }
@@ -535,6 +550,14 @@ public class VeracodeConfig {
 
     public void setGcaasSecretKey(String gcaasSecretKey) {
         this.gcaasSecretKey = gcaasSecretKey;
+    }
+
+    public String getGcaasRestBaseURL() {
+        return gcaasRestBaseURL;
+    }
+
+    public void setGcaasRestBaseURL(String gcaasRestBaseURL) {
+        this.gcaasRestBaseURL = gcaasRestBaseURL;
     }
 
     public String getGcaasRestEndpointIntake() {

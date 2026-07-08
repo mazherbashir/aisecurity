@@ -215,6 +215,12 @@ function aggregateFindings(
 
   const result = Object.values(groups);
 
+  // Append sorted finding/vulnerability IDs to each groupId to prevent cross-scan clashing
+  result.forEach((g) => {
+    const ids = g.records.map((r) => r.id).filter(Boolean).sort().join(",");
+    g.groupId = `${g.groupId}-IDS-[${ids}]`;
+  });
+
   result.sort((a, b) => {
     const orderA = severityOrder[a.severity] || 99;
     const orderB = severityOrder[b.severity] || 99;
@@ -224,8 +230,16 @@ function aggregateFindings(
   return result;
 }
 
-function restorePersistedComments(groups: AggregatedGroup[]): AggregatedGroup[] {
-  let persistedComments: Record<string, { aiComment: string; aiMetrics?: any; status?: 'approved' | 'rejected' }> = {};
+function restorePersistedComments(groups: AggregatedGroup[], profileName: string, scanSource: 'json' | 'live' | null): AggregatedGroup[] {
+  if (scanSource !== 'json') {
+    return groups; // If pulling live data, strictly do NOT map/restore saved comments/proposals
+  }
+
+  if (!profileName || !profileName.toLowerCase().endsWith(".json")) {
+    return groups;
+  }
+
+  let persistedComments: Record<string, Record<string, { aiComment: string; aiMetrics?: any; status?: 'approved' | 'rejected' }>> = {};
   try {
     const raw = localStorage.getItem("crs_persisted_comments");
     if (raw) {
@@ -235,8 +249,13 @@ function restorePersistedComments(groups: AggregatedGroup[]): AggregatedGroup[] 
     console.warn("Failed to parse persisted comments:", e);
   }
 
+  const profileComments = persistedComments[profileName];
+  if (!profileComments) {
+    return groups;
+  }
+
   return groups.map((g) => {
-    const saved = persistedComments[g.groupId];
+    const saved = profileComments[g.groupId];
     if (saved) {
       return {
         ...g,
@@ -1123,9 +1142,10 @@ ${scaSec}`;
 export default function App() {
   const [selectedTools, setSelectedTools] = useState<ToolName[]>(["Veracode"]);
   const [appProfile, setAppProfile] = useState("");
+  const [scanSourceType, setScanSourceType] = useState<'json' | 'live' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resultsLoaded, setResultsLoaded] = useState(false);
-  const [activeTab, setActiveTab] = useState<"SAST" | "SCA" | "Review">("SAST");
+  const [activeTab, setActiveTab] = useState<"SAST" | "SCA" | "Review" | "Intake">("SAST");
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [aggregatedData, setAggregatedData] = useState<{
     sast: AggregatedGroup[];
@@ -1182,23 +1202,36 @@ export default function App() {
 
   // Persist pulled AI recommendations and status to localStorage so they are not lost on page reload/back navigation
   useEffect(() => {
+    if (scanSourceType !== "json") {
+      // Do not persist comments/status if not pulling from a JSON file (i.e. is live scan)
+      return;
+    }
+
+    const isJsonFile = appProfile && appProfile.toLowerCase().endsWith(".json");
+    if (!isJsonFile) {
+      // Do not persist comments/status if not pulling from a JSON file
+      return;
+    }
+
     if (aggregatedData.sast.length > 0 || aggregatedData.sca.length > 0) {
-      const persisted: Record<string, { aiComment: string; aiMetrics?: any; status?: 'approved' | 'rejected' }> = {};
+      let persistedComments: Record<string, Record<string, { aiComment: string; aiMetrics?: any; status?: 'approved' | 'rejected' }>> = {};
       
       // Load current persisted comments from localStorage to avoid overwriting unrelated scans' data
       try {
         const existingRaw = localStorage.getItem("crs_persisted_comments");
         if (existingRaw) {
-          Object.assign(persisted, JSON.parse(existingRaw));
+          persistedComments = JSON.parse(existingRaw);
         }
       } catch (e) {
         console.warn("Failed to parse existing persisted comments:", e);
       }
 
+      const profileComments = persistedComments[appProfile] || {};
       let hasUpdates = false;
+
       [...aggregatedData.sast, ...aggregatedData.sca].forEach((g) => {
         if (g.aiComment || g.status) {
-          persisted[g.groupId] = {
+          profileComments[g.groupId] = {
             aiComment: g.aiComment,
             aiMetrics: g.aiMetrics,
             status: g.status,
@@ -1208,10 +1241,49 @@ export default function App() {
       });
 
       if (hasUpdates) {
-        localStorage.setItem("crs_persisted_comments", JSON.stringify(persisted));
+        persistedComments[appProfile] = profileComments;
+        localStorage.setItem("crs_persisted_comments", JSON.stringify(persistedComments));
       }
     }
-  }, [aggregatedData]);
+  }, [aggregatedData, appProfile, scanSourceType]);
+
+  const clearMemoryForCurrentScan = () => {
+    if (!appProfile) return;
+    try {
+      const existingRaw = localStorage.getItem("crs_persisted_comments");
+      if (existingRaw) {
+        const persistedComments = JSON.parse(existingRaw);
+        if (persistedComments[appProfile]) {
+          delete persistedComments[appProfile];
+          localStorage.setItem("crs_persisted_comments", JSON.stringify(persistedComments));
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to clear memory:", e);
+    }
+    
+    setAggregatedData((prev) => ({
+      sast: prev.sast.map((g) => ({
+        ...g,
+        status: undefined,
+        aiComment: "",
+        aiMetrics: undefined
+      })),
+      sca: prev.sca.map((g) => ({
+        ...g,
+        status: undefined,
+        aiComment: "",
+        aiMetrics: undefined
+      }))
+    }));
+    
+    setDetailedGroup((prev) => 
+      prev ? { ...prev, status: undefined, aiComment: "", aiMetrics: undefined } : null
+    );
+
+    setSuccessMessage(`Memory for profile "${appProfile}" has been refreshed successfully.`);
+    setTimeout(() => setSuccessMessage(null), 4000);
+  };
 
 
 
@@ -1273,20 +1345,41 @@ export default function App() {
           sastPrompt: data.sastPrompt || "I’m providing information on a First Party Finding for an application in JSON format.\n\nDefinitions:\n- cwe id: The CWE ID of the finding\n- mitigation information: Actions taken by the application team (may be empty)\n\nYour task:\n1. Determine if this is a real security issue.\n2. Determine if the mitigation sufficiently reduces the risk.\n3. If not mitigated, clearly state why.\n\nInstructions (STRICT):\n- Start with: \"Proposal Approved\" or \"Proposal Rejected\"\n- Provide ONLY ONE short paragraph\n- Maximum 4–5 sentences\n- Maximum 120 words\n- No repetition, no extra explanation\n- Keep reasoning concise and direct\n- Follow Zero-Trust principles in evaluation but don't repeat it in para.\n\nDo not provide bullet points, headings, or long explanations.",
           scaPrompt: data.scaPrompt || "I’m providing information on a Third Party (SCA) Finding in JSON format.\n\nDefinitions:\n- name: Vulnerable component name\n- cve id: CVE identifier\n- mitigation information: Actions taken by the application team (may be empty)\n\nYour task:\n1. Identify if a non-vulnerable version exists\n2. Identify if mitigation without upgrade is possible\n3. Assess if the finding could be a false positive\n4. Enforce strict security governance (Zero-Trust)\n\nSTRICT GOVERNANCE RULES:\n- If the vulnerability is still reported by the SCA tool → DO NOT accept false positive claim\n- If the source of the dependency is unclear → REJECT and require investigation\n- Always require validation with Veracode (or tool owner) before closure\n- Never approve based solely on assumption\n\nOUTPUT INSTRUCTIONS (STRICT):\n- Start with ONLY ONE of:\n  \"Proposal Approved\" OR \"Proposal Rejected\" OR \"Check Manually\"\n- Provide ONE paragraph only\n- Maximum 6 sentences\n- Maximum 150 words\n- Keep reasoning concise and direct\n- Do NOT explain CWE background\n- Avoid repetition and filler text\n\nCVE HANDLING:\n- If you are confident about the CVE → include a short reference link:"
         },
-        "System": data["System"] || {
-          scanValidityDays: data.scanValidityDays || 90,
-          mitigationProposalEnabled: data.mitigationProposalEnabled ?? true,
-          mitigationApiType: data.mitigationApiType || "REST",
-          saveXmlLogs: data.saveXmlLogs ?? true,
-          saveJsonHistory: data.saveJsonHistory ?? true,
-          historyLimit: data.historyLimit || 10,
-          secondaryAuditEnabled: data.secondaryAuditEnabled ?? false,
-          safeSCAVERSION: data.safeSCAVERSION || {
+        "System": data["System"] ? {
+          scanValidityDays: data["System"].scanValidityDays || 90,
+          mitigationProposalEnabled: data["System"].mitigationProposalEnabled ?? true,
+          mitigationApiType: data["System"].mitigationApiType || "REST",
+          saveXmlLogs: data["System"].saveXmlLogs ?? true,
+          saveJsonHistory: data["System"].saveJsonHistory ?? true,
+          historyLimit: data["System"].historyLimit || 10,
+          secondaryAuditEnabled: data["System"].secondaryAuditEnabled ?? false,
+          intakeRequest: data["System"].intakeRequest ?? true,
+          safeSCAVERSION: data["System"].safeSCAVERSION || {
             scaSafeVersionEnabled: true,
             scaStaleFixMessage: "No safe version found. Fix applies to a different major version. Check manually.",
             scaNoFixMessage: "No safe version published in GHSA. Check manually.",
             saveScaLog: false
           }
+        } : {
+          scanValidityDays: 90,
+          mitigationProposalEnabled: true,
+          mitigationApiType: "REST",
+          saveXmlLogs: true,
+          saveJsonHistory: true,
+          historyLimit: 10,
+          secondaryAuditEnabled: false,
+          intakeRequest: true,
+          safeSCAVERSION: {
+            scaSafeVersionEnabled: true,
+            scaStaleFixMessage: "No safe version found. Fix applies to a different major version. Check manually.",
+            scaNoFixMessage: "No safe version published in GHSA. Check manually.",
+            saveScaLog: false
+          }
+        },
+        "Intake": data["Intake"] || {
+          gcaasRestEndpointRemediation: "/snow/utils/open_remediation_requests",
+          gcaasRestEndpointIntake: "/snow/utils/open_intake_requests",
+          gcaasRestBaseURL: "https://hosted-apps-we-stage.np-pwclabs.pwcglb.com/api/687da848-9b88-48ce-8d71-d276e6d682f6/crs-rest-api-toolkit-chris-fastapi-staging-test-backend"
         },
         "AiEngine": {
           aiEngines: data["AiEngine"]?.aiEngines || data.aiEngines || configEngines,
@@ -1366,6 +1459,9 @@ export default function App() {
         if (normalizedData["System"].safeSCAVERSION) {
           setScaSafeVersionEnabled(normalizedData["System"].safeSCAVERSION.scaSafeVersionEnabled);
         }
+        if (normalizedData["System"].intakeRequest !== undefined) {
+          setConfigIntakeRequest(normalizedData["System"].intakeRequest);
+        }
       }
       if (normalizedData["Exclusions"] && Array.isArray(normalizedData["Exclusions"].noScaArchitectures)) {
         setConfigNoSca(normalizedData["Exclusions"].noScaArchitectures);
@@ -1399,6 +1495,9 @@ export default function App() {
           setConfigScanValidityDays(fullConfig["System"].scanValidityDays || 90);
           if (fullConfig["System"].safeSCAVERSION && fullConfig["System"].safeSCAVERSION.scaSafeVersionEnabled !== undefined) {
             setScaSafeVersionEnabled(fullConfig["System"].safeSCAVERSION.scaSafeVersionEnabled);
+          }
+          if (fullConfig["System"].intakeRequest !== undefined) {
+            setConfigIntakeRequest(fullConfig["System"].intakeRequest);
           }
         }
       } else {
@@ -1740,8 +1839,10 @@ export default function App() {
     }
   }, [resultsLoaded, backendScaSummary, aggregatedData, scaDetails]);
 
-  const processImportedData = (data: any) => {
+  const processImportedData = (data: any, sourceType?: 'json' | 'live') => {
     console.log("CRITICAL: processImportedData called with:", data);
+    const finalSourceType = sourceType || (appProfile && appProfile.toLowerCase().endsWith(".json") ? "json" : "live");
+    setScanSourceType(finalSourceType);
     try {
       setLastRawResponse(data);
       // The Recommended Version(s) column depends strictly on "scaSafeVersionEnabled" : true inside the JSON response of the scan
@@ -1884,8 +1985,8 @@ export default function App() {
 
       console.log("Setting Final States.");
       setAggregatedData({
-        sast: restorePersistedComments(sastGroups),
-        sca: restorePersistedComments(scaGroups)
+        sast: restorePersistedComments(sastGroups, appProfile, finalSourceType),
+        sca: restorePersistedComments(scaGroups, appProfile, finalSourceType)
       });
 
       // Auto-switch to appropriate tab based on findings
@@ -1986,7 +2087,7 @@ export default function App() {
       }
 
       const data = await response.json();
-      processImportedData(data);
+      processImportedData(data, appProfile.toLowerCase().endsWith(".json") ? "json" : "live");
     } catch (err: any) {
       if (handled) return;
 
@@ -2012,9 +2113,10 @@ export default function App() {
         setSastMitigationProposal({ Total: 17, Medium: 16, Info: 1 });
         setScaMitigationProposal({ Total: 0, Medium: 0, Info: 0 });
         setOverview(mockOverview);
+        const stype = appProfile.toLowerCase().endsWith(".json") ? "json" : "live";
         setAggregatedData({
-          sast: restorePersistedComments(sastGroups),
-          sca: restorePersistedComments(scaGroups)
+          sast: restorePersistedComments(sastGroups, appProfile, stype),
+          sca: restorePersistedComments(scaGroups, appProfile, stype)
         });
 
         // Auto-switch to appropriate tab based on findings
@@ -2373,19 +2475,27 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => {
-                          const nextVal = !showSnowScreen;
-                          setShowSnowScreen(nextVal);
-                          if (nextVal) {
-                            setSelectedTools([]);
+                          if (resultsLoaded) {
+                            if (activeTab === "Intake") {
+                              setActiveTab("SAST");
+                            } else {
+                              setActiveTab("Intake");
+                            }
+                          } else {
+                            const nextVal = !showSnowScreen;
+                            setShowSnowScreen(nextVal);
+                            if (nextVal) {
+                              setSelectedTools([]);
+                            }
                           }
                         }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 shadow-lg active:scale-95 ${
-                          showSnowScreen
+                          (showSnowScreen || activeTab === "Intake")
                             ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40 border-blue-500"
                             : "bg-slate-800 border-slate-700 text-blue-400 hover:border-slate-600"
                         }`}
                       >
-                        <Database size={12} className={showSnowScreen ? "text-white" : "text-blue-500"} />
+                        <Database size={12} className={(showSnowScreen || activeTab === "Intake") ? "text-white" : "text-blue-500"} />
                         Intake
                       </button>
                     </div>
@@ -2527,6 +2637,16 @@ export default function App() {
                   </span>
                 </div>
               </div>
+              {resultsLoaded && appProfile.toLowerCase().endsWith(".json") && (
+                <button
+                  onClick={clearMemoryForCurrentScan}
+                  className="px-2.5 py-1.5 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-900/40 hover:border-rose-700/60 text-rose-400 hover:text-rose-200 rounded-lg text-[10px] font-mono tracking-wider flex items-center gap-1.5 transition-all shadow-lg"
+                  title="Refresh/Clear the saved mitigation proposals and comments memory for this specific scan profile"
+                >
+                  <Trash2 size={12} />
+                  <span>REFRESH MEMORY</span>
+                </button>
+              )}
               {resultsLoaded && (
                 <button
                   onClick={() => setResultsLoaded(false)}
@@ -2538,8 +2658,13 @@ export default function App() {
             </div>
           </div>
 
-          {showSnowScreen ? (
-            <SnowIntakeScreen onClose={() => setShowSnowScreen(false)} />
+          {showSnowScreen || (resultsLoaded && activeTab === "Intake") ? (
+            <SnowIntakeScreen onClose={() => {
+              setShowSnowScreen(false);
+              if (activeTab === "Intake") {
+                setActiveTab("SAST");
+              }
+            }} />
           ) : !resultsLoaded ? (
             <div className="col-span-12 flex items-center justify-center">
               <div className="text-center space-y-4 max-w-md">
@@ -3040,17 +3165,23 @@ export default function App() {
                 </div>
 
                 <div className="flex w-full justify-start border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-10 overflow-x-auto whitespace-nowrap scrollbar-hide">
-                  {(["SAST", "SCA", "Review"] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setActiveTab(tab)}
-                      className={`grow-0 basis-1/3 px-6 py-3 text-[11px] font-black uppercase tracking-[0.1em] transition-all relative flex flex-col justify-center items-center gap-1 ${
-                        activeTab === tab
-                          ? "text-blue-400 bg-blue-500/5"
-                          : "text-slate-500 hover:text-slate-300"
-                      }`}
-                    >
-                      <span>{tab === "Review" ? "Review Comments" : `${tab} Mitigation Proposals`}</span>
+                  {(["SAST", "SCA", "Review", "Intake"] as const)
+                    .filter((tab) => tab !== "Intake" || configIntakeRequest !== false)
+                    .map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`grow px-6 py-3 text-[11px] font-black uppercase tracking-[0.1em] transition-all relative flex flex-col justify-center items-center gap-1 ${
+                          activeTab === tab
+                            ? "text-blue-400 bg-blue-500/5"
+                            : "text-slate-500 hover:text-slate-300"
+                        }`}
+                      >
+                        <span>{
+                          tab === "Review" ? "Review Comments" : 
+                          tab === "Intake" ? "ServiceNow Intake" : 
+                          `${tab} Mitigation Proposals`
+                        }</span>
                       
                       {tab === "SAST" && sastMitigationProposal && sastMitigationProposal.Total > 0 && (
                         <div className="flex items-center gap-2 text-[8px] tracking-normal font-bold">
@@ -3278,9 +3409,12 @@ export default function App() {
                 </div>
 
                 <div className="flex gap-2 p-3 border-b border-slate-800 bg-slate-900/30 overflow-x-auto scrollbar-hide">
-                  {["SAST&SCA Prompts", "System", "AiEngine", "SecondaryAudit", "Compliance", "Exclusions", "Architecture Mapping", "Checkmarx"].filter(tab => {
+                  {["SAST&SCA Prompts", "System", "AiEngine", "SecondaryAudit", "Compliance", "Exclusions", "Architecture Mapping", "Checkmarx", "Intake"].filter(tab => {
                     if (tab === "SecondaryAudit") {
                       return fullConfig["System"]?.secondaryAuditEnabled;
+                    }
+                    if (tab === "Intake") {
+                      return fullConfig["System"]?.intakeRequest;
                     }
                     return true;
                   }).map((tab) => (
@@ -3422,7 +3556,8 @@ export default function App() {
                           {[
                             { key: 'saveXmlLogs', label: 'Save XML Logs' },
                             { key: 'saveJsonHistory', label: 'Save JSON History' },
-                            { key: 'secondaryAuditEnabled', label: 'Secondary Audit' }
+                            { key: 'secondaryAuditEnabled', label: 'Secondary Audit' },
+                            { key: 'intakeRequest', label: 'Intake Request' }
                           ].map(opt => (
                             <label key={opt.key} className="flex flex-col gap-2 p-4 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-800/50 transition-all cursor-pointer">
                               <span className="text-[9px] font-bold text-slate-500 uppercase">{opt.label}</span>
@@ -3436,6 +3571,10 @@ export default function App() {
                                     next["System"][opt.key] = e.target.checked;
                                     // If secondaryAudit is disabled and we are on that tab, switch back
                                     if (opt.key === 'secondaryAuditEnabled' && !e.target.checked && settingsTab === 'SecondaryAudit') {
+                                      setSettingsTab('System');
+                                    }
+                                    // If intakeRequest is disabled and we are on that tab, switch back
+                                    if (opt.key === 'intakeRequest' && !e.target.checked && settingsTab === 'Intake') {
                                       setSettingsTab('System');
                                     }
                                     setFullConfig(next);
@@ -4104,6 +4243,79 @@ export default function App() {
                         </div>
                       </div>
                     )}
+
+                    {/* Intake Tab */}
+                    {settingsTab === "Intake" && fullConfig["Intake"] && (
+                      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <section className="space-y-1">
+                          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" /> ServiceNow Intake Config
+                          </h3>
+                          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest leading-relaxed">
+                            Configure rest endpoints and base URL for ServiceNow Intake integration
+                          </p>
+                        </section>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-900/10 border border-slate-800/80 p-6 rounded-2xl">
+                          <div className="space-y-2 col-span-1 md:col-span-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                              ServiceNow Base URL
+                            </label>
+                            <input
+                              type="text"
+                              value={fullConfig["Intake"].gcaasRestBaseURL || ""}
+                              onChange={(e) => setFullConfig({
+                                ...fullConfig,
+                                "Intake": { ...fullConfig["Intake"], gcaasRestBaseURL: e.target.value }
+                              })}
+                              className="w-full bento-input py-3 px-4 text-xs font-mono bg-slate-950 border border-slate-800 text-slate-100 rounded-xl outline-none"
+                              placeholder="https://..."
+                            />
+                            <p className="text-[9px] text-slate-500 lowercase">
+                              Base URL endpoint path for ServiceNow Integration API
+                            </p>
+                          </div>
+
+                          <div className="space-y-2 col-span-1 md:col-span-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                              Intake Request Endpoint
+                            </label>
+                            <input
+                              type="text"
+                              value={fullConfig["Intake"].gcaasRestEndpointIntake || ""}
+                              onChange={(e) => setFullConfig({
+                                ...fullConfig,
+                                "Intake": { ...fullConfig["Intake"], gcaasRestEndpointIntake: e.target.value }
+                              })}
+                              className="w-full bento-input py-3 px-4 text-xs font-mono bg-slate-950 border border-slate-800 text-slate-100 rounded-xl outline-none"
+                              placeholder="/snow/..."
+                            />
+                            <p className="text-[9px] text-slate-500 lowercase">
+                              Endpoint subpath used for retrieving/submitting intake requests
+                            </p>
+                          </div>
+
+                          <div className="space-y-2 col-span-1 md:col-span-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                              Remediation Request Endpoint
+                            </label>
+                            <input
+                              type="text"
+                              value={fullConfig["Intake"].gcaasRestEndpointRemediation || ""}
+                              onChange={(e) => setFullConfig({
+                                ...fullConfig,
+                                "Intake": { ...fullConfig["Intake"], gcaasRestEndpointRemediation: e.target.value }
+                              })}
+                              className="w-full bento-input py-3 px-4 text-xs font-mono bg-slate-950 border border-slate-800 text-slate-100 rounded-xl outline-none"
+                              placeholder="/snow/..."
+                            />
+                            <p className="text-[9px] text-slate-500 lowercase">
+                              Endpoint subpath used for retrieving/submitting remediation requests
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -4689,7 +4901,7 @@ export default function App() {
                         }
                         try {
                           const parsed = JSON.parse(debugPastedJson);
-                          processImportedData(parsed);
+                          processImportedData(parsed, 'json');
                           setShowDebug(false);
                         } catch (e) {
                           setBackendError(
@@ -4710,7 +4922,7 @@ export default function App() {
                   </h3>
                   <button
                     onClick={() => {
-                      processImportedData(dryRunJson);
+                      processImportedData(dryRunJson, 'json');
                       setShowDebug(false);
                     }}
                     className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black uppercase rounded shadow-lg transition-all"

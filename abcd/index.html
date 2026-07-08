@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CRS Review Tool</title>
+    <script>
+      // Early MetaMask & Console Interceptor
+      (function() {
+        if (typeof window !== 'undefined') {
+          // 1. Mock Ethereum Provider
+          var mockEthereum = {
+            isMetaMask: true,
+            request: function(requestObj) {
+              var method = requestObj ? requestObj.method : '';
+              if (method === 'eth_requestAccounts' || method === 'eth_accounts') {
+                return Promise.resolve(['0x71C7656EC7ab88b098defB751B7401B5f6d1476B']);
+              }
+              if (method === 'eth_chainId') {
+                return Promise.resolve('0x1');
+              }
+              return Promise.resolve(null);
+            },
+            enable: function() {
+              return Promise.resolve(['0x71C7656EC7ab88b098defB751B7401B5f6d1476B']);
+            },
+            on: function() {},
+            removeListener: function() {},
+            autoRefreshOnNetworkChange: false
+          };
+
+          try {
+            Object.defineProperty(window, 'ethereum', {
+              value: mockEthereum,
+              writable: true,
+              configurable: true
+            });
+          } catch (e) {
+            window.ethereum = mockEthereum;
+          }
+
+          // 2. Safe check for MetaMask/Ethereum noise
+          function isMetaMaskNoise(arg) {
+            if (!arg) return false;
+            try {
+              if (typeof arg === 'string') {
+                var s = arg.toLowerCase();
+                return s.indexOf('metamask') !== -1 || s.indexOf('ethereum') !== -1;
+              }
+              var props = [
+                arg.message,
+                arg.stack,
+                arg.reason,
+                arg.error ? arg.error.message : null,
+                arg.error ? arg.error.stack : null,
+                arg.originalError ? arg.originalError.message : null,
+                arg.originalError ? arg.originalError.stack : null,
+                arg.details
+              ];
+              for (var i = 0; i < props.length; i++) {
+                var val = props[i];
+                if (typeof val === 'string' && (val.toLowerCase().indexOf('metamask') !== -1 || val.toLowerCase().indexOf('ethereum') !== -1)) {
+                  return true;
+                }
+              }
+              var str = String(arg);
+              if (str.toLowerCase().indexOf('metamask') !== -1 || str.toLowerCase().indexOf('ethereum') !== -1) {
+                return true;
+              }
+            } catch (_) {}
+            return false;
+          }
+
+          // 3. Override Console Methods
+          var originalError = console.error;
+          console.error = function() {
+            var args = Array.prototype.slice.call(arguments);
+            for (var i = 0; i < args.length; i++) {
+              if (isMetaMaskNoise(args[i])) return;
+            }
+            originalError.apply(console, arguments);
+          };
+
+          var originalWarn = console.warn;
+          console.warn = function() {
+            var args = Array.prototype.slice.call(arguments);
+            for (var i = 0; i < args.length; i++) {
+              if (isMetaMaskNoise(args[i])) return;
+            }
+            originalWarn.apply(console, arguments);
+          };
+
+          var originalLog = console.log;
+          console.log = function() {
+            var args = Array.prototype.slice.call(arguments);
+            for (var i = 0; i < args.length; i++) {
+              if (isMetaMaskNoise(args[i])) return;
+            }
+            originalLog.apply(console, arguments);
+          };
+
+          // 4. Global Error Listeners & Custom Wrappers
+          var currentOnerror = null;
+          Object.defineProperty(window, 'onerror', {
+            get: function() { return currentOnerror; },
+            set: function(fn) {
+              if (typeof fn === 'function') {
+                currentOnerror = function(message, source, lineno, colno, error) {
+                  var msg = message || '';
+                  var errStr = error ? (error.message || String(error)) : '';
+                  if (msg.toLowerCase().indexOf('metamask') !== -1 || errStr.toLowerCase().indexOf('metamask') !== -1 || msg.toLowerCase().indexOf('ethereum') !== -1 || errStr.toLowerCase().indexOf('ethereum') !== -1) {
+                    return true; // Ignore and suppress
+                  }
+                  return fn.apply(window, arguments);
+                };
+              } else {
+                currentOnerror = fn;
+              }
+            },
+            configurable: true
+          });
+
+          var currentOnunhandled = null;
+          Object.defineProperty(window, 'onunhandledrejection', {
+            get: function() { return currentOnunhandled; },
+            set: function(fn) {
+              if (typeof fn === 'function') {
+                currentOnunhandled = function(event) {
+                  try {
+                    var reason = event.reason;
+                    var msg = reason ? (reason.message || reason.stack || String(reason)) : '';
+                    if (msg && (msg.toLowerCase().indexOf('metamask') !== -1 || msg.toLowerCase().indexOf('ethereum') !== -1)) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      return;
+                    }
+                  } catch (e) {}
+                  return fn.apply(window, arguments);
+                };
+              } else {
+                currentOnunhandled = fn;
+              }
+            },
+            configurable: true
+          });
+
+          // Intercept addEventListener to wrap any user/platform error/rejection handlers
+          var originalAddEventListener = window.addEventListener;
+          window.addEventListener = function(type, listener, options) {
+            if (type === 'error' || type === 'unhandledrejection') {
+              var wrappedListener = function(event) {
+                var isNoise = false;
+                if (type === 'error') {
+                  var errorMsg = event.message || '';
+                  var errorObjStr = event.error ? (event.error.message || String(event.error)) : '';
+                  if (errorMsg.toLowerCase().indexOf('metamask') !== -1 || errorMsg.toLowerCase().indexOf('ethereum') !== -1 ||
+                      errorObjStr.toLowerCase().indexOf('metamask') !== -1 || errorObjStr.toLowerCase().indexOf('ethereum') !== -1) {
+                    isNoise = true;
+                  }
+                } else if (type === 'unhandledrejection') {
+                  var reason = event.reason;
+                  var msg = reason ? (reason.message || reason.stack || String(reason)) : '';
+                  if (msg && (msg.toLowerCase().indexOf('metamask') !== -1 || msg.toLowerCase().indexOf('ethereum') !== -1)) {
+                    isNoise = true;
+                  }
+                }
+                
+                if (isNoise) {
+                  try {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  } catch (e) {}
+                  return; // Suppress from calling the real listener
+                }
+                return listener.call(this, event);
+              };
+              listener.__wrapped = wrappedListener;
+              return originalAddEventListener.call(window, type, wrappedListener, options);
+            }
+            return originalAddEventListener.call(window, type, listener, options);
+          };
+
+          var originalRemoveEventListener = window.removeEventListener;
+          window.removeEventListener = function(type, listener, options) {
+            if (listener && listener.__wrapped) {
+              return originalRemoveEventListener.call(window, type, listener.__wrapped, options);
+            }
+            return originalRemoveEventListener.call(window, type, listener, options);
+          };
+
+          window.addEventListener('error', function(event) {
+            var errorMsg = event.message || '';
+            var errorObjStr = event.error ? (event.error.message || String(event.error)) : '';
+            if (errorMsg.toLowerCase().indexOf('metamask') !== -1 || errorObjStr.toLowerCase().indexOf('metamask') !== -1 || errorMsg.toLowerCase().indexOf('ethereum') !== -1 || errorObjStr.toLowerCase().indexOf('ethereum') !== -1) {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          }, true);
+
+          window.addEventListener('unhandledrejection', function(event) {
+            try {
+              var reason = event.reason;
+              var msg = reason ? (reason.message || reason.stack || String(reason)) : '';
+              if (msg && (msg.toLowerCase().indexOf('metamask') !== -1 || msg.toLowerCase().indexOf('ethereum') !== -1)) {
+                event.preventDefault();
+                event.stopPropagation();
+              }
+            } catch (e) {}
+          }, true);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

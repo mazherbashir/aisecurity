@@ -303,8 +303,15 @@ public class CheckmarxService {
 
         // 4. Parse scaScanResults
         JsonNode scaScanResults = root.path("scaScanResults");
+        int apiTotalPackages = -1;
         if (!scaScanResults.isMissingNode() && !scaScanResults.isNull()) {
             dto.scaSummary.vulnerabilities = scaScanResults.path("totalResults").asInt(0);
+            
+            // Fetch total packages using scan-summary API
+            apiTotalPackages = getScaTotalPackages(token, scanId);
+            if (apiTotalPackages >= 0) {
+                dto.scaSummary.totalPackages = apiTotalPackages;
+            }
             
             JsonNode sevBreakdownArray = scaScanResults.path("severitiesBreakdown");
             if (sevBreakdownArray.isArray()) {
@@ -387,7 +394,7 @@ public class CheckmarxService {
                                         finding.userComments = new java.util.ArrayList<>(); // Explicitly blank for SCA
                                         
                                         // Attempt to fetch comments from Risk Management API
-                                        populateScaComments(token, scaDetail.packageName, scaDetail.version, ecosystem, cve, finding);
+                                        // populateScaComments(token, scaDetail.packageName, scaDetail.version, ecosystem, cve, finding);
                                         
                                         dto.findingsWithCommentsSCA.add(finding);
                                         
@@ -419,7 +426,14 @@ public class CheckmarxService {
                     dto.scaDetails.add(scaDetail);
                 }
                 dto.scaSummary.totalVulnerablePackages = vulnerableCount;
-                dto.scaSummary.totalPackages = vulnerableCount; // Could differ if we had a non-vulnerable list
+                if (apiTotalPackages < 0) {
+                    dto.scaSummary.totalPackages = vulnerableCount; // Could differ if we had a non-vulnerable list
+                }
+            } else {
+                dto.scaSummary.totalVulnerablePackages = 0;
+                if (apiTotalPackages < 0) {
+                    dto.scaSummary.totalPackages = 0;
+                }
             }
         }
 
@@ -447,6 +461,77 @@ public class CheckmarxService {
         }
 
         return dto;
+    }
+
+    private int getScaTotalPackages(String token, String scanId) {
+        if (token == null || scanId == null || scanId.isEmpty()) {
+            return -1;
+        }
+        try {
+            String url = apiUrl + "/scan-summary?scan-ids=" + scanId;
+            System.out.println("Fetching scan summary from Checkmarx: " + url);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/json")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            String responseBody = response.body();
+
+            // Save JSON to the logs folder
+            try {
+                Path logsDir = Paths.get("checkmarx", "logs");
+                Files.createDirectories(logsDir);
+                Files.writeString(logsDir.resolve("scansummary_" + scanId + ".json"), responseBody);
+                System.out.println("Saved scan summary to: " + logsDir.resolve("scansummary_" + scanId + ".json").toAbsolutePath());
+            } catch (Exception fileEx) {
+                System.err.println("Warning: Failed to save scan-summary log file: " + fileEx.getMessage());
+            }
+
+            if (response.statusCode() == 200) {
+                JsonNode root = mapper.readTree(responseBody);
+                
+                // Try to find scaPackagesCounters (with s) first, then scaPackagesCounter (without s)
+                JsonNode counterNode = findJsonNode(root, "scaPackagesCounters");
+                if (counterNode == null || counterNode.isMissingNode()) {
+                    counterNode = findJsonNode(root, "scaPackagesCounter");
+                }
+                
+                if (counterNode != null && !counterNode.isMissingNode() && counterNode.hasNonNull("totalCounter")) {
+                    int total = counterNode.get("totalCounter").asInt(-1);
+                    System.out.println("Successfully retrieved scaPackagesCounters/scaPackagesCounter totalCounter: " + total);
+                    return total;
+                } else {
+                    System.err.println("Warning: scaPackagesCounters/scaPackagesCounter node or totalCounter was not found in scan-summary response.");
+                }
+            } else {
+                System.err.println("Warning: Failed to fetch scan summary. HTTP " + response.statusCode() + ": " + responseBody);
+            }
+        } catch (Exception e) {
+            System.err.println("Error fetching scan summary for packages count: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return -1;
+    }
+
+    private JsonNode findJsonNode(JsonNode root, String key) {
+        if (root == null) return null;
+        if (root.has(key)) return root.get(key);
+        if (root.isArray()) {
+            for (JsonNode child : root) {
+                JsonNode res = findJsonNode(child, key);
+                if (res != null) return res;
+            }
+        } else if (root.isObject()) {
+            java.util.Iterator<JsonNode> elements = root.elements();
+            while (elements.hasNext()) {
+                JsonNode res = findJsonNode(elements.next(), key);
+                if (res != null) return res;
+            }
+        }
+        return null;
     }
 
     private String getToken() throws Exception {
@@ -744,7 +829,8 @@ public class CheckmarxService {
     }
 
     private void populateScaComments(String token, String packageName, String packageVersion, String packageManager, String vulnerabilityId, com.crs_reivew_api.dto.VeracodeReportDTO.FindingDTO finding) {
-        if (token == null || packageName == null || packageVersion == null || packageManager == null || vulnerabilityId == null) return;
+        // Disabled: Checkmarx One does not support API retrieval of SCA comments
+        if (true) return;
         try {
             String pm = packageManager.toLowerCase().trim();
             if (pm.equals("python")) {
