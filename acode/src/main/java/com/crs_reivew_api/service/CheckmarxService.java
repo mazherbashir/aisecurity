@@ -162,7 +162,8 @@ public class CheckmarxService {
         if (!scannerOverview.isMissingNode()) {
             JsonNode sastResults = scannerOverview.path("sastResults");
             if (!sastResults.isMissingNode() && sastResults.has("percentage")) {
-                dto.overview.sastScore = sastResults.path("percentage").asInt();
+                int score = sastResults.path("percentage").asInt();
+                dto.overview.sastScore = (score == 0) ? 100 : score;
             }
         }
         
@@ -714,6 +715,9 @@ public class CheckmarxService {
     private String requestReportGeneration(String token, String projectId, String branchName, String scanId) throws Exception {
         String url = apiUrl + "/reports/v2";
 
+        String safeProjectId = projectId.replaceAll("[^a-zA-Z0-9_-]", "_");
+        String safeBranchName = branchName.replaceAll("[^a-zA-Z0-9_-]", "_");
+
         String jsonPayload = String.format(
             "{\n" +
             "  \"reportName\": \"improved-scan-report\",\n" +
@@ -731,7 +735,7 @@ public class CheckmarxService {
             "    \"severities\": [\"critical\",\"high\",\"medium\",\"low\",\"information\"],\n" +
             "    \"states\": [\"to-verify\",\"proposed-not-exploitable\"]\n" +
             "  }\n" +
-            "}", projectId, branchName, scanId);
+            "}", safeProjectId, safeBranchName, scanId);
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))

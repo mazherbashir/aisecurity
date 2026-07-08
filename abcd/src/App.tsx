@@ -772,7 +772,7 @@ function ReviewTabContent({
                 <div className="flex items-center gap-2 text-emerald-400">
                   <Check size={18} />
                   <h2 className="text-sm font-black uppercase tracking-widest text-emerald-400">
-                    Veracode SAST Sign-off
+                    {selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx" ? "CHECKMARX SIGN-OFF" : "Veracode SAST Sign-off"}
                   </h2>
                 </div>
                 <button
@@ -788,6 +788,7 @@ function ReviewTabContent({
                 onSubmit={(e) => {
                   e.preventDefault();
                   
+                  const isCheckmarxActive = selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx";
                   const accountId = overview.accountId || "---";
                   const appId = overview.appId || "---";
                   const buildId = overview.buildId || "---";
@@ -796,17 +797,21 @@ function ReviewTabContent({
                   const sandboxId = overview.sandboxId || "---";
                   const profileName = overview.applicationName || "---";
                   const reportFilename = buildPdfFilename(profileName);
+                  const profileUrl = `https://us.ast.checkmarx.net/projects/${appId}/overview?branch=${overview.scanName || ""}`;
 
-                  const veracodeSignUp = `The SAST assessment has been completed successfully with no remaining open findings in 
+                  const signUpText = isCheckmarxActive ? `The SAST assessment has been completed successfully with no remaining open findings in adherence to the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a>.<br/>
+<br/>
+This can be considered a <b>final</b> sign-off for the static code analysis for this assessed version, scans within <code><a target="_blank" href="${reportUrlInput}">${scanNameInput}</a></code>, of the <code><a target="_blank" href="${profileUrl}">${profileName}</a></code> application. Please note that after this sign-off, this request will be closed and will not be tracked anymore.<br/>
+<br/>
+Thank you!` : `The SAST assessment has been completed successfully with no remaining open findings in 
   adherence to the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a>.<br/>
 <br/>
 This can be considered a <b>final</b> sign-off for the static code analysis for this assessed version,
-scan <code><a target="_blank" href="https://analysiscenter.veracode.com/auth/index.jsp#StaticOverview:${accountId}:${appId}:${buildId}:${analysisId}:${staticAnalysisUnitId}::::${sandboxId}">${scanNameInput}</a></code>, of the <code>, 
-of the <code><a target="_blank" href="https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:${accountId}:${appId}:${buildId}">${profileName}</a></code>  application. For more details, please see the Veracode report <code><a target="_blank" href="${reportUrlInput}">${reportFilename}</a></code> attached to this request. Please note that after this sign off, this request will be closed and will not be tracked anymore.<br/>
+scan <code><a target="_blank" href="https://analysiscenter.veracode.com/auth/index.jsp#StaticOverview:${accountId}:${appId}:${buildId}:${analysisId}:${staticAnalysisUnitId}::::${sandboxId}">${scanNameInput}</a></code>, of the <code><a target="_blank" href="https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:${accountId}:${appId}:${buildId}">${profileName}</a></code>  application. For more details, please see the Veracode report <code><a target="_blank" href="${reportUrlInput}">${reportFilename}</a></code> attached to this request. Please note that after this sign off, this request will be closed and will not be tracked anymore.<br/>
 <br/>
 Thank you!`;
 
-                  const finalHtml = StaticContent.header_style + veracodeSignUp + StaticContent.footerMsg;
+                  const finalHtml = StaticContent.header_style + signUpText + StaticContent.footerMsg;
                   setOverrideHtml(finalHtml);
                   setIsSignOffModalOpen(false);
                 }}
@@ -814,33 +819,35 @@ Thank you!`;
               >
                 <div className="p-6 space-y-4">
                   <p className="text-xs text-slate-400 leading-relaxed font-sans">
-                    Generate the final sign-off HTML message. Provide the scan name and the Veracode report PDF URL.
+                    {selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx"
+                      ? "Generate the final sign-off HTML message. Provide the archive name and archive url."
+                      : "Generate the final sign-off HTML message. Provide the scan name and the Veracode report PDF URL."}
                   </p>
 
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-sans">
-                      Scan Name (scan_Name)
+                      {selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx" ? "ARCHIVE NAME" : "Scan Name (scan_Name)"}
                     </label>
                     <input
                       type="text"
                       required
                       value={scanNameInput}
                       onChange={(e) => setScanNameInput(e.target.value)}
-                      placeholder="e.g. 2026-05-23-Scan"
+                      placeholder={selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx" ? "e.g. MyArchiveName" : "e.g. 2026-05-23-Scan"}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-sans">
-                      Report URL (report_url)
+                      {selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx" ? "ARCHIVE URL" : "Report URL (report_url)"}
                     </label>
                     <input
                       type="url"
                       required
                       value={reportUrlInput}
                       onChange={(e) => setReportUrlInput(e.target.value)}
-                      placeholder="https://analysiscenter.veracode.com/..."
+                      placeholder={selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx" ? "https://us.ast.checkmarx.net/..." : "https://analysiscenter.veracode.com/..."}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
                     />
                   </div>
@@ -888,7 +895,7 @@ Thank you!`;
                 <div className="flex items-center gap-2 text-sky-400">
                   <CheckCircle2 size={18} />
                   <h2 className="text-sm font-black uppercase tracking-widest text-sky-400 font-sans">
-                    Veracode RP Sign-off
+                    {selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx" ? "CHECKMARX RP SIGN-OFF" : "Veracode RP Sign-off"}
                   </h2>
                 </div>
                 <button
@@ -969,8 +976,16 @@ Thank you!`;
 
                   const isCheckmarxActive = selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx";
                   const meetText = rpDoesMeet === "YES" ? "does" : "does not";
+                  const profileUrl = `https://us.ast.checkmarx.net/projects/${appId}/overview?branch=${overview.scanName || ""}`;
 
-                  const veracodeRp = `The SAST assessment has been completed successfully with open findings. The remediation plan <code><a target="_blank" href="https://eu.workbench.pwc.com/home/my-reports/IRM-ARR-Dashboard">${rpNumber}</a></code> is in place for the open findings in adherence to the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a>.<br/>
+                  const rpMessageText = isCheckmarxActive ? `The SAST assessment has been completed successfully with open findings. The remediation plan <code><a target="_blank" href="https://eu.workbench.pwc.com/home/my-reports/IRM-ARR-Dashboard">${rpNumber}</a></code> is in place for the open findings in adherence to the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a>.<br/>
+<br/>
+This can be considered a <b>final</b> sign-off for the static code analysis for this assessed version, scans within <code><a target="_blank" href="${rpReportUrlInput}">${rpScanNameInput}</a></code>, of the <code><a target="_blank" href="${profileUrl}">${profileName}</a></code> application. Please note that after this sign-off, this request will be closed and will not be tracked anymore.<br/>
+<br/>
+Thank you!
+<hr/>
+<p><b><u>Remediation Plan ${rpNumber} Risk Review</u></b><br/>
+The estimated completion date of ${rpEstimatedCompletionDate} <u>${meetText} meet</u> the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a> Vulnerability Remediation Timeframe for ${isCheckmarxActive ? `<span class="rounded critical">Critical</span>` : `<span class="rounded veryhigh">Very High</span>`} and <span class="rounded high">High</span> findings (within ${veryHighHighDays} days) and <span class="rounded medium">Medium</span> findings (within ${mediumDays} days).</p>` : `The SAST assessment has been completed successfully with open findings. The remediation plan <code><a target="_blank" href="https://eu.workbench.pwc.com/home/my-reports/IRM-ARR-Dashboard">${rpNumber}</a></code> is in place for the open findings in adherence to the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a>.<br/>
 <br/>
 This can be considered a <b>final</b> sign-off for the static code analysis for this assessed version, scan <code><a target="_blank" href="https://analysiscenter.veracode.com/auth/index.jsp#StaticOverview:${accountId}:${appId}:${buildId}:${analysisId}:${staticAnalysisUnitId}::::${sandboxId}">${rpScanNameInput}</a></code>, of the <code><a target="_blank" href="https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:${accountId}:${appId}:${buildId}">${profileName}</a></code> application. For more details, please see the Veracode report <code><a target="_blank" href="${rpReportUrlInput}">${reportFilename}</a></code> attached to this request. Please note that after this sign off, this request will be closed and will not be tracked anymore.<br/>
 <br/>
@@ -1020,7 +1035,7 @@ ${scaSec}`;
                     }
                   }
 
-                  const finalHtml = StaticContent.header_style + veracodeRp + sastBlock + scaBlock + StaticContent.footerMsg;
+                  const finalHtml = StaticContent.header_style + rpMessageText + sastBlock + scaBlock + StaticContent.footerMsg;
                   setOverrideHtml(finalHtml);
                   setIsRpSignOffModalOpen(false);
                 }}
@@ -1028,7 +1043,9 @@ ${scaSec}`;
               >
                 <div className="p-6 space-y-4">
                   <p className="text-xs text-slate-400 leading-relaxed font-sans">
-                    Generate the Remediation Plan (RP) sign-off HTML message. Provide the scan name, Remediation Plan number (rp_number), Report URL and estimated completion date.
+                    {selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx"
+                      ? "Generate the Remediation Plan (RP) sign-off HTML message. Provide the archive name, archive url, Remediation Plan number (rp_number) and estimated completion date."
+                      : "Generate the Remediation Plan (RP) sign-off HTML message. Provide the scan name, Remediation Plan number (rp_number), Report URL and estimated completion date."}
                   </p>
 
                   {rpError && (
@@ -1041,14 +1058,14 @@ ${scaSec}`;
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-sans">
-                        Scan Name
+                        {selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx" ? "ARCHIVE NAME" : "Scan Name"}
                       </label>
                       <input
                         type="text"
                         required
                         value={rpScanNameInput}
                         onChange={(e) => setRpScanNameInput(e.target.value)}
-                        placeholder="e.g. 2026-05-23-Scan"
+                        placeholder={selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx" ? "e.g. MyArchiveName" : "e.g. 2026-05-23-Scan"}
                         className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
                       />
                     </div>
@@ -1070,14 +1087,14 @@ ${scaSec}`;
 
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-sans">
-                      Report URL (report_url)
+                      {selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx" ? "ARCHIVE URL" : "Report URL (report_url)"}
                     </label>
                     <input
                       type="url"
                       required
                       value={rpReportUrlInput}
                       onChange={(e) => setRpReportUrlInput(e.target.value)}
-                      placeholder="https://analysiscenter.veracode.com/..."
+                      placeholder={selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx" ? "https://us.ast.checkmarx.net/..." : "https://analysiscenter.veracode.com/..."}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
                     />
                   </div>
@@ -2629,16 +2646,6 @@ export default function App() {
                   </span>
                 </div>
               </div>
-              {resultsLoaded && appProfile.toLowerCase().endsWith(".json") && (
-                <button
-                  onClick={clearMemoryForCurrentScan}
-                  className="px-2.5 py-1.5 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-900/40 hover:border-rose-700/60 text-rose-400 hover:text-rose-200 rounded-lg text-[10px] font-mono tracking-wider flex items-center gap-1.5 transition-all shadow-lg"
-                  title="Refresh/Clear the saved mitigation proposals and comments memory for this specific scan profile"
-                >
-                  <Trash2 size={12} />
-                  <span>REFRESH MEMORY</span>
-                </button>
-              )}
               {resultsLoaded && (
                 <button
                   onClick={() => setResultsLoaded(false)}
@@ -3281,14 +3288,14 @@ export default function App() {
                             <th className="p-4 w-20">Qty</th>
                             <th className="p-4 w-40">Identifier</th>
                             <th className="p-4">Context & AI assessment</th>
-                            <th className="p-4 w-44">
-                              <div className="flex flex-col gap-1.5 items-start">
+                            <th className="p-4 w-48">
+                              <div className="flex flex-row items-center gap-2">
                                 <span>Status</span>
-                                {resultsLoaded && appProfile && (
+                                {resultsLoaded && appProfile && appProfile.toLowerCase().endsWith(".json") && (
                                   <button
                                     type="button"
                                     onClick={clearMemoryForCurrentScan}
-                                    className="px-2 py-1 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-900/40 hover:border-rose-700/60 text-rose-400 hover:text-rose-200 rounded text-[9px] font-mono tracking-wider flex items-center gap-1 transition-all active:scale-95"
+                                    className="px-2 py-0.5 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-900/40 hover:border-rose-700/60 text-rose-400 hover:text-rose-200 rounded text-[9px] font-mono tracking-wider flex items-center gap-1 transition-all active:scale-95 whitespace-nowrap shrink-0"
                                     title="Refresh/Clear the saved mitigation proposals and comments memory for this specific scan profile"
                                   >
                                     <RefreshCcw size={10} />
