@@ -1145,7 +1145,7 @@ export default function App() {
   const [scanSourceType, setScanSourceType] = useState<'json' | 'live' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resultsLoaded, setResultsLoaded] = useState(false);
-  const [activeTab, setActiveTab] = useState<"SAST" | "SCA" | "Review" | "Intake">("SAST");
+  const [activeTab, setActiveTab] = useState<"SAST" | "SCA" | "Review">("SAST");
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [aggregatedData, setAggregatedData] = useState<{
     sast: AggregatedGroup[];
@@ -2475,27 +2475,19 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => {
-                          if (resultsLoaded) {
-                            if (activeTab === "Intake") {
-                              setActiveTab("SAST");
-                            } else {
-                              setActiveTab("Intake");
-                            }
-                          } else {
-                            const nextVal = !showSnowScreen;
-                            setShowSnowScreen(nextVal);
-                            if (nextVal) {
-                              setSelectedTools([]);
-                            }
+                          const nextVal = !showSnowScreen;
+                          setShowSnowScreen(nextVal);
+                          if (nextVal) {
+                            setSelectedTools([]);
                           }
                         }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 shadow-lg active:scale-95 ${
-                          (showSnowScreen || activeTab === "Intake")
+                          showSnowScreen
                             ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40 border-blue-500"
                             : "bg-slate-800 border-slate-700 text-blue-400 hover:border-slate-600"
                         }`}
                       >
-                        <Database size={12} className={(showSnowScreen || activeTab === "Intake") ? "text-white" : "text-blue-500"} />
+                        <Database size={12} className={showSnowScreen ? "text-white" : "text-blue-500"} />
                         Intake
                       </button>
                     </div>
@@ -2658,13 +2650,8 @@ export default function App() {
             </div>
           </div>
 
-          {showSnowScreen || (resultsLoaded && activeTab === "Intake") ? (
-            <SnowIntakeScreen onClose={() => {
-              setShowSnowScreen(false);
-              if (activeTab === "Intake") {
-                setActiveTab("SAST");
-              }
-            }} />
+          {showSnowScreen ? (
+            <SnowIntakeScreen onClose={() => setShowSnowScreen(false)} />
           ) : !resultsLoaded ? (
             <div className="col-span-12 flex items-center justify-center">
               <div className="text-center space-y-4 max-w-md">
@@ -3165,23 +3152,17 @@ export default function App() {
                 </div>
 
                 <div className="flex w-full justify-start border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-10 overflow-x-auto whitespace-nowrap scrollbar-hide">
-                  {(["SAST", "SCA", "Review", "Intake"] as const)
-                    .filter((tab) => tab !== "Intake" || configIntakeRequest !== false)
-                    .map((tab) => (
-                      <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`grow px-6 py-3 text-[11px] font-black uppercase tracking-[0.1em] transition-all relative flex flex-col justify-center items-center gap-1 ${
-                          activeTab === tab
-                            ? "text-blue-400 bg-blue-500/5"
-                            : "text-slate-500 hover:text-slate-300"
-                        }`}
-                      >
-                        <span>{
-                          tab === "Review" ? "Review Comments" : 
-                          tab === "Intake" ? "ServiceNow Intake" : 
-                          `${tab} Mitigation Proposals`
-                        }</span>
+                  {(["SAST", "SCA", "Review"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={`grow px-6 py-3 text-[11px] font-black uppercase tracking-[0.1em] transition-all relative flex flex-col justify-center items-center gap-1 ${
+                        activeTab === tab
+                          ? "text-blue-400 bg-blue-500/5"
+                          : "text-slate-500 hover:text-slate-300"
+                      }`}
+                    >
+                      <span>{tab === "Review" ? "Review Comments" : `${tab} Mitigation Proposals`}</span>
                       
                       {tab === "SAST" && sastMitigationProposal && sastMitigationProposal.Total > 0 && (
                         <div className="flex items-center gap-2 text-[8px] tracking-normal font-bold">
@@ -3300,7 +3281,22 @@ export default function App() {
                             <th className="p-4 w-20">Qty</th>
                             <th className="p-4 w-40">Identifier</th>
                             <th className="p-4">Context & AI assessment</th>
-                            <th className="p-4 w-24">Status</th>
+                            <th className="p-4 w-44">
+                              <div className="flex flex-col gap-1.5 items-start">
+                                <span>Status</span>
+                                {resultsLoaded && appProfile && (
+                                  <button
+                                    type="button"
+                                    onClick={clearMemoryForCurrentScan}
+                                    className="px-2 py-1 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-900/40 hover:border-rose-700/60 text-rose-400 hover:text-rose-200 rounded text-[9px] font-mono tracking-wider flex items-center gap-1 transition-all active:scale-95"
+                                    title="Refresh/Clear the saved mitigation proposals and comments memory for this specific scan profile"
+                                  >
+                                    <RefreshCcw size={10} />
+                                    <span>REFRESH MEMORY</span>
+                                  </button>
+                                )}
+                              </div>
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/50">
