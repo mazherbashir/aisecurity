@@ -1963,147 +1963,174 @@ export default function App() {
       "Info": "Info"
     };
 
-    let totalFlaws = 0;
+    let totalFlaws = sastSummary?.vulnerabilities !== undefined ? sastSummary.vulnerabilities : 0;
     const counts: Record<string, Record<string, number>> = {};
-    const severityTotalsOnly: Record<string, number> = {};
+    const severityTotals: Record<string, number> = {
+      "Critical": 0,
+      "Very High": 0,
+      "High": 0,
+      "Medium": 0,
+      "Low": 0,
+      "Info": 0
+    };
 
-    // 1. Try to populate from aggregatedData.sast
+    // 1. Populate severityTotals from dynamic, authoritative sastSummary.breakdown
+    if (sastSummary?.breakdown) {
+      Object.entries(sastSummary.breakdown).forEach(([sevKey, count]) => {
+        let label = sevKey;
+        if (sevKey === "Information") label = "Info";
+        const targetLabel = severityLabels[label] || label;
+        if (severityTotals[targetLabel] !== undefined) {
+          severityTotals[targetLabel] += count as number;
+        }
+      });
+    }
+
+    // 2. Extract CWE details from backendSastSummary.breakdown first (most complete source for all severities)
+    if (backendSastSummary?.breakdown) {
+      const bd = backendSastSummary.breakdown;
+      if (typeof bd === "string") {
+        let currentSeverity = "Medium";
+        const lines = bd.split("\n");
+        lines.forEach((line: string) => {
+          const trimmed = line.trim();
+          if (!trimmed) return;
+          const sevHeaderMatch = trimmed.match(/^([A-Za-z\s]+):\s*(\d+)$/);
+          if (sevHeaderMatch) {
+            currentSeverity = sevHeaderMatch[1].trim();
+          } else {
+            const cweMatch = trimmed.match(/(CWE-\d+)/i);
+            if (cweMatch) {
+              const cweStr = cweMatch[1].toUpperCase();
+              let count = 1;
+              const countMatch = trimmed.match(/x\s*(\d+)/i);
+              if (countMatch) {
+                count = parseInt(countMatch[1], 10) || 1;
+              }
+              
+              let sev = currentSeverity;
+              if (sev === "VeryHigh") sev = "Very High";
+              const label = severityLabels[sev] || sev;
+              
+              if (!counts[label]) {
+                counts[label] = {};
+              }
+              counts[label][cweStr] = (counts[label][cweStr] || 0) + count;
+            }
+          }
+        });
+      } else if (typeof bd === "object") {
+        Object.entries(bd).forEach(([sevKey, val]: [string, any]) => {
+          let sev = sevKey;
+          if (sev === "VeryHigh") sev = "Very High";
+          const label = severityLabels[sev] || sev;
+
+          if (val && typeof val === "object") {
+            const findings = val.findings;
+            if (Array.isArray(findings) && findings.length > 0) {
+              findings.forEach((f: any) => {
+                let cweStr = String(f.cwe || f.cweid || "");
+                if (cweStr) {
+                  if (!cweStr.toUpperCase().startsWith("CWE-")) {
+                    cweStr = `CWE-${cweStr}`;
+                  }
+                  cweStr = cweStr.toUpperCase();
+                  const count = typeof f.count === "number"
+                    ? f.count
+                    : typeof f.total === "number"
+                      ? f.total
+                      : parseInt(f.count || f.total) || 1;
+
+                  if (!counts[label]) {
+                    counts[label] = {};
+                  }
+                  counts[label][cweStr] = (counts[label][cweStr] || 0) + count;
+                }
+              });
+            }
+          }
+        });
+      }
+    }
+
+    // 3. Also add any details from aggregatedData.sast that might be missing from backendSastSummary
     if (aggregatedData?.sast && aggregatedData.sast.length > 0) {
       aggregatedData.sast.forEach(g => {
-        let sev = g.severity || "Info";
+        if (g.status === "approved") return; // skip approved
+
+        let sev = g.severity || "Medium";
         if (sev === "VeryHigh") sev = "Very High";
         const label = severityLabels[sev] || sev;
-        
+
         let cweStr = String(g.cweId || g.identifier || "");
         if (cweStr) {
           if (!cweStr.toUpperCase().startsWith("CWE-")) {
             cweStr = `CWE-${cweStr}`;
           }
+          cweStr = cweStr.toUpperCase();
 
           const cnt = g.records?.length || g.count || 0;
           if (cnt > 0) {
             if (!counts[label]) {
               counts[label] = {};
             }
-            counts[label][cweStr] = (counts[label][cweStr] || 0) + cnt;
-            totalFlaws += cnt;
+            if (counts[label][cweStr] === undefined) {
+              counts[label][cweStr] = cnt;
+            }
           }
         }
       });
     }
 
-    // 2. If counts is still empty, fallback to backendSastSummary
-    if (Object.keys(counts).length === 0 && backendSastSummary) {
-      totalFlaws = typeof backendSastSummary.vulnerabilities === "number"
-        ? backendSastSummary.vulnerabilities
-        : parseInt(backendSastSummary.vulnerabilities) || 0;
+    // 4. Deduct any approved findings from the counts to keep them synchronized with dynamic UI state
+    const approvedSastGroups = (aggregatedData?.sast || []).filter(g => g.status === "approved");
+    approvedSastGroups.forEach(g => {
+      let sev = g.severity || "Medium";
+      if (sev === "VeryHigh") sev = "Very High";
+      const label = severityLabels[sev] || sev;
 
-      const bd = backendSastSummary.breakdown;
-      if (bd) {
-        if (typeof bd === "string") {
-          let currentSeverity = "Medium";
-          const lines = bd.split("\n");
-          lines.forEach((line: string) => {
-            const trimmed = line.trim();
-            if (!trimmed) return;
-            const sevHeaderMatch = trimmed.match(/^([A-Za-z\s]+):\s*(\d+)$/);
-            if (sevHeaderMatch) {
-              currentSeverity = sevHeaderMatch[1].trim();
-            } else {
-              const cweMatch = trimmed.match(/(CWE-\d+)/i);
-              if (cweMatch) {
-                const cweStr = cweMatch[1].toUpperCase();
-                let count = 1;
-                const countMatch = trimmed.match(/x\s*(\d+)/i);
-                if (countMatch) {
-                  count = parseInt(countMatch[1], 10) || 1;
-                }
-                
-                let sev = currentSeverity;
-                if (sev === "VeryHigh") sev = "Very High";
-                const label = severityLabels[sev] || sev;
-                
-                if (!counts[label]) {
-                  counts[label] = {};
-                }
-                counts[label][cweStr] = (counts[label][cweStr] || 0) + count;
-              }
-            }
-          });
-        } else if (typeof bd === "object") {
-          Object.entries(bd).forEach(([sevKey, val]: [string, any]) => {
-            let sev = sevKey;
-            if (sev === "VeryHigh") sev = "Very High";
-            const label = severityLabels[sev] || sev;
+      let cweStr = String(g.cweId || g.identifier || "");
+      if (cweStr) {
+        if (!cweStr.toUpperCase().startsWith("CWE-")) {
+          cweStr = `CWE-${cweStr}`;
+        }
+        cweStr = cweStr.toUpperCase();
 
-            if (val && typeof val === "object") {
-              // Format: { total: 4, findings: [ { cwe: "CWE-89", count: 4 } ] }
-              const findings = val.findings;
-              if (Array.isArray(findings) && findings.length > 0) {
-                findings.forEach((f: any) => {
-                  let cweStr = String(f.cwe || f.cweid || "");
-                  if (cweStr) {
-                    if (!cweStr.toUpperCase().startsWith("CWE-")) {
-                      cweStr = `CWE-${cweStr}`;
-                    }
-                    const count = typeof f.count === "number"
-                      ? f.count
-                      : typeof f.total === "number"
-                        ? f.total
-                        : parseInt(f.count || f.total) || 1;
-
-                    if (!counts[label]) {
-                      counts[label] = {};
-                    }
-                    counts[label][cweStr] = (counts[label][cweStr] || 0) + count;
-                  }
-                });
-              } else {
-                // No findings list, just total
-                const total = typeof val.total === "number"
-                  ? val.total
-                  : parseInt(val.total) || 0;
-                if (total > 0) {
-                  severityTotalsOnly[label] = (severityTotalsOnly[label] || 0) + total;
-                }
-              }
-            } else if (typeof val === "number") {
-              // Format: "Low": 145
-              if (val > 0) {
-                severityTotalsOnly[label] = (severityTotalsOnly[label] || 0) + val;
-              }
-            }
-          });
+        const countToDeduct = g.records?.length || g.count || 1;
+        if (counts[label] && counts[label][cweStr] !== undefined) {
+          counts[label][cweStr] = Math.max(0, counts[label][cweStr] - countToDeduct);
         }
       }
-    }
+    });
 
-    // Now, construct the output string
+    // 5. Construct the output string
     let text = `Open Flaw Summary:${totalFlaws}`;
     const orderedSevs = ["Critical", "Very High", "High", "Medium", "Low", "Info"];
 
     orderedSevs.forEach(sev => {
-      const cweMap = counts[sev];
-      if (cweMap && Object.keys(cweMap).length > 0) {
-        const sevTotal = Object.values(cweMap).reduce((a, b) => a + b, 0);
+      const sevTotal = severityTotals[sev] || 0;
+      if (sevTotal > 0) {
         text += `\n- ${sev}: ${sevTotal}`;
         
-        const sortedCwes = Object.keys(cweMap).sort((a, b) => {
-          const numA = parseInt(a.replace(/\D/g, '')) || 0;
-          const numB = parseInt(b.replace(/\D/g, '')) || 0;
-          return numA - numB;
-        });
+        const cweMap = counts[sev];
+        if (cweMap && Object.keys(cweMap).length > 0) {
+          const sortedCwes = Object.keys(cweMap).sort((a, b) => {
+            const numA = parseInt(a.replace(/\D/g, '')) || 0;
+            const numB = parseInt(b.replace(/\D/g, '')) || 0;
+            return numA - numB;
+          });
 
-        sortedCwes.forEach(cwe => {
-          const count = cweMap[cwe];
-          if (sev === "Info") {
-            text += `\n  - ${cwe} x ${count}`;
-          } else {
-            text += `\n  - ${cwe}  ${sev}  x  ${count}`;
-          }
-        });
-      } else if (severityTotalsOnly[sev] !== undefined && severityTotalsOnly[sev] > 0) {
-        text += `\n- ${sev}: ${severityTotalsOnly[sev]}`;
+          sortedCwes.forEach(cwe => {
+            const count = cweMap[cwe];
+            if (count > 0) {
+              if (sev === "Info") {
+                text += `\n  - ${cwe} x ${count}`;
+              } else {
+                text += `\n  - ${cwe}  ${sev}  x  ${count}`;
+              }
+            }
+          });
+        }
       }
     });
 

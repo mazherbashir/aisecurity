@@ -631,65 +631,6 @@ Code Review Services recommends upgrading the third-party component with a vulne
 
         const cvesInPackage = (detail.cveList || "").split(",").map((c: string) => c.trim()).filter(Boolean);
 
-        let hasGroups = false;
-        let isAllDevDep = true;
-        let isAllApproved = true;
-        let isAnyRejected = false;
-
-        if (aggregatedData?.sca) {
-          const dPkg = (detail.packageName || "").toLowerCase().trim();
-          const matchingGroups = aggregatedData.sca.filter((g: any) => {
-            return g.records && g.records.some((r: any) => {
-              const rPkg = (r.packageName || r.title || r.location || g.identifier || "").toLowerCase().trim();
-              const dPkg_lower = dPkg.toLowerCase().trim();
-              const rVer = (r.version || "").toLowerCase().trim();
-              const dVer = (detail.version || "").toLowerCase().trim();
-              const rLoc = (r.location || "").toLowerCase().trim();
-              
-              const dPkgParts = dPkg_lower.split(/[:\/]/);
-              const dPkgLast = dPkgParts[dPkgParts.length - 1];
-              
-              const pkgMatch = rPkg === dPkg_lower || 
-              (rPkg && dPkg_lower && (rPkg.includes(dPkg_lower) || dPkg_lower.includes(rPkg))) || 
-              (dPkgLast && rPkg && rPkg.includes(dPkgLast)) || 
-              (dPkgLast && r.location && r.location.toLowerCase().includes(dPkgLast));
-              const verMatch = (rVer && dVer && (rVer === dVer || rVer.includes(dVer) || dVer.includes(rVer))) || 
-                               (!rVer && rLoc.includes(dVer));
-              
-              // Match by package and version; allow fallback for empty version matching.
-              // Bypassing strict severity matching for component grouping to avoid duplicate package rows
-              // caused by different scanner databases classifying CVE severities differently.
-              return pkgMatch && (verMatch || !dVer || dVer === "n/a" || !rVer);
-            });
-          });
-
-          if (matchingGroups.length > 0) {
-            hasGroups = true;
-            isAllDevDep = matchingGroups.every((g: any) => g.status === "approved" && g.isDevDependency);
-            isAllApproved = matchingGroups.every((g: any) => g.status === "approved");
-            isAnyRejected = matchingGroups.some((g: any) => g.status === "rejected");
-          }
-        }
-
-        let label = "None";
-        let bgClass = "bg-gold";
-
-        if (detail.status === "Dev Dependency") {
-          label = "Dev Dependency";
-          bgClass = "bg-green";
-        } else if (hasGroups) {
-          if (isAllDevDep) {
-            label = "Dev Dependency";
-            bgClass = "bg-green";
-          } else if (isAllApproved) {
-            label = "Approved";
-            bgClass = "bg-green";
-          } else if (isAnyRejected) {
-            label = "Rejected";
-            bgClass = "bg-red";
-          }
-        }
-
         const buildRow = (cves: string[], countsObj: Record<string, number>, label: string, bgClass: string) => {
           const severitiesToRender = Object.entries(countsObj)
             .filter(([sev, c]) => c > 0)
@@ -729,7 +670,160 @@ Code Review Services recommends upgrading the third-party component with a vulne
       </tr>`;
         };
 
-        return buildRow(cvesInPackage, totalCounts, label, bgClass);
+        const itemsWithStatus: { cve: string | null; severity: string; status: string }[] = [];
+
+        if (cvesInPackage.length > 0) {
+          const fallbackCounts = { ...totalCounts };
+
+          cvesInPackage.forEach((cve) => {
+            let itemStatus = "None";
+            let cveSeverity = "Medium";
+            let foundInGroup = false;
+
+            if (aggregatedData?.sca) {
+              const matchedGroup = aggregatedData.sca.find((g: any) => {
+                const matchesPkg = g.records && g.records.some((r: any) => {
+                  const rPkg = (r.packageName || r.location || r.fileName || "").toLowerCase().trim();
+                  const pkgName = (detail.packageName || "").toLowerCase().trim();
+                  const getArtId = (p: string) => {
+                    if (!p) return "";
+                    const parts = p.split(":");
+                    return parts[parts.length - 1] || p;
+                  };
+                  const rArtId = getArtId(rPkg);
+                  const dArtId = getArtId(pkgName);
+                  const getSignificantWords = (p: string) => p.toLowerCase().split(/[:.\-_]/).filter(w => w.length > 3);
+                  const rWords = getSignificantWords(rPkg);
+                  const dWords = getSignificantWords(pkgName);
+                  const hasSharedWord = rWords.some(w => dWords.includes(w));
+                  return rPkg === pkgName || (rArtId && dArtId && rArtId === dArtId) || rPkg.includes(pkgName) || pkgName.includes(rPkg) || hasSharedWord;
+                });
+                if (!matchesPkg) return false;
+
+                return g.records && g.records.some((r: any) => {
+                  const rCveList = (r.cveList || r.title || r.id || "").toLowerCase();
+                  return rCveList.includes(cve.toLowerCase()) || cve.toLowerCase().includes(rCveList) || (g.identifier && g.identifier.toLowerCase().includes(cve.toLowerCase()));
+                });
+              });
+
+              if (matchedGroup) {
+                foundInGroup = true;
+                let sName = matchedGroup.severity || "Medium";
+                if (sName === "VeryHigh" || sName === "Critical") sName = "Very High";
+                cveSeverity = sName;
+
+                if (matchedGroup.status === "approved") {
+                  itemStatus = matchedGroup.isDevDependency ? "Dev Dependency" : "Approved";
+                } else if (matchedGroup.status === "rejected") {
+                  itemStatus = "Rejected";
+                }
+              }
+            }
+
+            if (!foundInGroup) {
+              for (const sev of ["Very High", "High", "Medium", "Low"]) {
+                if (fallbackCounts[sev] > 0) {
+                  cveSeverity = sev;
+                  fallbackCounts[sev]--;
+                  break;
+                }
+              }
+            }
+
+            if (detail.status === "Dev Dependency") {
+              itemStatus = "Dev Dependency";
+            } else if (detail.status === "Approved") {
+              itemStatus = "Approved";
+            } else if (detail.status === "Rejected") {
+              itemStatus = "Rejected";
+            }
+
+            itemsWithStatus.push({ cve, severity: cveSeverity, status: itemStatus });
+          });
+        } else {
+          Object.entries(totalCounts).forEach(([severity, count]) => {
+            for (let i = 0; i < count; i++) {
+              let itemStatus = "None";
+
+              if (aggregatedData?.sca) {
+                const matchedGroup = aggregatedData.sca.find((g: any) => {
+                  const matchesPkg = g.records && g.records.some((r: any) => {
+                    const rPkg = (r.packageName || r.location || r.fileName || "").toLowerCase().trim();
+                    const pkgName = (detail.packageName || "").toLowerCase().trim();
+                    const getArtId = (p: string) => {
+                      if (!p) return "";
+                      const parts = p.split(":");
+                      return parts[parts.length - 1] || p;
+                    };
+                    const rArtId = getArtId(rPkg);
+                    const dArtId = getArtId(pkgName);
+                    const getSignificantWords = (p: string) => p.toLowerCase().split(/[:.\-_]/).filter(w => w.length > 3);
+                    const rWords = getSignificantWords(rPkg);
+                    const dWords = getSignificantWords(pkgName);
+                    const hasSharedWord = rWords.some(w => dWords.includes(w));
+                    return rPkg === pkgName || (rArtId && dArtId && rArtId === dArtId) || rPkg.includes(pkgName) || pkgName.includes(rPkg) || hasSharedWord;
+                  });
+                  const isSameSeverity = (a: string, b: string) => {
+                    const norm = (s: string) => {
+                      const l = s.toLowerCase().trim();
+                      if (l === "critical" || l === "very high" || l === "veryhigh") return "very high";
+                      return l;
+                    };
+                    return norm(a) === norm(b);
+                  };
+                  return matchesPkg && isSameSeverity(g.severity, severity);
+                });
+
+                if (matchedGroup) {
+                  if (matchedGroup.status === "approved") {
+                    itemStatus = matchedGroup.isDevDependency ? "Dev Dependency" : "Approved";
+                  } else if (matchedGroup.status === "rejected") {
+                    itemStatus = "Rejected";
+                  }
+                }
+              }
+
+              if (detail.status === "Dev Dependency") {
+                itemStatus = "Dev Dependency";
+              } else if (detail.status === "Approved") {
+                itemStatus = "Approved";
+              } else if (detail.status === "Rejected") {
+                itemStatus = "Rejected";
+              }
+
+              itemsWithStatus.push({ cve: null, severity, status: itemStatus });
+            }
+          });
+        }
+
+        const statusGroups: Record<string, { cves: string[]; counts: Record<string, number> }> = {};
+
+        itemsWithStatus.forEach((item) => {
+          const s = item.status;
+          if (!statusGroups[s]) {
+            statusGroups[s] = { cves: [], counts: { "Very High": 0, "High": 0, "Medium": 0, "Low": 0 } };
+          }
+          if (item.cve) {
+            statusGroups[s].cves.push(item.cve);
+          }
+          statusGroups[s].counts[item.severity] = (statusGroups[s].counts[item.severity] || 0) + 1;
+        });
+
+        const renderedRows: string[] = [];
+        const statusConfig: Record<string, { label: string; bgClass: string }> = {
+          "Dev Dependency": { label: "Dev Dependency", bgClass: "bg-green" },
+          "Approved": { label: "Approved", bgClass: "bg-green" },
+          "Rejected": { label: "Rejected", bgClass: "bg-red" },
+          "None": { label: "None", bgClass: "bg-gold" }
+        };
+
+        Object.entries(statusGroups).forEach(([status, sData]) => {
+          const cfg = statusConfig[status] || { label: status, bgClass: "bg-gold" };
+          const rowHtml = buildRow(sData.cves, sData.counts, cfg.label, cfg.bgClass);
+          renderedRows.push(rowHtml);
+        });
+
+        return renderedRows.join("");
       })
       .join("");
 
