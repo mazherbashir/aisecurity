@@ -1,5 +1,35 @@
 import { StaticContent } from "../staticContent";
 
+export function isSameSeverity(sev1: string, sev2: string): boolean {
+  if (!sev1 || !sev2) return false;
+  const s1 = sev1.toLowerCase().replace(/\s+/g, "");
+  const s2 = sev2.toLowerCase().replace(/\s+/g, "");
+  if ((s1 === "critical" || s1 === "veryhigh") && (s2 === "critical" || s2 === "veryhigh")) return true;
+  return s1 === s2;
+}
+
+export function isSeverityMatching(gSev: string, detailSevCounts: string): boolean {
+  if (!gSev) return true;
+  const dSev = (detailSevCounts || "").toLowerCase().trim();
+  if (!dSev || dSev === "" || dSev === "n/a" || dSev === "no findings" || dSev === "unknown" || dSev === "empty" || dSev.includes("empty")) return true;
+  
+  const rSev = gSev.toLowerCase().trim();
+  
+  // Normalize both severities for comparison
+  const isRVeryHigh = rSev === "very high" || rSev === "veryhigh" || rSev === "critical";
+  const isRHigh = rSev === "high";
+  const isRMedium = rSev === "medium";
+  const isRLow = rSev === "low";
+  
+  if (isRVeryHigh && (dSev.includes("critical") || dSev.includes("very high") || dSev.includes("veryhigh"))) return true;
+  if (isRHigh && dSev.includes("high")) return true;
+  if (isRMedium && dSev.includes("medium")) return true;
+  if (isRLow && dSev.includes("low")) return true;
+  
+  // Fallback: check raw inclusion
+  return dSev.includes(rSev);
+}
+
 export interface SummaryInput {
   backendSastSummary: any;
   backendScaSummary: any;
@@ -302,15 +332,29 @@ export function generateReviewSummary(input: SummaryInput) {
           // If no explicitly listed CVEs in cveList are present, represent severityCounts as separate items
           Object.entries(parsedCounts).forEach(([severity, count]) => {
             for (let i = 0; i < count; i++) {
-              let isApproved = false;
-              if (aggregatedData?.sca) {
+              const isDetailApproved = detail.status === "Dev Dependency" || detail.status === "Approved";
+              let isApproved = isDetailApproved;
+              if (!isApproved && aggregatedData?.sca) {
                 isApproved = aggregatedData.sca.some((g: any) => {
                   if (g.status !== "approved") return false;
                   const matchesPkg = g.records && g.records.some((r: any) => {
                     const rPkg = (r.packageName || r.location || r.fileName || "").toLowerCase().trim();
-                    return rPkg.includes(pkgName) || pkgName.includes(rPkg);
+                    const getArtId = (p: string) => {
+                      if (!p) return "";
+                      const parts = p.split(":");
+                      return parts[parts.length - 1] || p;
+                    };
+                    const rArtId = getArtId(rPkg);
+                    const dArtId = getArtId(pkgName);
+                    
+                    const getSignificantWords = (p: string) => p.toLowerCase().split(/[:.\-_]/).filter(w => w.length > 3);
+                    const rWords = getSignificantWords(rPkg);
+                    const dWords = getSignificantWords(pkgName);
+                    const hasSharedWord = rWords.some(w => dWords.includes(w));
+                    
+                    return rPkg === pkgName || (rArtId && dArtId && rArtId === dArtId) || rPkg.includes(pkgName) || pkgName.includes(rPkg) || hasSharedWord;
                   });
-                  return matchesPkg && g.severity === severity;
+                  return matchesPkg && isSameSeverity(g.severity, severity);
                 });
               }
               if (!isApproved) {
@@ -324,8 +368,9 @@ export function generateReviewSummary(input: SummaryInput) {
         } else {
           // Process each cve in cveList
           cvesInDetail.forEach((cve) => {
-            let isApproved = false;
-            if (aggregatedData?.sca) {
+            const isDetailApproved = detail.status === "Dev Dependency" || detail.status === "Approved";
+            let isApproved = isDetailApproved;
+            if (!isApproved && aggregatedData?.sca) {
               isApproved = aggregatedData.sca.some((g: any) => {
                 if (g.status !== "approved") return false;
 
@@ -333,7 +378,20 @@ export function generateReviewSummary(input: SummaryInput) {
                   const rPkg = (r.packageName || r.location || r.fileName || "").toLowerCase().trim();
                   const rCveList = (r.cveList || r.title || r.id || "").toLowerCase();
 
-                  const pkgMatch = rPkg.includes(pkgName) || pkgName.includes(rPkg);
+                  const getArtId = (p: string) => {
+                    if (!p) return "";
+                    const parts = p.split(":");
+                    return parts[parts.length - 1] || p;
+                  };
+                  const rArtId = getArtId(rPkg);
+                  const dArtId = getArtId(pkgName);
+                  
+                  const getSignificantWords = (p: string) => p.toLowerCase().split(/[:.\-_]/).filter(w => w.length > 3);
+                  const rWords = getSignificantWords(rPkg);
+                  const dWords = getSignificantWords(pkgName);
+                  const hasSharedWord = rWords.some(w => dWords.includes(w));
+                  
+                  const pkgMatch = rPkg === pkgName || (rArtId && dArtId && rArtId === dArtId) || rPkg.includes(pkgName) || pkgName.includes(rPkg) || hasSharedWord;
                   const cveMatch =
                     rCveList.includes(cve) ||
                     cve.includes(rCveList) ||
@@ -355,7 +413,7 @@ export function generateReviewSummary(input: SummaryInput) {
                     const rCveList = (r.cveList || r.title || r.id || "").toLowerCase();
                     return rCveList.includes(cve) || cve.includes(rCveList);
                   });
-                  if (match) {
+                  console.log("cve", cve, "match", match, "status", g.status, "isDev", g.isDevDependency); if (match) {
                     let sName = match.severity || "Medium";
                     if (sName === "VeryHigh" || sName === "Critical") sName = "Very High";
                     cveSeverity = sName;
@@ -571,62 +629,68 @@ Code Review Services recommends upgrading the third-party component with a vulne
           totalCounts[s] = (totalCounts[s] || 0) + (parseInt(p.count, 10) || 0);
         });
 
-        let approvedCves: string[] = [];
-        let rejectedCves: string[] = [];
-        let noneCves: string[] = [];
-
-        let approvedCounts: Record<string, number> = { "Very High": 0, "High": 0, "Medium": 0, "Low": 0 };
-        let rejectedCounts: Record<string, number> = { "Very High": 0, "High": 0, "Medium": 0, "Low": 0 };
-        let noneCounts: Record<string, number> = { ...totalCounts };
-
         const cvesInPackage = (detail.cveList || "").split(",").map((c: string) => c.trim()).filter(Boolean);
 
-        cvesInPackage.forEach((cve: string) => {
-          let status = "none";
-          let severity = "Medium";
+        let hasGroups = false;
+        let isAllDevDep = true;
+        let isAllApproved = true;
+        let isAnyRejected = false;
 
-          if (aggregatedData?.sca) {
-            for (const g of aggregatedData.sca) {
-              const isCveMatch = g.identifier === cve || (g.identifier && g.identifier.toLowerCase().includes(cve.toLowerCase()));
-              if (isCveMatch) {
-                const locMatch = g.records.some((r) => {
-                  const rPkg = (r.packageName || r.location || "").toLowerCase().trim();
-                  const dPkg = (detail.packageName || "").toLowerCase().trim();
-                  return rPkg.includes(dPkg) || dPkg.includes(rPkg);
-                });
-                if (locMatch || isCveMatch) {
-                  status = g.status || "none";
-                  let s = g.severity.trim();
-                  if (s === "VeryHigh" || s === "Critical") s = "Very High";
-                  if (s === "Info" || s === "Information") s = "Low";
-                  if (s !== "Very High" && s !== "High" && s !== "Medium" && s !== "Low") s = "Medium";
-                  severity = s;
-                  break;
-                }
-              }
-            }
+        if (aggregatedData?.sca) {
+          const dPkg = (detail.packageName || "").toLowerCase().trim();
+          const matchingGroups = aggregatedData.sca.filter((g: any) => {
+            return g.records && g.records.some((r: any) => {
+              const rPkg = (r.packageName || r.title || r.location || g.identifier || "").toLowerCase().trim();
+              const dPkg_lower = dPkg.toLowerCase().trim();
+              const rVer = (r.version || "").toLowerCase().trim();
+              const dVer = (detail.version || "").toLowerCase().trim();
+              const rLoc = (r.location || "").toLowerCase().trim();
+              
+              const dPkgParts = dPkg_lower.split(/[:\/]/);
+              const dPkgLast = dPkgParts[dPkgParts.length - 1];
+              
+              const pkgMatch = rPkg === dPkg_lower || 
+              (rPkg && dPkg_lower && (rPkg.includes(dPkg_lower) || dPkg_lower.includes(rPkg))) || 
+              (dPkgLast && rPkg && rPkg.includes(dPkgLast)) || 
+              (dPkgLast && r.location && r.location.toLowerCase().includes(dPkgLast));
+              const verMatch = (rVer && dVer && (rVer === dVer || rVer.includes(dVer) || dVer.includes(rVer))) || 
+                               (!rVer && rLoc.includes(dVer));
+              
+              // Match by package and version; allow fallback for empty version matching.
+              // Bypassing strict severity matching for component grouping to avoid duplicate package rows
+              // caused by different scanner databases classifying CVE severities differently.
+              return pkgMatch && (verMatch || !dVer || dVer === "n/a" || !rVer);
+            });
+          });
+
+          if (matchingGroups.length > 0) {
+            hasGroups = true;
+            isAllDevDep = matchingGroups.every((g: any) => g.status === "approved" && g.isDevDependency);
+            isAllApproved = matchingGroups.every((g: any) => g.status === "approved");
+            isAnyRejected = matchingGroups.some((g: any) => g.status === "rejected");
           }
+        }
 
-          if (status === "approved") {
-            approvedCves.push(cve);
-            approvedCounts[severity] = (approvedCounts[severity] || 0) + 1;
-          } else if (status === "rejected") {
-            rejectedCves.push(cve);
-            rejectedCounts[severity] = (rejectedCounts[severity] || 0) + 1;
-          } else {
-            noneCves.push(cve);
+        let label = "None";
+        let bgClass = "bg-gold";
+
+        if (detail.status === "Dev Dependency") {
+          label = "Dev Dependency";
+          bgClass = "bg-green";
+        } else if (hasGroups) {
+          if (isAllDevDep) {
+            label = "Dev Dependency";
+            bgClass = "bg-green";
+          } else if (isAllApproved) {
+            label = "Approved";
+            bgClass = "bg-green";
+          } else if (isAnyRejected) {
+            label = "Rejected";
+            bgClass = "bg-red";
           }
-        });
-
-        Object.keys(noneCounts).forEach((s) => {
-          noneCounts[s] -= (approvedCounts[s] || 0);
-          noneCounts[s] -= (rejectedCounts[s] || 0);
-          if (noneCounts[s] < 0) noneCounts[s] = 0;
-        });
+        }
 
         const buildRow = (cves: string[], countsObj: Record<string, number>, label: string, bgClass: string) => {
-          if (cves.length === 0) return "";
-
           const severitiesToRender = Object.entries(countsObj)
             .filter(([sev, c]) => c > 0)
             .sort(([sevA], [sevB]) => (severityOrder[sevA] || 99) - (severityOrder[sevB] || 99))
@@ -645,14 +709,10 @@ Code Review Services recommends upgrading the third-party component with a vulne
               return `<span class="crs-rounded minwidth ${sevClass}">${displayedSev}</span>: ${c}`;
             });
 
-          if (severitiesToRender.length === 0) return "";
+          const severityHtml = severitiesToRender.length > 0 ? severitiesToRender.join("<br/>") : "None";
 
-          const severityHtml = severitiesToRender.join("<br/>");
           const cveLinks = cves
-            .map(
-              (cve) =>
-                `<a target="_blank" href="http://web.nvd.nist.gov/view/vuln/detail?vulnId=${cve}">${cve}</a>`,
-            )
+            .map((cve) => `<a target="_blank" href="http://web.nvd.nist.gov/view/vuln/detail?vulnId=${cve}">${cve}</a>`)
             .join("</div><div>");
 
           const safeVersionHtml = scaSafeVersionEnabled ? `<td>${detail.safeVersion || "N/A"}</td>` : "";
@@ -669,11 +729,7 @@ Code Review Services recommends upgrading the third-party component with a vulne
       </tr>`;
         };
 
-        const noneRow = buildRow(noneCves, noneCounts, "None", "bg-gold");
-        const appRow = buildRow(approvedCves, approvedCounts, "Approved", "bg-green");
-        const rejRow = buildRow(rejectedCves, rejectedCounts, "Rejected", "bg-red");
-
-        return noneRow + appRow + rejRow;
+        return buildRow(cvesInPackage, totalCounts, label, bgClass);
       })
       .join("");
 

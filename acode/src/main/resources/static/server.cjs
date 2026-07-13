@@ -115,7 +115,7 @@ async function startServer() {
         noSca: ["Apex", "TSQL", "Perl"],
         tiers: ["tier-1", "tier-2", "tier-3a", "tier-3b"],
         scaSafeVersionEnabled: true,
-        intakeRequest: false,
+        intakeRequest: devMemFullConfig && devMemFullConfig["System"] && devMemFullConfig["System"].intakeRequest !== void 0 ? devMemFullConfig["System"].intakeRequest : true,
         engines: ["Gemini", "azure.gpt-4o"],
         "history-checkmarx": ["FIT_Honeybee_develop.json", "FIT_Honeybee_1781906942677.json"],
         history: [
@@ -141,6 +141,7 @@ async function startServer() {
       const data = await response.json();
       res.json({
         ...data,
+        intakeRequest: devMemFullConfig && devMemFullConfig["System"] && devMemFullConfig["System"].intakeRequest !== void 0 ? devMemFullConfig["System"].intakeRequest : true,
         tiers: data.tiers || ["tier-1", "tier-2", "tier-3a", "tier-3b"]
       });
     } catch (error) {
@@ -149,7 +150,7 @@ async function startServer() {
         noSca: ["Apex", "TSQL", "Perl"],
         tiers: ["tier-1", "tier-2", "tier-3a", "tier-3b"],
         scaSafeVersionEnabled: true,
-        intakeRequest: false,
+        intakeRequest: devMemFullConfig && devMemFullConfig["System"] && devMemFullConfig["System"].intakeRequest !== void 0 ? devMemFullConfig["System"].intakeRequest : true,
         engines: ["Gemini", "azure.gpt-4o"],
         "history-checkmarx": ["FIT_Honeybee_develop.json", "FIT_Honeybee_1781906942677.json"],
         history: [
@@ -218,6 +219,7 @@ Do not provide bullet points, headings, or long explanations.`,
           },
           "System": {
             "scanValidityDays": 90,
+            "intakeRequest": true,
             "mitigationProposalEnabled": true,
             "mitigationApiType": "REST",
             "saveXmlLogs": true,
@@ -284,6 +286,17 @@ Do not provide bullet points, headings, or long explanations.`,
             "NET": ["nuget", "CIL32", "MSIL"],
             "Ruby": ["rubygems", "RUBY"],
             "Python": ["pip", "pypi", "PYTHON"]
+          },
+          "Checkmarx": {
+            "authUrl": "https://us.iam.checkmarx.net/auth/realms/pwc-tax/protocol/openid-connect/token",
+            "apiUrl": "https://us.ast.checkmarx.net/api",
+            "pollingInterval": 5e3,
+            "pollingRetry": 15
+          },
+          "Intake": {
+            "gcaasRestEndpointRemediation": "/snow/utils/open_remediation_requests",
+            "gcaasRestEndpointIntake": "/snow/utils/open_intake_requests",
+            "gcaasRestBaseURL": "https://hosted-apps-we-stage.np-pwclabs.pwcglb.com/api/687da848-9b88-48ce-8d71-d276e6d682f6/crs-rest-api-toolkit-chris-fastapi-staging-test-backend"
           }
         };
         devMemFullConfig = initialConfig;
@@ -352,6 +365,7 @@ Do not provide bullet points, headings, or long explanations.`,
           "saveJsonHistory": true,
           "historyLimit": 10,
           "secondaryAuditEnabled": false,
+          "intakeRequest": true,
           "safeSCAVERSION": {
             "scaSafeVersionEnabled": true,
             "scaStaleFixMessage": "No safe version found. Fix applies to a different major version. Check manually.",
@@ -365,6 +379,17 @@ Do not provide bullet points, headings, or long explanations.`,
           "sharedServiceEndpoint": "https://genai-sharedservice-americas.pwcinternal.com/v1/chat/completions",
           "sharedServiceRole": "user",
           "sharedServiceMaxTokens": 1e3
+        },
+        "Checkmarx": {
+          "authUrl": "https://us.iam.checkmarx.net/auth/realms/pwc-tax/protocol/openid-connect/token",
+          "apiUrl": "https://us.ast.checkmarx.net/api",
+          "pollingInterval": 5e3,
+          "pollingRetry": 15
+        },
+        "Intake": {
+          "gcaasRestEndpointRemediation": "/snow/utils/open_remediation_requests",
+          "gcaasRestEndpointIntake": "/snow/utils/open_intake_requests",
+          "gcaasRestBaseURL": "https://hosted-apps-we-stage.np-pwclabs.pwcglb.com/api/687da848-9b88-48ce-8d71-d276e6d682f6/crs-rest-api-toolkit-chris-fastapi-staging-test-backend"
         }
       };
       res.json(devMemFullConfig || fallbackConfig);
@@ -572,32 +597,59 @@ Do not provide bullet points, headings, or long explanations.`,
   ];
   app.get("/api/intake/requests", async (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
-    const endpoint = "http://localhost:8081/api/intake/requests";
+    const intakeBase = devMemFullConfig?.Intake?.gcaasRestBaseURL || "http://localhost:8081";
+    const intakeSub = devMemFullConfig?.Intake?.gcaasRestEndpointIntake || "/api/intake/requests";
+    let intakeEndpoint = intakeBase.endsWith("/") || intakeSub.startsWith("/") ? `${intakeBase}${intakeSub}` : `${intakeBase}/${intakeSub}`;
+    if (!intakeEndpoint.startsWith("http://") && !intakeEndpoint.startsWith("https://")) {
+      intakeEndpoint = "http://localhost:8081/api/intake/requests";
+    }
+    const extractRecords = (resData) => {
+      if (!resData) return [];
+      if (Array.isArray(resData)) return resData;
+      if (resData.result && Array.isArray(resData.result)) return resData.result;
+      if (resData.data) {
+        if (Array.isArray(resData.data)) return resData.data;
+        if (resData.data.result && Array.isArray(resData.data.result)) return resData.data.result;
+      }
+      return [];
+    };
+    let recordsData = [];
+    let isLiveSuccess = false;
+    let fetchErrorMsg = "";
     try {
-      console.log(`Fetching Intake records from: ${endpoint}`);
-      const response = await fetchWithTimeout(endpoint, {
+      console.log(`Fetching Intake records from: ${intakeEndpoint}`);
+      const response = await fetchWithTimeout(intakeEndpoint, {
         method: "GET",
         headers: {
           "Content-Type": "application/json"
         }
       }, 1500);
-      if (!response.ok) {
-        throw new Error(`API returned ${response.status}: ${response.statusText}`);
+      if (response.ok) {
+        const data = await response.json();
+        recordsData = extractRecords(data);
+        isLiveSuccess = true;
+      } else {
+        fetchErrorMsg = `Intake API returned status ${response.status}`;
       }
-      const data = await response.json();
+    } catch (error) {
+      fetchErrorMsg = error.message;
+    }
+    if (isLiveSuccess) {
       res.json({
         success: true,
         source: "live",
-        data,
-        endpointUsed: endpoint
+        data: {
+          result: recordsData
+        },
+        endpointUsed: intakeEndpoint
       });
-    } catch (error) {
-      console.log("[ServiceNow] Local mock sandbox active (local 8081 backend is absent in this sandbox).");
+    } else {
+      console.log("[ServiceNow] Using local fallback mock records.");
       res.json({
         success: false,
         source: "mock",
-        error: "Local endpoint is not active, using fallback mockup data.",
-        endpointUsed: endpoint,
+        error: `Could not reach local endpoint: ${fetchErrorMsg}`,
+        endpointUsed: intakeEndpoint,
         data: {
           result: mockSnowRecordsData
         }
@@ -607,7 +659,12 @@ Do not provide bullet points, headings, or long explanations.`,
   app.post("/api/intake/requests", import_express.default.json(), async (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
     const record = req.body;
-    const endpoint = "http://localhost:8081/api/intake/requests";
+    const intakeBase = devMemFullConfig?.Intake?.gcaasRestBaseURL || "http://localhost:8081";
+    const intakeSub = devMemFullConfig?.Intake?.gcaasRestEndpointIntake || "/api/intake/requests";
+    let endpoint = intakeBase.endsWith("/") || intakeSub.startsWith("/") ? `${intakeBase}${intakeSub}` : `${intakeBase}/${intakeSub}`;
+    if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
+      endpoint = "http://localhost:8081/api/intake/requests";
+    }
     try {
       console.log(`Forwarding Intake creation/update to: ${endpoint}`);
       const response = await fetchWithTimeout(endpoint, {

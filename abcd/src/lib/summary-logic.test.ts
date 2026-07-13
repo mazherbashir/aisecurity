@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateReviewSummary } from './summary-logic';
+import { generateReviewSummary, isSameSeverity, isSeverityMatching } from './summary-logic';
 
 describe('generateReviewSummary', () => {
   const mockInput = {
@@ -223,3 +223,34 @@ describe('generateReviewSummary', () => {
     expect(result.sastSection).toContain('class="heading bg-gold">Code Flaws</h3>');
   });
 });
+
+describe('isSameSeverity', () => {
+  it('should treat Critical and Very High as the same severity', () => {
+    expect(isSameSeverity('Critical', 'Very High')).toBe(true);
+    expect(isSameSeverity('Very High', 'Critical')).toBe(true);
+    expect(isSameSeverity('veryhigh', 'Critical')).toBe(true);
+    expect(isSameSeverity('critical', 'veryhigh')).toBe(true);
+  });
+
+  it('should compare standard severities case-insensitively', () => {
+    expect(isSameSeverity('High', 'high')).toBe(true);
+    expect(isSameSeverity('Medium', 'medium')).toBe(true);
+    expect(isSameSeverity('Low', 'LOW')).toBe(true);
+    expect(isSameSeverity('High', 'Medium')).toBe(false);
+  });
+});
+
+describe('isSeverityMatching', () => {
+  it('should match correctly against structured severity counts string', () => {
+    expect(isSeverityMatching('Very High', 'Critical: 2, High: 4')).toBe(true);
+    expect(isSeverityMatching('High', 'Critical: 2, High: 4')).toBe(true);
+    expect(isSeverityMatching('Medium', 'Critical: 2, High: 4')).toBe(false);
+  });
+
+  it('should return true for empty or unknown severities', () => {
+    expect(isSeverityMatching('High', '')).toBe(true);
+    expect(isSeverityMatching('High', 'n/a')).toBe(true);
+    expect(isSeverityMatching('High', 'empty')).toBe(true);
+  });
+});
+

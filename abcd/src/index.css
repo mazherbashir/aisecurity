@@ -22,3 +22,15 @@
 .bento-button-primary {
   @apply bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg transition-all shadow-lg shadow-blue-900/20;
 }
+
+@layer utilities {
+  .bg-green {
+    background-color: #059669; /* emerald-600 */
+  }
+  .bg-gold {
+    background-color: #d97706; /* amber-600 */
+  }
+  .bg-red {
+    background-color: #dc2626; /* red-600 */
+  }
+}

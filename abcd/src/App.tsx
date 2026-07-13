@@ -136,6 +136,28 @@ class ErrorBoundary extends React.Component<
   }
 }
 
+export function isSeverityMatching(gSev: string, detailSevCounts: string): boolean {
+  if (!gSev) return true;
+  const dSev = (detailSevCounts || "").toLowerCase().trim();
+  if (!dSev || dSev === "" || dSev === "n/a" || dSev === "no findings" || dSev === "unknown" || dSev === "empty" || dSev.includes("empty")) return true;
+  
+  const rSev = gSev.toLowerCase().trim();
+  
+  // Normalize both severities for comparison
+  const isRVeryHigh = rSev === "very high" || rSev === "veryhigh" || rSev === "critical";
+  const isRHigh = rSev === "high";
+  const isRMedium = rSev === "medium";
+  const isRLow = rSev === "low";
+  
+  if (isRVeryHigh && (dSev.includes("critical") || dSev.includes("very high") || dSev.includes("veryhigh"))) return true;
+  if (isRHigh && dSev.includes("high")) return true;
+  if (isRMedium && dSev.includes("medium")) return true;
+  if (isRLow && dSev.includes("low")) return true;
+  
+  // Fallback: check raw inclusion
+  return dSev.includes(rSev);
+}
+
 function aggregateFindings(
   findings: Finding[],
   type: "SAST" | "SCA",
@@ -239,7 +261,7 @@ function restorePersistedComments(groups: AggregatedGroup[], profileName: string
     return groups;
   }
 
-  let persistedComments: Record<string, Record<string, { aiComment: string; aiMetrics?: any; status?: 'approved' | 'rejected' }>> = {};
+  let persistedComments: Record<string, Record<string, { aiComment: string; aiMetrics?: any; status?: 'approved' | 'rejected'; isDevDependency?: boolean }>> = {};
   try {
     const raw = localStorage.getItem("crs_persisted_comments");
     if (raw) {
@@ -262,6 +284,7 @@ function restorePersistedComments(groups: AggregatedGroup[], profileName: string
         aiComment: saved.aiComment || g.aiComment,
         aiMetrics: saved.aiMetrics || g.aiMetrics,
         status: saved.status || g.status,
+        isDevDependency: saved.isDevDependency || g.isDevDependency,
       };
     }
     return g;
@@ -995,7 +1018,7 @@ Thank you!
 The estimated completion date of ${rpEstimatedCompletionDate} <u>${meetText} meet</u> the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%20Documents/Standards/PwC%20NIS%20Application%20Readiness%20Standard.pdf">Application Readiness Standard</a> Vulnerability Remediation Timeframe for ${isCheckmarxActive ? `<span class="rounded critical">Critical</span>` : `<span class="rounded veryhigh">Very High</span>`} and <span class="rounded high">High</span> findings (within ${veryHighHighDays} days) and <span class="rounded medium">Medium</span> findings (within ${mediumDays} days).</p>`;
 
                   const hasSastVulnerabilities = (sastSummary?.vulnerabilities || 0) > 0;
-                  const hasScaVulnerabilities = (backendScaSummary?.vulnerabilities || 0) > 0;
+                  const hasScaVulnerabilities = (scaSummary?.vulnerabilities || 0) > 0 || (backendScaSummary?.vulnerabilities || 0) > 0;
 
                   let sastBlock = "";
                   let scaBlock = "";
@@ -1162,8 +1185,9 @@ export default function App() {
   const [scanSourceType, setScanSourceType] = useState<'json' | 'live' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resultsLoaded, setResultsLoaded] = useState(false);
-  const [activeTab, setActiveTab] = useState<"SAST" | "SCA" | "Review">("SAST");
+  const [activeTab, setActiveTab] = useState<"SAST" | "SCA" | "DevDeps" | "Review">("SAST");
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
+  const [selectedDevDepPkgs, setSelectedDevDepPkgs] = useState<Set<string>>(new Set());
   const [aggregatedData, setAggregatedData] = useState<{
     sast: AggregatedGroup[];
     sca: AggregatedGroup[];
@@ -1233,7 +1257,7 @@ export default function App() {
     }
 
     if (aggregatedData.sast.length > 0 || aggregatedData.sca.length > 0) {
-      let persistedComments: Record<string, Record<string, { aiComment: string; aiMetrics?: any; status?: 'approved' | 'rejected' }>> = {};
+      let persistedComments: Record<string, Record<string, { aiComment: string; aiMetrics?: any; status?: 'approved' | 'rejected'; isDevDependency?: boolean }>> = {};
       
       // Load current persisted comments from localStorage to avoid overwriting unrelated scans' data
       try {
@@ -1249,11 +1273,12 @@ export default function App() {
       let hasUpdates = false;
 
       [...aggregatedData.sast, ...aggregatedData.sca].forEach((g) => {
-        if (g.aiComment || g.status) {
+        if (g.aiComment || g.status || g.isDevDependency) {
           profileComments[g.groupId] = {
             aiComment: g.aiComment,
             aiMetrics: g.aiMetrics,
             status: g.status,
+            isDevDependency: g.isDevDependency,
           };
           hasUpdates = true;
         }
@@ -1615,6 +1640,182 @@ export default function App() {
   }, []);
 
   // Dynamic Summaries
+  const scaComponents = React.useMemo(() => {
+    const componentsMap = new Map<string, any>();
+
+    // 1. Populate from scaDetails if available
+    if (scaDetails && scaDetails.length > 0) {
+      scaDetails.forEach((detail: any) => {
+        const pkgName = detail.packageName || "Unknown Component";
+        const ver = detail.version || "N/A";
+        const key = `${pkgName.toLowerCase().trim()}::${ver.toLowerCase().trim()}`;
+        if (!componentsMap.has(key)) {
+          componentsMap.set(key, {
+            id: key,
+            packageName: pkgName,
+            version: ver,
+            severityCounts: detail.severityCounts || "N/A",
+            severities: new Set<string>(),
+            groups: [],
+            detailStatus: detail.status
+          });
+        }
+      });
+    }
+
+    // 2. Populate/enrich from aggregatedData.sca (findings)
+    aggregatedData.sca.forEach((g) => {
+      let matchedKey = null;
+      for (const existingKey of componentsMap.keys()) {
+        const item = componentsMap.get(existingKey);
+        const dPkg = (item.packageName || "").toLowerCase().trim();
+        const dVer = (item.version || "").toLowerCase().trim();
+
+        const hasMatch = g.records && g.records.some((r: any) => {
+          const rPkg = (r.packageName || r.title || r.location || g.identifier || "").toLowerCase().trim();
+          const dPkg_lower = dPkg.toLowerCase().trim();
+          const rVer = (r.version || "").toLowerCase().trim();
+          const rLoc = (r.location || "").toLowerCase().trim();
+          
+          const dPkgParts = dPkg_lower.split(/[:\/]/);
+          const dPkgLast = dPkgParts[dPkgParts.length - 1];
+          
+          const pkgMatch = rPkg === dPkg_lower || 
+            (rPkg && dPkg_lower && (rPkg.includes(dPkg_lower) || dPkg_lower.includes(rPkg))) || 
+            (dPkgLast && rPkg && rPkg.includes(dPkgLast)) || 
+            (dPkgLast && r.location && r.location.toLowerCase().includes(dPkgLast));
+          const verMatch = (rVer && dVer && (rVer === dVer || rVer.includes(dVer) || dVer.includes(rVer))) || 
+                           (!rVer && rLoc.includes(dVer));
+          
+          // Match by package and version; allow fallback for empty version matching.
+          // Bypassing strict severity matching for component grouping to avoid duplicate package rows
+          // caused by different scanner databases classifying CVE severities differently.
+          return pkgMatch && (verMatch || !dVer || dVer === "n/a" || !rVer);
+        });
+
+        if (hasMatch) {
+          matchedKey = existingKey;
+          break;
+        }
+      }
+
+      if (!matchedKey) {
+        const recordPkgName = g.records?.[0]?.packageName || g.records?.[0]?.title || g.identifier?.split(" - ")[0] || g.records?.[0]?.location || "Unknown Component";
+        const recordVer = g.records?.[0]?.version || g.records?.[0]?.location || "N/A";
+        matchedKey = `${recordPkgName.toLowerCase().trim()}::${recordVer.toLowerCase().trim()}`;
+      }
+
+      if (!componentsMap.has(matchedKey)) {
+        const recordPkgName = g.records?.[0]?.packageName || g.records?.[0]?.title || g.identifier?.split(" - ")[0] || g.records?.[0]?.location || "Unknown Component";
+        const recordVer = g.records?.[0]?.version || g.records?.[0]?.location || "N/A";
+        componentsMap.set(matchedKey, {
+          id: matchedKey,
+          packageName: recordPkgName,
+          version: recordVer,
+          severityCounts: g.severity ? `${g.severity}: 1` : "N/A",
+          severities: new Set<string>(),
+          groups: []
+        });
+      }
+
+      const item = componentsMap.get(matchedKey);
+      if (g.severity) item.severities.add(g.severity);
+      if (!item.groups.includes(g)) {
+        item.groups.push(g);
+      }
+    });
+
+    // 3. Map to final display components with status
+    const getSeverityRank = (severity: string): number => {
+      const s = severity.toLowerCase().trim();
+      if (s === "critical" || s === "very high" || s === "veryhigh") return 4;
+      if (s === "high") return 3;
+      if (s === "medium") return 2;
+      if (s === "low") return 1;
+      return 0;
+    };
+
+    const mapped = Array.from(componentsMap.values()).map((item) => {
+      const matchingGroups = item.groups;
+
+      const isAllDevDep = matchingGroups.length > 0 && matchingGroups.every((g: any) => g.status === "approved" && g.isDevDependency);
+      const isAllApproved = matchingGroups.length > 0 && matchingGroups.every((g: any) => g.status === "approved");
+      const isAnyRejected = matchingGroups.some((g: any) => g.status === "rejected");
+      
+      const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+      if (item.severityCounts && item.severityCounts !== "N/A") {
+        const matches = Array.from(item.severityCounts.matchAll(/(Critical|Very High|VeryHigh|High|Medium|Low):\s*(\d+)/gi));
+        let found = false;
+        for (const m of matches) {
+          found = true;
+          const sev = m[1].toLowerCase();
+          const count = parseInt(m[2], 10);
+          if (sev === "critical" || sev === "very high" || sev === "veryhigh") counts.critical += count;
+          else if (sev === "high") counts.high += count;
+          else if (sev === "medium") counts.medium += count;
+          else if (sev === "low") counts.low += count;
+        }
+        if (!found) {
+          const nameMatches = Array.from(item.severityCounts.matchAll(/(Critical|Very High|VeryHigh|High|Medium|Low)/gi));
+          for (const m of nameMatches) {
+            const sev = m[1].toLowerCase();
+            if (sev === "critical" || sev === "very high" || sev === "veryhigh") counts.critical += 1;
+            else if (sev === "high") counts.high += 1;
+            else if (sev === "medium") counts.medium += 1;
+            else if (sev === "low") counts.low += 1;
+          }
+        }
+      } else {
+        item.severities.forEach((s: string) => {
+          const lowS = s.toLowerCase();
+          if (lowS.includes("critical") || lowS.includes("very high") || lowS.includes("veryhigh")) counts.critical += 1;
+          else if (lowS.includes("high")) counts.high += 1;
+          else if (lowS.includes("medium")) counts.medium += 1;
+          else if (lowS.includes("low")) counts.low += 1;
+        });
+      }
+
+      const sortScore = (counts.critical * 1000000) + (counts.high * 10000) + (counts.medium * 100) + (counts.low);
+      const hasFindings = sortScore > 0;
+
+      let status = "Pending";
+      if (isAllDevDep || item.detailStatus === "Dev Dependency") status = "Dev Dependency";
+      else if (isAllApproved || item.detailStatus === "Approved") status = "Approved";
+      else if (isAnyRejected || item.detailStatus === "Rejected") status = "Rejected";
+      else if (matchingGroups.length === 0) {
+        status = hasFindings ? "Open Findings" : "No open findings";
+      }
+
+      const displaySeverity = [];
+      if (counts.critical > 0) displaySeverity.push(`Critical: ${counts.critical}`);
+      if (counts.high > 0) displaySeverity.push(`High: ${counts.high}`);
+      if (counts.medium > 0) displaySeverity.push(`Medium: ${counts.medium}`);
+      if (counts.low > 0) displaySeverity.push(`Low: ${counts.low}`);
+      
+      const severityDisplay = displaySeverity.length > 0 ? displaySeverity.join(", ") : (item.severityCounts || "No findings");
+
+      return {
+        id: item.id,
+        packageName: item.packageName,
+        version: item.version,
+        severityCounts: severityDisplay,
+        status,
+        groups: matchingGroups,
+        sortScore,
+        hasFindings,
+        isDevDependency: status === "Dev Dependency",
+        counts
+      };
+    });
+
+    return mapped.sort((a, b) => {
+      if (b.sortScore !== a.sortScore) {
+        return b.sortScore - a.sortScore;
+      }
+      return a.packageName.localeCompare(b.packageName);
+    });
+  }, [scaDetails, aggregatedData.sca]);
+
   const sastSummary = React.useMemo(() => {
     const IS_PRODUCTION =
       import.meta.env.PROD || import.meta.env.VITE_ENVIRONMENT === "production";
@@ -1640,21 +1841,45 @@ export default function App() {
       };
     }
 
+    // Dynamic deduction of approved findings from sastSummary
+    const approvedSastGroups = (aggregatedData?.sast || []).filter(g => g.status === "approved");
+    const breakdown = { ...baseSummary.breakdown };
+    let deductedCount = 0;
+
+    approvedSastGroups.forEach(g => {
+      const sev = g.severity || "Medium";
+      const count = g.records?.length || 1;
+      if (breakdown[sev] !== undefined) {
+        breakdown[sev] = Math.max(0, breakdown[sev] - count);
+      } else {
+        const mappedSev = sev === "Critical" ? "Very High" : (sev === "Information" ? "Low" : sev);
+        if (breakdown[mappedSev] !== undefined) {
+          breakdown[mappedSev] = Math.max(0, breakdown[mappedSev] - count);
+        }
+      }
+      deductedCount += count;
+    });
+
     return {
-      vulnerabilities: baseSummary.vulnerabilities,
-      breakdown: baseSummary.breakdown,
+      vulnerabilities: Math.max(0, baseSummary.vulnerabilities - deductedCount),
+      breakdown,
     };
-  }, [resultsLoaded, backendSastSummary]);
+  }, [resultsLoaded, backendSastSummary, aggregatedData.sast]);
 
   const scaSummary = React.useMemo(() => {
     const IS_PRODUCTION =
       import.meta.env.PROD || import.meta.env.VITE_ENVIRONMENT === "production";
 
-    let baseSummary = {
+    let baseSummary = IS_PRODUCTION ? {
       vulnerabilities: 0,
       breakdown: { "Very High": 0, High: 0, Medium: 0, Low: 0 },
       totalPackages: 0,
       totalVulnerablePackages: 0,
+    } : {
+      vulnerabilities: mockScaSummary.vulnerabilities,
+      breakdown: adaptBreakdown(mockScaSummary.breakdown),
+      totalPackages: mockScaSummary.totalPackages,
+      totalVulnerablePackages: mockScaSummary.totalVulnerablePackages,
     };
 
     if (resultsLoaded && backendScaSummary) {
@@ -1683,180 +1908,49 @@ export default function App() {
       };
     }
 
-    if (scaDetails && scaDetails.length > 0) {
-      let dynamicVulnerabilities = 0;
-      const dynamicBreakdown: Record<string, number> = { "Very High": 0, High: 0, Medium: 0, Low: 0 };
-      let dynamicVulnerablePackages = 0;
+    // Dynamic deduction of approved/devDependency findings from scaSummary breakdown and total vulnerabilities!
+    const breakdown = { ...baseSummary.breakdown };
+    let deductedCount = 0;
 
-      scaDetails.forEach((detail: any) => {
-        const pkgName = (detail.packageName || "").trim().toLowerCase();
-        const cvesInDetail = (detail.cveList || "")
-          .split(",")
-          .map((c: string) => c.trim().toLowerCase())
-          .filter(Boolean);
-
-        let unapprovedCvesInPkg = 0;
-
-        // Parse severityCounts for this package: e.g. "High: 4 Critical: 2"
-        const parsedCounts: Record<string, number> = { "Very High": 0, High: 0, Medium: 0, Low: 0 };
-        const severityMatches = Array.from(
-          (detail.severityCounts || "").matchAll(
-            /(Very\s*High|VeryHigh|Critical|High|Medium|Low):\s*(\d+)/gi
-          )
-        );
-        severityMatches.forEach((match) => {
-          let sName = match[1].trim();
-          if (/^Very\s*High$/i.test(sName) || /^VeryHigh$/i.test(sName) || /^Critical$/i.test(sName)) {
-            sName = "Very High";
-          } else if (/^High$/i.test(sName)) {
-            sName = "High";
-          } else if (/^Medium$/i.test(sName)) {
-            sName = "Medium";
-          } else if (/^Low$/i.test(sName)) {
-            sName = "Low";
-          }
-          const count = parseInt(match[2], 10) || 0;
-          if (parsedCounts[sName] !== undefined) {
-            parsedCounts[sName] = count;
-          }
-        });
-
-        if (cvesInDetail.length === 0) {
-          // If no explicitly listed CVEs in cveList are present, represent severityCounts as separate items
-          Object.entries(parsedCounts).forEach(([severity, count]) => {
-            for (let i = 0; i < count; i++) {
-              let isApproved = false;
-              if (aggregatedData?.sca) {
-                isApproved = aggregatedData.sca.some((g: any) => {
-                  if (g.status !== "approved") return false;
-                  const matchesPkg = g.records && g.records.some((r: any) => {
-                    const rPkg = (r.packageName || r.location || r.fileName || "").toLowerCase().trim();
-                    return rPkg.includes(pkgName) || pkgName.includes(rPkg);
-                  });
-                  return matchesPkg && g.severity === severity;
-                });
-              }
-              if (!isApproved) {
-                unapprovedCvesInPkg++;
-                if (dynamicBreakdown[severity] !== undefined) {
-                  dynamicBreakdown[severity]++;
-                }
-              }
-            }
-          });
-        } else {
-          // Process each cve in cveList
-          cvesInDetail.forEach((cve) => {
-            let isApproved = false;
-            if (aggregatedData?.sca) {
-              isApproved = aggregatedData.sca.some((g: any) => {
-                if (g.status !== "approved") return false;
-
-                return g.records && g.records.some((r: any) => {
-                  const rPkg = (r.packageName || r.location || r.fileName || "").toLowerCase().trim();
-                  const rCveList = (r.cveList || r.title || r.id || "").toLowerCase();
-
-                  const pkgMatch = rPkg.includes(pkgName) || pkgName.includes(rPkg);
-                  const cveMatch =
-                    rCveList.includes(cve) ||
-                    cve.includes(rCveList) ||
-                    (g.identifier && g.identifier.toLowerCase().includes(cve));
-
-                  return pkgMatch && cveMatch;
-                });
-              });
-            }
-
-            if (!isApproved) {
-              unapprovedCvesInPkg++;
-              
-              let cveSeverity = "Medium";
-              let foundInGroup = false;
-              if (aggregatedData?.sca) {
-                for (const g of aggregatedData.sca) {
-                  const match = g.records && g.records.find((r: any) => {
-                    const rCveList = (r.cveList || r.title || r.id || "").toLowerCase();
-                    return rCveList.includes(cve) || cve.includes(rCveList);
-                  });
-                  if (match) {
-                    let sName = match.severity || "Medium";
-                    if (sName === "VeryHigh" || sName === "Critical") sName = "Very High";
-                    cveSeverity = sName;
-                    foundInGroup = true;
-                    break;
-                  }
-                }
-              }
-
-              if (!foundInGroup) {
-                for (const sev of ["Very High", "High", "Medium", "Low"]) {
-                  if (parsedCounts[sev] > 0) {
-                    cveSeverity = sev;
-                    parsedCounts[sev]--;
-                    break;
-                  }
-                }
-              }
-
-              if (dynamicBreakdown[cveSeverity] !== undefined) {
-                dynamicBreakdown[cveSeverity]++;
-              }
-            }
-          });
+    // Deduct approved / devDependency findings using the parsed counts from scaComponents
+    scaComponents.forEach(c => {
+      if (c.status === "Approved" || c.status === "Dev Dependency") {
+        const counts = (c as any).counts || { critical: 0, high: 0, medium: 0, low: 0 };
+        
+        // Deduct Very High (Critical)
+        if (counts.critical > 0) {
+          breakdown["Very High"] = Math.max(0, (breakdown["Very High"] || 0) - counts.critical);
+          deductedCount += counts.critical;
         }
-
-        if (unapprovedCvesInPkg > 0) {
-          dynamicVulnerablePackages++;
-          dynamicVulnerabilities += unapprovedCvesInPkg;
+        // Deduct High
+        if (counts.high > 0) {
+          breakdown["High"] = Math.max(0, (breakdown["High"] || 0) - counts.high);
+          deductedCount += counts.high;
         }
-      });
-
-      return {
-        ...baseSummary,
-        vulnerabilities: dynamicVulnerabilities,
-        breakdown: dynamicBreakdown,
-        totalVulnerablePackages: dynamicVulnerablePackages,
-      };
-    } else {
-      // Fallback if scaDetails is empty/unavailable
-      const dynamicBreakdown = { ...baseSummary.breakdown };
-      let approvedCount = 0;
-      const approvedPackages = new Set<string>();
-      const unapprovedPackages = new Set<string>();
-
-      if (aggregatedData?.sca) {
-        aggregatedData.sca.forEach((g: any) => {
-          const isGrpApproved = g.status === "approved";
-          g.records?.forEach((r: any) => {
-            const pkg = (r.packageName || r.location || r.fileName || "unknown").toLowerCase().trim();
-            if (isGrpApproved) {
-              approvedCount++;
-              const sev = r.severity;
-              if (dynamicBreakdown[sev] > 0) {
-                dynamicBreakdown[sev]--;
-              }
-              approvedPackages.add(pkg);
-            } else {
-              unapprovedPackages.add(pkg);
-            }
-          });
-        });
+        // Deduct Medium
+        if (counts.medium > 0) {
+          breakdown["Medium"] = Math.max(0, (breakdown["Medium"] || 0) - counts.medium);
+          deductedCount += counts.medium;
+        }
+        // Deduct Low
+        if (counts.low > 0) {
+          breakdown["Low"] = Math.max(0, (breakdown["Low"] || 0) - counts.low);
+          deductedCount += counts.low;
+        }
       }
+    });
 
-      const dynamicVulnerabilities = Math.max(0, baseSummary.vulnerabilities - approvedCount);
-      let dynamicVulnerablePackages = baseSummary.totalVulnerablePackages;
-      if (unapprovedPackages.size > 0 || approvedPackages.size > 0) {
-        dynamicVulnerablePackages = unapprovedPackages.size;
-      }
+    const dynamicVulnerablePackages = scaComponents.filter(
+      c => c.hasFindings && c.status !== "Approved" && c.status !== "Dev Dependency"
+    ).length;
 
-      return {
-        ...baseSummary,
-        vulnerabilities: dynamicVulnerabilities,
-        breakdown: dynamicBreakdown,
-        totalVulnerablePackages: dynamicVulnerablePackages,
-      };
-    }
-  }, [resultsLoaded, backendScaSummary, aggregatedData, scaDetails]);
+    return {
+      ...baseSummary,
+      vulnerabilities: Math.max(0, baseSummary.vulnerabilities - deductedCount),
+      totalVulnerablePackages: dynamicVulnerablePackages,
+      breakdown
+    };
+  }, [resultsLoaded, backendScaSummary, aggregatedData.sca, scaComponents]);
 
   const handleCopySast = () => {
     const severityLabels: Record<string, string> = {
@@ -2159,13 +2253,17 @@ export default function App() {
       }
       if (data && data.sastMitigationProposal)
         setSastMitigationProposal(data.sastMitigationProposal);
-      if (data && data.scaMitigationProposal)
-        setScaMitigationProposal(data.scaMitigationProposal);
+      
 
       console.log("Processing Findings...");
       // Handle both formats (standard scan and dry run format)
-      const rawSast = data?.findingsWithCommentsSAST || data?.sastDetails || [];
-      const rawSca = data?.findingsWithCommentsSCA || data?.scaDetails || [];
+      const rawSast = data?.findingsWithCommentsSAST || [];
+      const rawSca = data?.findingsWithCommentsSCA || [];
+      if (rawSca.length === 0) {
+        setScaMitigationProposal({ Total: 0, "Very High": 0, High: 0, Medium: 0, Low: 0, Information: 0 });
+      } else if (data && data.scaMitigationProposal) {
+        setScaMitigationProposal(data.scaMitigationProposal);
+      }
 
       const sastFindings = Array.isArray(rawSast) ? rawSast : [];
       const scaFindings = Array.isArray(rawSca)
@@ -2277,7 +2375,9 @@ export default function App() {
           }
 
           setBackendError(msg);
-          setResultsLoaded(false);
+          if (!resultsLoaded) {
+            setResultsLoaded(false);
+          }
           handled = true;
           return; // Stop here, states are set
         } else {
@@ -2304,7 +2404,9 @@ export default function App() {
 
       if (IS_PRODUCTION) {
         setBackendError(message);
-        setResultsLoaded(false);
+        if (!resultsLoaded) {
+          setResultsLoaded(false);
+        }
       } else {
         console.warn(
           "Backend unreachable or invalid data. Falling back to mock data in Development mode.",
@@ -2533,16 +2635,8 @@ export default function App() {
         
         if (isSAST) {
           setSastMitigationProposal((prev: any) => updateMitigationProposal(prev, group));
-
-          if (actionType === "approved") {
-            setBackendSastSummary((prev: any) => updateBackendSummary(prev, group));
-          }
         } else {
           setScaMitigationProposal((prev: any) => updateMitigationProposal(prev, group));
-
-          if (actionType === "approved") {
-            setBackendScaSummary((prev: any) => updateBackendSummary(prev, group));
-          }
         }
       } catch (err: any) {
         console.error(`Error during batch action for ${group.groupId}:`, err.message);
@@ -2573,6 +2667,89 @@ export default function App() {
     }
   };
 
+  const handleApproveDevDeps = async (selectedPackageIds: string[]) => {
+    if (selectedPackageIds.length === 0) {
+      alert("Please select at least one component to approve.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    const buildId = activeOverview.buildId || "";
+
+    // 1. Find matching groups
+    const matchingGroups = Array.from(new Set(
+      scaComponents
+        .filter(c => selectedPackageIds.includes(c.id))
+        .flatMap(c => c.groups)
+    )) as AggregatedGroup[];
+
+    let successCount = 0;
+    if (matchingGroups.length > 0) {
+      setAggregatedData((prev) => {
+        let nextSca = prev.sca;
+        for (const group of matchingGroups) {
+          if (!group.aiComment || group.aiComment.trim() === "") {
+            group.aiComment = "This component is used as a test or development dependency and does not impact production security.";
+          }
+          successCount++;
+          nextSca = nextSca.map((g) =>
+            g.groupId === group.groupId ? { ...g, status: "approved", isDevDependency: true } : g
+          );
+        }
+        return { ...prev, sca: nextSca };
+      });
+    }
+
+    setScaDetails((prev: any[]) => {
+      let nextDetails = [...prev];
+      let updated = false;
+      const matchedComponents = scaComponents.filter(c => selectedPackageIds.includes(c.id));
+      for (const comp of matchedComponents) {
+        const pkgName = (comp.packageName || "").toLowerCase().trim();
+        const ver = (comp.version || "").toLowerCase().trim();
+        
+        const existingDetail = nextDetails.find(detail => 
+          (detail.packageName || "Unknown Component").toLowerCase().trim() === pkgName &&
+          (detail.version || "N/A").toLowerCase().trim() === ver
+        );
+        
+        if (existingDetail) {
+          nextDetails = nextDetails.map(detail => {
+            if (
+              (detail.packageName || "Unknown Component").toLowerCase().trim() === pkgName &&
+              (detail.version || "N/A").toLowerCase().trim() === ver
+            ) {
+              updated = true;
+              return { ...detail, status: "Dev Dependency" };
+            }
+            return detail;
+          });
+        } else {
+          updated = true;
+          const newDetail = {
+            packageName: comp.packageName || "Unknown Component",
+            version: comp.version || "N/A",
+            severityCounts: comp.severityCounts || "N/A",
+            cveList: Array.from(new Set(
+              comp.groups.flatMap((g: any) => 
+                g.records.map((r: any) => r.cveList || r.title || r.id).filter(Boolean)
+              )
+            )).join(", ") || "",
+            status: "Dev Dependency",
+            remediation_due_date: comp.remediation_due_date || "N/A"
+          };
+          nextDetails.push(newDetail);
+        }
+      }
+      return updated ? nextDetails : prev;
+    });
+
+    setIsSubmitting(false);
+    setSelectedDevDepPkgs(new Set());
+    
+    setSuccessMessage(`Successfully approved selected component(s) as Dev Dependency.`);
+  };
+
   const severityOrderRenderer: Record<string, number> = {
     "Very High": 1,
     High: 2,
@@ -2600,11 +2777,16 @@ export default function App() {
   };
 
   const currentGroups = React.useMemo(() => {
-    const raw = activeTab === "SAST"
-      ? getSortedGroups(aggregatedData.sast)
-      : getSortedGroups(aggregatedData.sca);
+    let raw: any[] = [];
+    if (activeTab === "SAST") {
+      raw = getSortedGroups(aggregatedData.sast);
+    } else if (activeTab === "SCA") {
+      raw = getSortedGroups(aggregatedData.sca);
+    } else if (activeTab === "Review") {
+      raw = getSortedGroups([...aggregatedData.sast, ...aggregatedData.sca].filter(g => g.status === 'approved' || g.status === 'rejected'));
+    }
     
-    if (hideProcessedFindings) {
+    if (hideProcessedFindings && (activeTab === "SAST" || activeTab === "SCA")) {
       return raw.filter(g => !g.status);
     }
     return raw;
@@ -2643,6 +2825,10 @@ export default function App() {
     }
   }, [activeOverview, configTiers]);
 
+  React.useEffect(() => {
+    setSelectedDevDepPkgs(new Set());
+  }, [appProfile, activeOverview]);
+
   return (
     <ErrorBoundary
       onError={(err) => setBackendError(`Render Crash: ${err.message}`)}
@@ -2650,14 +2836,14 @@ export default function App() {
       <div className="h-screen overflow-hidden bg-slate-950 text-slate-200 font-sans p-4 selection:bg-blue-500/30">
         <div className="max-w-[1450px] mx-auto grid grid-cols-12 grid-rows-[auto_minmax(0,1fr)] gap-4 h-full">
           {/* TOP BAR: Controls */}
-          <div className="col-span-12 bento-card p-2.5 flex items-center justify-start gap-4 bg-slate-900/50 backdrop-blur-xl flex-shrink-0">
-            <div className="flex gap-4 items-center flex-1">
-              <div className="flex items-center gap-2.5">
+          <div className="col-span-12 bento-card p-2.5 flex items-center justify-start gap-4 bg-slate-900 flex-shrink-0">
+            <div className="flex gap-4 items-center flex-1 min-w-0">
+              <div className="flex items-center gap-2.5 flex-shrink-0 w-[140px]">
                 <div className="bg-blue-600 p-1.5 rounded-lg text-white">
                   <Shield size={20} />
                 </div>
                 <div className="hidden sm:block">
-                  <h1 className="text-sm font-black tracking-tight leading-tight">
+                  <h1 className="text-sm font-black tracking-tight leading-tight whitespace-nowrap">
                     CRS Review Tool
                   </h1>
                   <p className="text-[9px] text-slate-500 font-mono tracking-widest uppercase mt-0.5">
@@ -2668,37 +2854,35 @@ export default function App() {
 
               <form
                 onSubmit={handleFetchResults}
-                className="flex gap-4 items-end"
+                className="flex gap-3 items-end min-w-0 flex-1 flex-wrap sm:flex-nowrap"
               >
                 {configIntakeRequest !== false && (
-                  <div className="flex gap-4">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
-                        SNOW
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextVal = !showSnowScreen;
-                          setShowSnowScreen(nextVal);
-                          if (nextVal) {
-                            setSelectedTools([]);
-                          }
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 shadow-lg active:scale-95 ${
-                          showSnowScreen
-                            ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40 border-blue-500"
-                            : "bg-slate-800 border-slate-700 text-blue-400 hover:border-slate-600"
-                        }`}
-                      >
-                        <Database size={12} className={showSnowScreen ? "text-white" : "text-blue-500"} />
-                        Intake
-                      </button>
-                    </div>
+                  <div className="flex flex-col flex-shrink-0">
+                    <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
+                      SNOW
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextVal = !showSnowScreen;
+                        setShowSnowScreen(nextVal);
+                        if (nextVal) {
+                          setSelectedTools([]);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 shadow-lg active:scale-95 ${
+                        showSnowScreen
+                          ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40 border-blue-500"
+                          : "bg-slate-800 border-slate-700 text-blue-400 hover:border-slate-600"
+                      }`}
+                    >
+                      <Database size={12} className={showSnowScreen ? "text-white" : "text-blue-500"} />
+                      Intake
+                    </button>
                   </div>
                 )}
 
-                <div className="flex flex-col">
+                <div className="flex flex-col flex-shrink-0">
                   <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
                     Tool Chain
                   </span>
@@ -2719,7 +2903,8 @@ export default function App() {
                     ))}
                   </div>
                 </div>
-                <div className="flex flex-col">
+
+                <div className="flex flex-col flex-shrink-0">
                   <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
                     Profile
                   </span>
@@ -2730,7 +2915,7 @@ export default function App() {
                     value={appProfile}
                     onChange={(e) => setAppProfile(e.target.value)}
                     list="app-profiles-list"
-                    className="bento-input w-48 text-[10px] py-1"
+                    className="bento-input w-40 text-[10px] py-1"
                   />
                   <datalist id="app-profiles-list">
                     {configHistory.map((app) => (
@@ -2739,40 +2924,48 @@ export default function App() {
                   </datalist>
                 </div>
 
-                {selectedTools.includes("Checkmarx") && (
-                  <>
-                    <div id="checkmarx-branch-container" className="flex flex-col">
-                      <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
-                        Branch
-                      </span>
-                      <input
-                        type="text"
-                        placeholder="e.g. main, dev"
-                        value={branch}
-                        onChange={(e) => setBranch(e.target.value)}
-                        className="bento-input w-36 text-[10px] py-1 bg-slate-950 border-slate-700"
-                      />
-                    </div>
-                    <div id="checkmarx-tier-container" className="flex flex-col">
-                      <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
-                        Tier
-                      </span>
-                      <select
-                        value={selectedTier}
-                        onChange={(e) => setSelectedTier(e.target.value)}
-                        className="bento-input w-32 text-[10px] py-1 bg-slate-950 border-slate-700 font-bold"
-                      >
-                        {configTiers.map((tier) => (
-                          <option key={tier} value={tier}>
-                            {tier}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </>
-                )}
+                <AnimatePresence>
+                  {selectedTools.includes("Checkmarx") && (
+                    <motion.div
+                      initial={{ opacity: 0, width: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, width: "auto", scale: 1 }}
+                      exit={{ opacity: 0, width: 0, scale: 0.95 }}
+                      transition={{ duration: 0.2 }}
+                      className="flex gap-3 overflow-hidden items-end flex-shrink-0"
+                    >
+                      <div id="checkmarx-branch-container" className="flex flex-col">
+                        <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
+                          Branch
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="e.g. main, dev"
+                          value={branch}
+                          onChange={(e) => setBranch(e.target.value)}
+                          className="bento-input w-28 text-[10px] py-1 bg-slate-950 border-slate-700"
+                        />
+                      </div>
+                      <div id="checkmarx-tier-container" className="flex flex-col">
+                        <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
+                          Tier
+                        </span>
+                        <select
+                          value={selectedTier}
+                          onChange={(e) => setSelectedTier(e.target.value)}
+                          className="bento-input w-24 text-[10px] py-1 bg-slate-950 border-slate-700 font-bold"
+                        >
+                          {configTiers.map((tier) => (
+                            <option key={tier} value={tier}>
+                              {tier}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-                <div className="flex flex-col">
+                <div className="flex flex-col flex-shrink-0">
                   <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
                     AI Engine
                   </span>
@@ -2790,6 +2983,7 @@ export default function App() {
                     ))}
                   </select>
                 </div>
+
                 <button
                   type="submit"
                   disabled={
@@ -2800,7 +2994,7 @@ export default function App() {
                       !appProfile.toLowerCase().endsWith(".json") &&
                       (!branch.trim() || !selectedTier))
                   }
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1.5 px-6 rounded-lg text-xs transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1.5 px-5 rounded-lg text-xs transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50 flex-shrink-0"
                 >
                   {isSubmitting ? (
                     <RefreshCcw size={14} className="animate-spin" />
@@ -3371,90 +3565,116 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex w-full justify-start border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-10 overflow-x-auto whitespace-nowrap scrollbar-hide">
-                  {(["SAST", "SCA", "Review"] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setActiveTab(tab)}
-                      className={`grow px-6 py-3 text-[11px] font-black uppercase tracking-[0.1em] transition-all relative flex flex-col justify-center items-center gap-1 ${
-                        activeTab === tab
-                          ? "text-blue-400 bg-blue-500/5"
-                          : "text-slate-500 hover:text-slate-300"
-                      }`}
-                    >
-                      <span>{tab === "Review" ? "Review Comments" : `${tab} Mitigation Proposals`}</span>
-                      
-                      {tab === "SAST" && sastMitigationProposal && sastMitigationProposal.Total > 0 && (
-                        <div className="flex items-center gap-2 text-[8px] tracking-normal font-bold">
-                          <span className="text-slate-400">Proposals: <span className="text-white">{sastMitigationProposal.Total}</span></span>
-                          {[
-                            "Very High",
-                            "High",
-                            "Medium",
-                            "Low",
-                            "Information",
-                            "Info",
-                          ].map((sev) => {
-                            const count = sastMitigationProposal[sev];
-                            if (!count || count <= 0) return null;
-                            return (
-                              <span key={sev} className="flex gap-1">
-                                <span className="text-slate-500">
-                                  {sev === "Very High" 
-                                    ? (selectedTools.includes("Checkmarx") ? "Critical" : "V.High") 
-                                    : sev.replace('Information', 'Info')}
-                                </span>
-                                <span className={`${
-                                  (sev === "Very High" || sev === "Critical") ? "text-purple-400" :
-                                  sev === "High" ? "text-red-400" :
-                                  sev === "Medium" ? "text-orange-400" :
-                                  sev === "Low" ? "text-blue-400" :
-                                  "text-slate-300"
-                                }`}>{count as number}</span>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      )}
+                <div className="flex w-full justify-start border-b border-slate-800 bg-slate-900 sticky top-0 z-10 overflow-x-auto whitespace-nowrap scrollbar-hide">
+                  {(() => {
+                    const isCheckmarxFlow = selectedTools.includes("Checkmarx") || activeOverview.scanType === "checkmarx";
+                    const hasScaFindings = aggregatedData.sca.length > 0 || scaDetails.length > 0;
+                    const tabs = (isCheckmarxFlow && hasScaFindings)
+                      ? (["SAST", "SCA", "DevDeps", "Review"] as const)
+                      : (["SAST", "SCA", "Review"] as const);
 
-                      {tab === "SCA" && scaMitigationProposal && scaMitigationProposal.Total > 0 && (
-                        <div className="flex items-center gap-2 text-[8px] tracking-normal font-bold">
-                          <span className="text-slate-400">Proposals: <span className="text-white">{scaMitigationProposal.Total}</span></span>
-                          {[
-                            "Very High",
-                            "High",
-                            "Medium",
-                            "Low",
-                            "Information",
-                            "Info",
-                          ].map((sev) => {
-                            const count = scaMitigationProposal[sev];
-                            if (!count || count <= 0) return null;
-                            return (
-                              <span key={sev} className="flex gap-1">
-                                <span className="text-slate-500">
-                                  {sev === "Very High" 
-                                    ? (selectedTools.includes("Checkmarx") ? "Critical" : "V.High") 
-                                    : sev.replace('Information', 'Info')}
+                    return tabs.map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`grow px-6 py-3 text-[11px] font-black uppercase tracking-[0.1em] transition-all relative flex flex-col justify-center items-center gap-1 ${
+                          activeTab === tab
+                            ? "text-blue-400 bg-blue-500/5"
+                            : "text-slate-500 hover:text-slate-300"
+                        }`}
+                      >
+                        <span>
+                          {tab === "Review" 
+                            ? "Review Comments" 
+                            : tab === "DevDeps"
+                              ? "Test & Dev Dependencies"
+                              : `${tab} Mitigation Proposals`}
+                        </span>
+                        
+                        {tab === "SAST" && sastMitigationProposal && sastMitigationProposal.Total > 0 && (
+                          <div className="flex items-center gap-2 text-[8px] tracking-normal font-bold">
+                            <span className="text-slate-400">Proposals: <span className="text-white">{sastMitigationProposal.Total}</span></span>
+                            {[
+                              "Very High",
+                              "High",
+                              "Medium",
+                              "Low",
+                              "Information",
+                              "Info",
+                            ].map((sev) => {
+                              const count = sastMitigationProposal[sev];
+                              if (!count || count <= 0) return null;
+                              return (
+                                <span key={sev} className="flex gap-1">
+                                  <span className="text-slate-500">
+                                    {sev === "Very High" 
+                                      ? (selectedTools.includes("Checkmarx") ? "Critical" : "V.High") 
+                                      : sev.replace('Information', 'Info')}
+                                  </span>
+                                  <span className={`${
+                                    (sev === "Very High" || sev === "Critical") ? "text-purple-400" :
+                                    sev === "High" ? "text-red-400" :
+                                    sev === "Medium" ? "text-orange-400" :
+                                    sev === "Low" ? "text-blue-400" :
+                                    "text-slate-300"
+                                  }`}>{count as number}</span>
                                 </span>
-                                <span className={`${
-                                  (sev === "Very High" || sev === "Critical") ? "text-purple-400" :
-                                  sev === "High" ? "text-red-400" :
-                                  sev === "Medium" ? "text-orange-400" :
-                                  sev === "Low" ? "text-blue-400" :
-                                  "text-slate-300"
-                                }`}>{count as number}</span>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      )}
+                              );
+                            })}
+                          </div>
+                        )}
 
-                      {activeTab === tab && (
-                        <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-blue-500 shadow-[0_-4px_12px_rgba(59,130,246,0.5)]" />
-                      )}
-                    </button>
-                  ))}
+                        {tab === "SCA" && scaMitigationProposal && scaMitigationProposal.Total > 0 && (
+                          <div className="flex items-center gap-2 text-[8px] tracking-normal font-bold">
+                            <span className="text-slate-400">Proposals: <span className="text-white">{scaMitigationProposal.Total}</span></span>
+                            {[
+                              "Very High",
+                              "High",
+                              "Medium",
+                              "Low",
+                              "Information",
+                              "Info",
+                            ].map((sev) => {
+                              const count = scaMitigationProposal[sev];
+                              if (!count || count <= 0) return null;
+                              return (
+                                <span key={sev} className="flex gap-1">
+                                  <span className="text-slate-500">
+                                    {sev === "Very High" 
+                                      ? (selectedTools.includes("Checkmarx") ? "Critical" : "V.High") 
+                                      : sev.replace('Information', 'Info')}
+                                  </span>
+                                  <span className={`${
+                                    (sev === "Very High" || sev === "Critical") ? "text-purple-400" :
+                                    sev === "High" ? "text-red-400" :
+                                    sev === "Medium" ? "text-orange-400" :
+                                    sev === "Low" ? "text-blue-400" :
+                                    "text-slate-300"
+                                  }`}>{count as number}</span>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {tab === "DevDeps" && (
+                          <div className="flex items-center gap-2 text-[8px] tracking-normal font-bold">
+                            <span className="text-slate-400">Components: <span className="text-white">{scaComponents.length}</span></span>
+                            <span className="text-slate-500">
+                              Approved:{" "}
+                              <span className="text-emerald-400">
+                                {scaComponents.filter((c) => c.isDevDependency).length}
+                              </span>
+                            </span>
+                          </div>
+                        )}
+
+                        {activeTab === tab && (
+                          <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-blue-500 shadow-[0_-4px_12px_rgba(59,130,246,0.5)]" />
+                        )}
+                      </button>
+                    ));
+                  })()}
                 </div>
 
                 <div className="flex-1 overflow-auto flex flex-col min-h-0 min-w-0">
@@ -3472,10 +3692,131 @@ export default function App() {
                       aggregatedData={aggregatedData}
                       selectedTools={selectedTools}
                     />
+                  ) : activeTab === "DevDeps" ? (
+                    <div className="p-6 flex flex-col gap-4 min-h-0 flex-1">
+                      <div className="flex justify-between items-center bg-slate-950/40 p-4 rounded-xl border border-slate-800/80">
+                        <div>
+                          <h4 className="text-xs font-black uppercase tracking-widest text-slate-300">
+                            Test & Dev Dependencies Manager
+                          </h4>
+                          <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-wider">
+                            Select components to approve them with the "Dev Dependency" exception label in review reports.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleApproveDevDeps(Array.from(selectedDevDepPkgs))}
+                          disabled={selectedDevDepPkgs.size === 0 || isSubmitting}
+                          className="px-6 py-2.5 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-20 flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+                        >
+                          {isSubmitting && <RefreshCcw size={12} className="animate-spin" />}
+                          Approved
+                        </button>
+                      </div>
+
+                      <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/40 flex-1 min-h-0">
+                        <table className="w-full text-left border-collapse">
+                          <thead className="bg-slate-950 text-[10px] text-slate-500 font-black uppercase tracking-wider sticky top-0 z-20">
+                            <tr className="border-b border-slate-800/60">
+                              <th className="p-4 w-12 text-center">
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-blue-500 focus:ring-0 cursor-pointer"
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      const approvable = scaComponents
+                                        .filter(c => c.status !== "Approved" && c.status !== "Dev Dependency" && c.status !== "No open findings")
+                                        .map(c => c.id);
+                                      setSelectedDevDepPkgs(new Set(approvable));
+                                    } else {
+                                      setSelectedDevDepPkgs(new Set());
+                                    }
+                                  }}
+                                  checked={
+                                    (() => {
+                                      const approvable = scaComponents.filter(c => c.status !== "Approved" && c.status !== "Dev Dependency" && c.status !== "No open findings");
+                                      return approvable.length > 0 && approvable.every(c => selectedDevDepPkgs.has(c.id));
+                                    })()
+                                  }
+                                  disabled={
+                                    scaComponents.filter(c => c.status !== "Approved" && c.status !== "Dev Dependency" && c.status !== "No open findings").length === 0
+                                  }
+                                />
+                              </th>
+                              <th className="p-4">SCA Component</th>
+                              <th className="p-4 w-40">Current Version</th>
+                              <th className="p-4 w-60">Vulnerability</th>
+                              <th className="p-4 w-40">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/50">
+                            {scaComponents.map((component) => {
+                              const isApproved = component.status === "Approved" || component.status === "Dev Dependency";
+                              const isSelected = selectedDevDepPkgs.has(component.id);
+                              const isNoFindings = component.status === "No open findings";
+                              
+                              return (
+                                <tr 
+                                  key={component.id} 
+                                  className={`border-b border-slate-800/30 transition-all ${
+                                    isSelected || isApproved ? 'bg-blue-500/5' : 'hover:bg-slate-800/40'
+                                  }`}
+                                >
+                                  <td className="p-4 text-center">
+                                    <input 
+                                      type="checkbox" 
+                                      className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-blue-500 focus:ring-0 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                      checked={isSelected || isApproved}
+                                      disabled={isApproved || isNoFindings}
+                                      onChange={() => {
+                                        setSelectedDevDepPkgs(prev => {
+                                          const next = new Set(prev);
+                                          if (next.has(component.id)) {
+                                            next.delete(component.id);
+                                          } else {
+                                            next.add(component.id);
+                                          }
+                                          return next;
+                                        });
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="p-4 font-bold text-slate-300 text-sm">
+                                    {component.packageName}
+                                  </td>
+                                  <td className="p-4 text-xs font-mono text-slate-400">
+                                    {component.version}
+                                  </td>
+                                  <td className="p-4 text-xs font-mono text-slate-400">
+                                    {component.severityCounts}
+                                  </td>
+                                  <td className="p-4">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                      component.status === "Approved" || component.status === "Dev Dependency" ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30' :
+                                      component.status === "Rejected" ? 'bg-red-500/10 text-red-400 border border-red-500/30' :
+                                      isNoFindings ? 'bg-slate-800 text-slate-500 border border-slate-700' :
+                                      'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                                    }`}>
+                                      {component.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            {scaComponents.length === 0 && (
+                              <tr key="empty-row">
+                                <td colSpan={5} className="p-12 text-center text-slate-500 font-mono text-xs uppercase">
+                                  No SCA components found
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   ) : (
                     <>
                       <table className="w-full text-left border-collapse">
-                        <thead className="bg-slate-950/40 text-[10px] text-slate-500 font-black uppercase tracking-wider sticky top-0 z-20 backdrop-blur-sm">
+                        <thead className="bg-slate-950 text-[10px] text-slate-500 font-black uppercase tracking-wider sticky top-0 z-20">
                           <tr>
                             <th className="p-4 w-12 text-center">
                               <input
@@ -3558,30 +3899,48 @@ export default function App() {
 
                 <div className="p-4 border-t border-slate-800 bg-slate-950/40 flex justify-between items-center text-[10px] font-mono text-slate-500 uppercase tracking-widest">
                   <div className="flex gap-6">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                      <span>TOTAL: {currentGroups.length}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      <span>
-                        APPROVED:{" "}
-                        {
-                          currentGroups.filter((g) => g.status === "approved")
-                            .length
-                        }
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                      <span>
-                        REJECTED:{" "}
-                        {
-                          currentGroups.filter((g) => g.status === "rejected")
-                            .length
-                        }
-                      </span>
-                    </div>
+                    {activeTab === "DevDeps" ? (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                          <span>COMPONENTS: {scaComponents.length}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span>
+                            DEV DEPENDENCY:{" "}
+                            {scaComponents.filter((c) => c.isDevDependency).length}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                          <span>TOTAL: {currentGroups.length}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span>
+                            APPROVED:{" "}
+                            {
+                              currentGroups.filter((g) => g.status === "approved")
+                                .length
+                            }
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                          <span>
+                            REJECTED:{" "}
+                            {
+                              currentGroups.filter((g) => g.status === "rejected")
+                                .length
+                            }
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                 </div>

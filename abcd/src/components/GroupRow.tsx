@@ -191,7 +191,7 @@ export const GroupRow: React.FC<GroupRowProps> = ({
               : 'bg-red-600/10 text-red-400 border-red-500/20 shadow-red-900/10'
           }`}>
             {group.status === 'approved' ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-            {group.status}
+            {group.status === 'approved' && group.isDevDependency ? 'DEV DEPENDENCY' : group.status}
           </div>
         ) : (
             <div className="text-[10px] text-slate-600 font-bold uppercase tracking-widest px-3 py-1.5 border border-slate-800 rounded-lg">
