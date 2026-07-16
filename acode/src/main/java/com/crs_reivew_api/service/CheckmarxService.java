@@ -1132,6 +1132,12 @@ public class CheckmarxService {
     }
 
     public String updatePredicate(String projectId, String scanId, String similarityIdList, String state, String comment, String severity) {
+        String mode = veracodeConfig != null ? veracodeConfig.getMitigationProposalEnabled() : "true";
+        if ("debug".equalsIgnoreCase(mode)) {
+            System.out.println("DEBUG: Checkmarx Mitigation Proposal Bypass (Debug Mode). Project: " + projectId + ", Scan: " + scanId + ", State: " + state);
+            return "Success (Debug Mode - Request Bypassed)";
+        }
+
         try {
             if (scanId == null || scanId.isEmpty()) {
                 throw new RuntimeException("scanId or buildId is required for Checkmarx mitigation update.");
@@ -1198,6 +1204,12 @@ public class CheckmarxService {
     }
 
     public String updatePredicatesList(JsonNode arrayNode) {
+        String mode = veracodeConfig != null ? veracodeConfig.getMitigationProposalEnabled() : "true";
+        if ("debug".equalsIgnoreCase(mode)) {
+            System.out.println("DEBUG: Checkmarx Mitigation Proposal Bypass (Debug Mode) for batch predicates.");
+            return "Success (Debug Mode - Request Bypassed)";
+        }
+
         try {
             String token = getToken();
             if (token == null) {
