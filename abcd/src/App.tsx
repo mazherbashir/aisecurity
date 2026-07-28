@@ -1456,7 +1456,10 @@ export default function App() {
       const saved = localStorage.getItem("veracode_history");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const filtered = parsed.filter((item: any) => typeof item === 'string' && item.toLowerCase().endsWith('.json'));
+          if (filtered.length > 0) return filtered;
+        }
       }
     } catch (e) {}
     return [
@@ -1477,7 +1480,10 @@ export default function App() {
       const saved = localStorage.getItem("checkmarx_history");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const filtered = parsed.filter((item: any) => typeof item === 'string' && item.toLowerCase().endsWith('.json'));
+          if (filtered.length > 0) return filtered;
+        }
       }
     } catch (e) {}
     return [
@@ -1716,18 +1722,18 @@ export default function App() {
       })
       .then((data) => {
         if (Array.isArray(data.history) && data.history.length > 0) {
-          setVeracodeHistory((prev) => {
-            const combined = Array.from(new Set([...prev, ...data.history]));
-            try { localStorage.setItem("veracode_history", JSON.stringify(combined)); } catch (e) {}
-            return combined;
-          });
+          const validList = data.history.filter((n: any) => typeof n === 'string' && n.toLowerCase().endsWith('.json'));
+          if (validList.length > 0) {
+            setVeracodeHistory(validList);
+            try { localStorage.setItem("veracode_history", JSON.stringify(validList)); } catch (e) {}
+          }
         }
         if (Array.isArray(data["history-checkmarx"]) && data["history-checkmarx"].length > 0) {
-          setCheckmarxHistory((prev) => {
-            const combined = Array.from(new Set([...prev, ...data["history-checkmarx"]]));
-            try { localStorage.setItem("checkmarx_history", JSON.stringify(combined)); } catch (e) {}
-            return combined;
-          });
+          const validList = data["history-checkmarx"].filter((n: any) => typeof n === 'string' && n.toLowerCase().endsWith('.json'));
+          if (validList.length > 0) {
+            setCheckmarxHistory(validList);
+            try { localStorage.setItem("checkmarx_history", JSON.stringify(validList)); } catch (e) {}
+          }
         }
         if (Array.isArray(data.engines)) setConfigEngines(data.engines);
         if (data.scanValidityDays) setConfigScanValidityDays(data.scanValidityDays);
@@ -1758,38 +1764,22 @@ export default function App() {
 
     const candidateNames: string[] = [];
 
-    if (data?.jsonFileName) candidateNames.push(data.jsonFileName);
-    if (data?.savedJsonName) candidateNames.push(data.savedJsonName);
-    if (data?.historyFileName) candidateNames.push(data.historyFileName);
+    // ONLY add exact JSON filenames returned directly by backend or explicit .json profile input
+    if (data?.jsonFileName && typeof data.jsonFileName === 'string') candidateNames.push(data.jsonFileName);
+    if (data?.savedJsonName && typeof data.savedJsonName === 'string') candidateNames.push(data.savedJsonName);
+    if (data?.historyFileName && typeof data.historyFileName === 'string') candidateNames.push(data.historyFileName);
+    if (data?.filename && typeof data.filename === 'string' && data.filename.toLowerCase().endsWith('.json')) {
+      candidateNames.push(data.filename);
+    }
 
     const trimmedInput = (profileInput || "").trim();
-    if (trimmedInput) {
-      if (trimmedInput.toLowerCase().endsWith(".json")) {
-        candidateNames.push(trimmedInput);
-      } else {
-        if (isCheckmarx) {
-          const b = (branchInput || data?.overview?.scanName || "").trim();
-          if (b) {
-            candidateNames.push(`${trimmedInput}_${b}.json`);
-          }
-          candidateNames.push(`${trimmedInput}.json`);
-        } else {
-          candidateNames.push(`${trimmedInput}.json`);
-        }
-      }
+    if (trimmedInput && trimmedInput.toLowerCase().endsWith(".json")) {
+      candidateNames.push(trimmedInput);
     }
 
     const appName = (data?.overview?.applicationName || "").trim();
-    const scanName = (data?.overview?.scanName || branchInput || "").trim();
-    if (appName) {
-      if (appName.toLowerCase().endsWith(".json")) {
-        candidateNames.push(appName);
-      } else {
-        if (isCheckmarx && scanName && !appName.includes(scanName)) {
-          candidateNames.push(`${appName}_${scanName}.json`);
-        }
-        candidateNames.push(`${appName}.json`);
-      }
+    if (appName && appName.toLowerCase().endsWith(".json")) {
+      candidateNames.push(appName);
     }
 
     const validCandidates = Array.from(
