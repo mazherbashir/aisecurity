@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { AggregatedGroup } from '../types';
 import { CWE_BASE_URL } from '../constants';
+import { extractCveCodes, getCveNvdUrl } from '../lib/cveUtils';
 
 interface GroupRowProps {
   group: AggregatedGroup;
@@ -65,18 +66,64 @@ export const GroupRow: React.FC<GroupRowProps> = ({
 
             {/* IDENTIFIER SECTION - Aligned with IDENTIFIER header (w-40) */}
             <div className="flex flex-col items-start gap-1 flex-1 min-w-[160px]">
-              {group.type === 'SCA' && group.identifier ? (
-                <span className="text-sm font-black text-blue-400 break-all">
-                  {group.records[0]?.title || group.identifier.split(" - ")[0]}
-                </span>
+              {group.type === 'SCA' ? (
+                <div className="flex flex-col items-start gap-1 w-full">
+                  {(() => {
+                    const cveCodes = extractCveCodes(group);
+                    const rawTitle = group.records[0]?.title || group.identifier || '';
+                    const cleanTitle = rawTitle.replace(/CVE-\d{4}-\d+/gi, '').replace(/\s*-\s*$/, '').trim();
+
+                    return (
+                      <>
+                        {cleanTitle && (
+                          <span className="text-xs font-semibold text-slate-300 break-all leading-tight">
+                            {cleanTitle}
+                          </span>
+                        )}
+                        {cveCodes.length > 0 ? (
+                          <div className="flex flex-col items-start gap-1">
+                            {cveCodes.map((cve) => (
+                              <a
+                                key={cve}
+                                href={getCveNvdUrl(cve)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-sm font-black text-blue-400 hover:text-blue-300 underline decoration-blue-500/40 underline-offset-2 transition-colors break-all"
+                                title={`View ${cve} on NVD (National Vulnerability Database)`}
+                              >
+                                <span>{cve}</span>
+                                <ExternalLink size={11} className="shrink-0" />
+                              </a>
+                            ))}
+                          </div>
+                        ) : group.cweId && group.cweId !== 'N/A' && group.cweId !== '0' ? (
+                          <a
+                            href={`${CWE_BASE_URL}${group.cweId}.html`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs font-black text-blue-400 hover:text-blue-300 transition-colors shrink-0"
+                          >
+                            <span>CWE-{group.cweId}</span>
+                            <ExternalLink size={10} className="shrink-0" />
+                          </a>
+                        ) : !cleanTitle ? (
+                          <span className="text-sm font-black text-blue-400 break-all">
+                            {group.identifier || "SCA Finding"}
+                          </span>
+                        ) : null}
+                      </>
+                    );
+                  })()}
+                </div>
               ) : (
                 <a 
                   href={`${CWE_BASE_URL}${group.cweId}.html`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm font-black text-blue-400 hover:text-blue-300 transition-colors shrink-0"
+                  className="text-sm font-black text-blue-400 hover:text-blue-300 transition-colors shrink-0 inline-flex items-center gap-1"
                 >
-                  CWE-{group.cweId}
+                  <span>CWE-{group.cweId}</span>
+                  <ExternalLink size={11} className="shrink-0" />
                 </a>
               )}
               <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[9px] font-black uppercase tracking-widest leading-none shrink-0 ${
@@ -91,20 +138,30 @@ export const GroupRow: React.FC<GroupRowProps> = ({
             </div>
           </div>
           
-          {/* Filename box spanning both columns */}
+          {/* Filename box spanning both columns for SCA */}
           {group.type === 'SCA' && group.records[0]?.fileName && (
             <div className="text-[10px] text-slate-400 font-mono break-all leading-tight bg-slate-900/50 p-2 rounded border border-slate-800/50 max-w-full">
               {group.records[0].fileName}
             </div>
           )}
 
-          {group.type === 'SAST' && group.records && group.records.length > 0 && (
-            <div className="text-[9px] text-slate-500 font-mono flex gap-1">
-              <span className="text-slate-600 font-black">ID:</span>
-              <span className="text-slate-400">
-                {group.records.slice(0, 3).map((r: any) => r.issue_id || r.id).join(", ")}
-                {group.records.length > 3 ? ", ..." : ""}
-              </span>
+          {/* Title and ID box spanning both Qty + Identifier spaces for SAST */}
+          {group.type === 'SAST' && (
+            <div className="text-[10px] text-slate-400 font-mono break-all leading-tight bg-slate-900/50 p-2 rounded border border-slate-800/50 max-w-full space-y-1">
+              {group.records[0]?.title && (
+                <div className="text-xs font-semibold text-slate-200 font-sans leading-tight">
+                  {group.records[0].title}
+                </div>
+              )}
+              {group.records && group.records.length > 0 && (
+                <div className="text-[9px] text-slate-500 font-mono flex gap-1 items-center">
+                  <span className="text-slate-600 font-black">ID:</span>
+                  <span className="text-slate-400">
+                    {group.records.slice(0, 3).map((r: any) => r.issue_id || r.id).join(", ")}
+                    {group.records.length > 3 ? ", ..." : ""}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import snippetsData from "./data/snippets.json";
 import {
   Shield,
@@ -55,6 +55,7 @@ import { GroupRow } from "./components/GroupRow";
 import { SnowIntakeScreen } from "./components/SnowIntakeScreen";
 import { CWE_BASE_URL } from "./constants";
 import { getEndpoint } from "./config";
+import { extractCveCodes, getCveNvdUrl } from "./lib/cveUtils";
 import { calculateIsScanTooOld, updateBackendSummary, updateMitigationProposal } from "./lib/state-update-utils";
 import { generateReviewSummary } from "./lib/summary-logic";
 import { StaticContent } from "./staticContent";
@@ -253,15 +254,19 @@ function aggregateFindings(
 }
 
 function restorePersistedComments(groups: AggregatedGroup[], profileName: string, scanSource: 'json' | 'live' | null): AggregatedGroup[] {
-  if (scanSource !== 'json') {
-    return groups; // If pulling live data, strictly do NOT map/restore saved comments/proposals
-  }
+  let persistedComments: Record<string, Record<string, {
+    groupId?: string;
+    baseGroupId?: string;
+    type?: string;
+    cweId?: string;
+    identifier?: string;
+    comments?: string;
+    aiComment?: string;
+    aiMetrics?: any;
+    status?: 'approved' | 'rejected';
+    isDevDependency?: boolean;
+  }>> = {};
 
-  if (!profileName || !profileName.toLowerCase().endsWith(".json")) {
-    return groups;
-  }
-
-  let persistedComments: Record<string, Record<string, { aiComment: string; aiMetrics?: any; status?: 'approved' | 'rejected'; isDevDependency?: boolean }>> = {};
   try {
     const raw = localStorage.getItem("crs_persisted_comments");
     if (raw) {
@@ -271,13 +276,77 @@ function restorePersistedComments(groups: AggregatedGroup[], profileName: string
     console.warn("Failed to parse persisted comments:", e);
   }
 
-  const profileComments = persistedComments[profileName];
-  if (!profileComments) {
+  const pName = (profileName || "").trim();
+  const keysToTry = [
+    pName,
+    pName.toLowerCase(),
+    pName.replace(/\.json$/i, ""),
+    `${pName}.json`,
+  ].filter(Boolean);
+
+  let profileComments: Record<string, any> | undefined;
+  for (const k of keysToTry) {
+    if (persistedComments[k]) {
+      profileComments = persistedComments[k];
+      break;
+    }
+  }
+
+  // Fallback 1: Partial case-insensitive match across keys
+  if (!profileComments && pName) {
+    const lower = pName.toLowerCase();
+    const matchedKey = Object.keys(persistedComments).find((k) => {
+      const kLower = k.toLowerCase();
+      return kLower === lower || kLower.includes(lower) || lower.includes(kLower);
+    });
+    if (matchedKey) {
+      profileComments = persistedComments[matchedKey];
+    }
+  }
+
+  // Fallback 2: If profileName wasn't matched but scanSource is 'json', try the most recent key
+  if (!profileComments && scanSource === 'json') {
+    const keys = Object.keys(persistedComments);
+    if (keys.length > 0) {
+      profileComments = persistedComments[keys[keys.length - 1]];
+    }
+  }
+
+  if (!profileComments || Object.keys(profileComments).length === 0) {
     return groups;
   }
 
   return groups.map((g) => {
-    const saved = profileComments[g.groupId];
+    const baseGroupId = g.groupId.split("-IDS-")[0];
+
+    // 1. Exact match on full groupId
+    // 2. Exact match on baseGroupId
+    let saved = profileComments[g.groupId] || profileComments[baseGroupId];
+
+    // 3. Signature fallback (type, CWE/identifier, comments)
+    if (!saved) {
+      const gCommentsNorm = (g.comments || "").trim().toLowerCase();
+      const gCwe = String(g.cweId || "");
+      const gIdentNorm = (g.identifier || "").trim().toLowerCase();
+
+      saved = Object.values(profileComments).find((val: any) => {
+        if (!val || typeof val !== "object") return false;
+        if (val.type && val.type !== g.type) return false;
+
+        const valCwe = String(val.cweId || "");
+        const valIdentNorm = (val.identifier || "").trim().toLowerCase();
+        const valCommentsNorm = (val.comments || "").trim().toLowerCase();
+
+        const cweOrIdentMatch =
+          (gCwe && valCwe && gCwe === valCwe) ||
+          (gIdentNorm && valIdentNorm && gIdentNorm === valIdentNorm);
+        const commentsMatch =
+          !gCommentsNorm || !valCommentsNorm || gCommentsNorm === valCommentsNorm;
+
+        return cweOrIdentMatch && commentsMatch;
+      });
+    }
+
     if (saved) {
       return {
         ...g,
@@ -1245,21 +1314,21 @@ export default function App() {
 
   // Persist pulled AI recommendations and status to localStorage so they are not lost on page reload/back navigation
   useEffect(() => {
-    if (scanSourceType !== "json") {
-      // Do not persist comments/status if not pulling from a JSON file (i.e. is live scan)
+    if (scanSourceType !== "json" && (!appProfile || appProfile.trim() === "")) {
       return;
     }
 
-    const isJsonFile = appProfile && appProfile.toLowerCase().endsWith(".json");
-    if (!isJsonFile) {
-      // Do not persist comments/status if not pulling from a JSON file
-      return;
-    }
+    const targetProfile = (
+      appProfile ||
+      (overview && (overview.applicationName || overview.scanName)) ||
+      "current_scan.json"
+    ).trim();
+
+    if (!targetProfile) return;
 
     if (aggregatedData.sast.length > 0 || aggregatedData.sca.length > 0) {
-      let persistedComments: Record<string, Record<string, { aiComment: string; aiMetrics?: any; status?: 'approved' | 'rejected'; isDevDependency?: boolean }>> = {};
-      
-      // Load current persisted comments from localStorage to avoid overwriting unrelated scans' data
+      let persistedComments: Record<string, Record<string, any>> = {};
+
       try {
         const existingRaw = localStorage.getItem("crs_persisted_comments");
         if (existingRaw) {
@@ -1269,63 +1338,102 @@ export default function App() {
         console.warn("Failed to parse existing persisted comments:", e);
       }
 
-      const profileComments = persistedComments[appProfile] || {};
+      const lowerKey = targetProfile.toLowerCase();
+      const profileComments =
+        persistedComments[targetProfile] || persistedComments[lowerKey] || {};
       let hasUpdates = false;
 
       [...aggregatedData.sast, ...aggregatedData.sca].forEach((g) => {
         if (g.aiComment || g.status || g.isDevDependency) {
-          profileComments[g.groupId] = {
+          const baseGroupId = g.groupId.split("-IDS-")[0];
+          const entry = {
+            groupId: g.groupId,
+            baseGroupId,
+            type: g.type,
+            cweId: g.cweId,
+            identifier: g.identifier,
+            comments: g.comments,
             aiComment: g.aiComment,
             aiMetrics: g.aiMetrics,
             status: g.status,
             isDevDependency: g.isDevDependency,
           };
+          profileComments[g.groupId] = entry;
+          if (baseGroupId && baseGroupId !== g.groupId) {
+            profileComments[baseGroupId] = entry;
+          }
           hasUpdates = true;
         }
       });
 
       if (hasUpdates) {
-        persistedComments[appProfile] = profileComments;
-        localStorage.setItem("crs_persisted_comments", JSON.stringify(persistedComments));
+        persistedComments[targetProfile] = profileComments;
+        if (lowerKey !== targetProfile) {
+          persistedComments[lowerKey] = profileComments;
+        }
+        localStorage.setItem(
+          "crs_persisted_comments",
+          JSON.stringify(persistedComments),
+        );
       }
     }
-  }, [aggregatedData, appProfile, scanSourceType]);
+  }, [aggregatedData, appProfile, scanSourceType, overview]);
 
   const clearMemoryForCurrentScan = () => {
-    if (!appProfile) return;
+    const targetProfile = (
+      appProfile ||
+      (overview && (overview.applicationName || overview.scanName)) ||
+      ""
+    ).trim();
+
     try {
       const existingRaw = localStorage.getItem("crs_persisted_comments");
       if (existingRaw) {
         const persistedComments = JSON.parse(existingRaw);
-        if (persistedComments[appProfile]) {
-          delete persistedComments[appProfile];
-          localStorage.setItem("crs_persisted_comments", JSON.stringify(persistedComments));
+        if (targetProfile) {
+          const lower = targetProfile.toLowerCase();
+          Object.keys(persistedComments).forEach((key) => {
+            if (
+              key === targetProfile ||
+              key.toLowerCase() === lower ||
+              key.toLowerCase().includes(lower)
+            ) {
+              delete persistedComments[key];
+            }
+          });
+        } else {
+          // If no profile, clear all keys
+          Object.keys(persistedComments).forEach((key) => delete persistedComments[key]);
         }
+        localStorage.setItem(
+          "crs_persisted_comments",
+          JSON.stringify(persistedComments),
+        );
       }
     } catch (e) {
       console.warn("Failed to clear memory:", e);
     }
-    
+
     setAggregatedData((prev) => ({
       sast: prev.sast.map((g) => ({
         ...g,
         status: undefined,
         aiComment: "",
-        aiMetrics: undefined
+        aiMetrics: undefined,
       })),
       sca: prev.sca.map((g) => ({
         ...g,
         status: undefined,
         aiComment: "",
-        aiMetrics: undefined
-      }))
+        aiMetrics: undefined,
+      })),
     }));
-    
-    setDetailedGroup((prev) => 
+
+    setDetailedGroup((prev) =>
       prev ? { ...prev, status: undefined, aiComment: "", aiMetrics: undefined } : null
     );
 
-    setSuccessMessage(`Memory for profile "${appProfile}" has been refreshed successfully.`);
+    setSuccessMessage(`Memory for profile "${targetProfile || appProfile}" has been refreshed successfully.`);
     setTimeout(() => setSuccessMessage(null), 4000);
   };
 
@@ -1343,22 +1451,40 @@ export default function App() {
     "Anthropic",
   ]);
   const [configHistory, setConfigHistory] = useState<string[]>([]);
-  const [veracodeHistory, setVeracodeHistory] = useState<string[]>([
-    "GBL_ASR_NGA_ADMIN_CROSS_BORDERS.json",
-    "GBL_ADV_CDE_Junction_US_2_03.json",
-    "GBL_ADV_CDE_Junction_US_2_02.json",
-    "GBL_ADV_CDE_Junction_US_2_01.json",
-    "GBL_ASR_NGA_OMNI_DOC_VIEWER_03.json",
-    "GBL_ASR_NGA_OMNI_DOC_VIEWER_02.json",
-    "GBL_ASR_NGA_OMNI_DOC_VIEWER_01.json",
-    "GBL_ASR_NGA_OMNI_DOC_VIEWER.json",
-    "USA_IFS_Job_Requisition_Assistant.json",
-    "USA_ADV_Value_Creation_for_CFOs_04.json"
-  ]);
-  const [checkmarxHistory, setCheckmarxHistory] = useState<string[]>([
-    "FIT_Honeybee_develop.json",
-    "FIT_Honeybee_1781906942677.json"
-  ]);
+  const [veracodeHistory, setVeracodeHistory] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("veracode_history");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [
+      "GBL_ASR_NGA_ADMIN_CROSS_BORDERS.json",
+      "GBL_ADV_CDE_Junction_US_2_03.json",
+      "GBL_ADV_CDE_Junction_US_2_02.json",
+      "GBL_ADV_CDE_Junction_US_2_01.json",
+      "GBL_ASR_NGA_OMNI_DOC_VIEWER_03.json",
+      "GBL_ASR_NGA_OMNI_DOC_VIEWER_02.json",
+      "GBL_ASR_NGA_OMNI_DOC_VIEWER_01.json",
+      "GBL_ASR_NGA_OMNI_DOC_VIEWER.json",
+      "USA_IFS_Job_Requisition_Assistant.json",
+      "USA_ADV_Value_Creation_for_CFOs_04.json"
+    ];
+  });
+  const [checkmarxHistory, setCheckmarxHistory] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("checkmarx_history");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [
+      "FIT_Honeybee_develop.json",
+      "FIT_Honeybee_1781906942677.json"
+    ];
+  });
   const [configScanValidityDays, setConfigScanValidityDays] =
     useState<number>(90);
   const [configIntakeRequest, setConfigIntakeRequest] = useState<boolean | undefined>(undefined);
@@ -1579,6 +1705,122 @@ export default function App() {
     });
   };
 
+  const fetchConfigInfo = useCallback(() => {
+    fetch(getEndpoint('configInfo'))
+      .then((res) => {
+        const contentType = res.headers.get('content-type');
+        if (res.ok && contentType && contentType.includes('application/json')) {
+          return res.json();
+        }
+        throw new Error(`Response is not valid JSON or status is not OK (Status: ${res.status})`);
+      })
+      .then((data) => {
+        if (Array.isArray(data.history) && data.history.length > 0) {
+          setVeracodeHistory((prev) => {
+            const combined = Array.from(new Set([...prev, ...data.history]));
+            try { localStorage.setItem("veracode_history", JSON.stringify(combined)); } catch (e) {}
+            return combined;
+          });
+        }
+        if (Array.isArray(data["history-checkmarx"]) && data["history-checkmarx"].length > 0) {
+          setCheckmarxHistory((prev) => {
+            const combined = Array.from(new Set([...prev, ...data["history-checkmarx"]]));
+            try { localStorage.setItem("checkmarx_history", JSON.stringify(combined)); } catch (e) {}
+            return combined;
+          });
+        }
+        if (Array.isArray(data.engines)) setConfigEngines(data.engines);
+        if (data.scanValidityDays) setConfigScanValidityDays(data.scanValidityDays);
+        if (Array.isArray(data.noSca)) setConfigNoSca(data.noSca);
+        if (Array.isArray(data.tiers)) setConfigTiers(data.tiers);
+        if (data.scaSafeVersionEnabled !== undefined) {
+          setScaSafeVersionEnabled(data.scaSafeVersionEnabled);
+        }
+        if (data.intakeRequest !== undefined) {
+          setConfigIntakeRequest(data.intakeRequest);
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to fetch initial config info (using local default config info):", err.message || err);
+      });
+  }, []);
+
+  const addScanToHistory = useCallback((
+    data: any,
+    toolType: string,
+    profileInput: string,
+    branchInput?: string
+  ) => {
+    const isCheckmarx =
+      toolType === "Checkmarx" ||
+      selectedTools.includes("Checkmarx") ||
+      data?.overview?.scanType === "checkmarx";
+
+    const candidateNames: string[] = [];
+
+    if (data?.jsonFileName) candidateNames.push(data.jsonFileName);
+    if (data?.savedJsonName) candidateNames.push(data.savedJsonName);
+    if (data?.historyFileName) candidateNames.push(data.historyFileName);
+
+    const trimmedInput = (profileInput || "").trim();
+    if (trimmedInput) {
+      if (trimmedInput.toLowerCase().endsWith(".json")) {
+        candidateNames.push(trimmedInput);
+      } else {
+        if (isCheckmarx) {
+          const b = (branchInput || data?.overview?.scanName || "").trim();
+          if (b) {
+            candidateNames.push(`${trimmedInput}_${b}.json`);
+          }
+          candidateNames.push(`${trimmedInput}.json`);
+        } else {
+          candidateNames.push(`${trimmedInput}.json`);
+        }
+      }
+    }
+
+    const appName = (data?.overview?.applicationName || "").trim();
+    const scanName = (data?.overview?.scanName || branchInput || "").trim();
+    if (appName) {
+      if (appName.toLowerCase().endsWith(".json")) {
+        candidateNames.push(appName);
+      } else {
+        if (isCheckmarx && scanName && !appName.includes(scanName)) {
+          candidateNames.push(`${appName}_${scanName}.json`);
+        }
+        candidateNames.push(`${appName}.json`);
+      }
+    }
+
+    const validCandidates = Array.from(
+      new Set(
+        candidateNames
+          .map((n) => n.trim())
+          .filter((n) => n.length > 0 && n.toLowerCase().endsWith(".json"))
+      )
+    );
+
+    if (validCandidates.length === 0) return;
+
+    if (isCheckmarx) {
+      setCheckmarxHistory((prev) => {
+        const next = Array.from(new Set([...validCandidates, ...prev]));
+        try {
+          localStorage.setItem("checkmarx_history", JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+    } else {
+      setVeracodeHistory((prev) => {
+        const next = Array.from(new Set([...validCandidates, ...prev]));
+        try {
+          localStorage.setItem("veracode_history", JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+    }
+  }, [selectedTools]);
+
   // Restore accidentally removed config fetching logic or ensure it's handled via fetchPrompts
   useEffect(() => {
     const checkServerHealth = () => {
@@ -1599,34 +1841,6 @@ export default function App() {
         });
     };
 
-    const fetchConfigInfo = () => {
-      fetch(getEndpoint('configInfo'))
-        .then((res) => {
-          const contentType = res.headers.get('content-type');
-          if (res.ok && contentType && contentType.includes('application/json')) {
-            return res.json();
-          }
-          throw new Error(`Response is not valid JSON or status is not OK (Status: ${res.status})`);
-        })
-        .then((data) => {
-          if (Array.isArray(data.history)) setVeracodeHistory(data.history);
-          if (Array.isArray(data["history-checkmarx"])) setCheckmarxHistory(data["history-checkmarx"]);
-          if (Array.isArray(data.engines)) setConfigEngines(data.engines);
-          if (data.scanValidityDays) setConfigScanValidityDays(data.scanValidityDays);
-          if (Array.isArray(data.noSca)) setConfigNoSca(data.noSca);
-          if (Array.isArray(data.tiers)) setConfigTiers(data.tiers);
-          if (data.scaSafeVersionEnabled !== undefined) {
-            setScaSafeVersionEnabled(data.scaSafeVersionEnabled);
-          }
-          if (data.intakeRequest !== undefined) {
-            setConfigIntakeRequest(data.intakeRequest);
-          }
-        })
-        .catch((err) => {
-          console.warn("Failed to fetch initial config info (using local default config info):", err.message || err);
-        });
-    };
-
     checkServerHealth();
     fetchConfigInfo();
     fetchPrompts();
@@ -1637,7 +1851,7 @@ export default function App() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchConfigInfo]);
 
   // Dynamic Summaries
   const scaComponents = React.useMemo(() => {
@@ -2294,10 +2508,18 @@ export default function App() {
 
       const sastFindings = Array.isArray(rawSast) ? rawSast : [];
       const scaFindings = Array.isArray(rawSca)
-        ? rawSca.map((f: any) => ({
+        ? rawSca.map((f: any, idx: number) => ({
             ...f,
             type: "SCA",
-            id: f.id || `sca-${Math.random().toString(36).substr(2, 9)}`,
+            id:
+              f.id ||
+              f.vulnerabilityId ||
+              f.issue_id ||
+              f.cve ||
+              f.cveList ||
+              (f.packageName
+                ? `sca-${f.packageName}-${f.version || idx}`
+                : `sca-finding-${idx}`),
             cweid: f.cweid || "0",
             title: f.title || f.packageName || "Unknown Product",
             severity: f.severity || f.severityCounts || "Medium",
@@ -2313,10 +2535,32 @@ export default function App() {
       const scaGroups = aggregateFindings(scaFindings, "SCA");
 
       console.log("Setting Final States.");
+      const profileKey = (appProfile || data?.overview?.applicationName || data?.overview?.scanName || "").trim();
+      const restoredSast = restorePersistedComments(sastGroups, profileKey, finalSourceType);
+      const restoredSca = restorePersistedComments(scaGroups, profileKey, finalSourceType);
+
       setAggregatedData({
-        sast: restorePersistedComments(sastGroups, appProfile, finalSourceType),
-        sca: restorePersistedComments(scaGroups, appProfile, finalSourceType)
+        sast: restoredSast,
+        sca: restoredSca
       });
+
+      // Update mitigation proposals to deduct restored approved/rejected findings
+      let currentSastProp = data && data.sastMitigationProposal ? { ...data.sastMitigationProposal } : null;
+      let currentScaProp = data && data.scaMitigationProposal ? { ...data.scaMitigationProposal } : null;
+
+      if (currentSastProp) {
+        restoredSast.filter(g => g.status === 'approved' || g.status === 'rejected').forEach(g => {
+          currentSastProp = updateMitigationProposal(currentSastProp, g);
+        });
+        setSastMitigationProposal(currentSastProp);
+      }
+
+      if (currentScaProp) {
+        restoredSca.filter(g => g.status === 'approved' || g.status === 'rejected' || g.isDevDependency).forEach(g => {
+          currentScaProp = updateMitigationProposal(currentScaProp, g);
+        });
+        setScaMitigationProposal(currentScaProp);
+      }
 
       // Auto-switch to appropriate tab based on findings
       if (sastGroups.length > 0) {
@@ -2326,6 +2570,11 @@ export default function App() {
       } else {
         setActiveTab("Review");
       }
+
+      // Add newly pulled scan name (.json format) to history for Veracode and Checkmarx
+      const activeToolType = selectedTools.includes("Checkmarx") || data?.overview?.scanType === "checkmarx" ? "Checkmarx" : "Veracode";
+      addScanToHistory(data, activeToolType, appProfile, branch);
+      fetchConfigInfo();
 
       setResultsLoaded(true);
       setBackendError(null);
@@ -3872,7 +4121,7 @@ export default function App() {
                             <th className="p-4 w-48">
                               <div className="flex flex-row items-center gap-2">
                                 <span>Status</span>
-                                {resultsLoaded && appProfile && appProfile.toLowerCase().endsWith(".json") && (
+                                {resultsLoaded && (scanSourceType === "json" || (appProfile && appProfile.trim().length > 0)) && (
                                   <button
                                     type="button"
                                     onClick={clearMemoryForCurrentScan}
@@ -4976,34 +5225,66 @@ export default function App() {
                           <span className="opacity-30">|</span>
                           {detailedGroup.type === 'SCA' ? (
                             (() => {
+                              const cveCodes = extractCveCodes(detailedGroup);
                               const title = detailedGroup.records[0]?.title || detailedGroup.identifier || `CWE-${detailedGroup.cweId}`;
-                              const cveMatch = title.match(/CVE-\d{4}-\d+/i);
-                              const cveCode = cveMatch ? cveMatch[0] : null;
+                              const cleanTitle = title.replace(/CVE-\d{4}-\d+/gi, "").replace(/\s*-\s*$/, "").trim();
 
-                              return cveCode ? (
-                                <a
-                                  href={`https://nvd.nist.gov/vuln/detail/${cveCode}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-400 hover:text-blue-300 font-bold underline decoration-blue-500/30 underline-offset-2"
-                                >
-                                  {title}
-                                </a>
-                              ) : (
-                                <span className="text-slate-300 font-bold">
-                                  {title}
-                                </span>
+                              return (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {cleanTitle && (
+                                    <span className="text-slate-300 font-bold">
+                                      {cleanTitle}
+                                    </span>
+                                  )}
+                                  {cveCodes.length > 0 ? (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {cveCodes.map((cveCode) => (
+                                        <a
+                                          key={cveCode}
+                                          href={getCveNvdUrl(cveCode)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-blue-400 hover:text-blue-300 font-black underline decoration-blue-500/40 underline-offset-2 flex items-center gap-1 transition-colors bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/30"
+                                          title={`Open ${cveCode} details on NVD`}
+                                        >
+                                          <span>{cveCode}</span>
+                                          <ExternalLink size={10} className="shrink-0" />
+                                        </a>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    detailedGroup.cweId && detailedGroup.cweId !== 'N/A' && (
+                                      <a
+                                        href={`${CWE_BASE_URL}${detailedGroup.cweId}.html`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-400 hover:text-blue-300 font-bold underline decoration-blue-500/30 underline-offset-2 flex items-center gap-1"
+                                      >
+                                        <span>CWE-{detailedGroup.cweId}</span>
+                                        <ExternalLink size={10} className="shrink-0" />
+                                      </a>
+                                    )
+                                  )}
+                                </div>
                               );
                             })()
                           ) : (
-                            <a
-                              href={`${CWE_BASE_URL}${detailedGroup.cweId}.html`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-400 hover:text-blue-300 font-bold underline decoration-blue-500/30 underline-offset-2"
-                            >
-                              CWE-{detailedGroup.cweId}
-                            </a>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <a
+                                href={`${CWE_BASE_URL}${detailedGroup.cweId}.html`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-400 hover:text-blue-300 font-bold underline decoration-blue-500/30 underline-offset-2 flex items-center gap-1"
+                              >
+                                <span>CWE-{detailedGroup.cweId}</span>
+                                <ExternalLink size={10} className="shrink-0" />
+                              </a>
+                              {detailedGroup.records[0]?.title && (
+                                <span className="text-slate-300 font-bold">
+                                  - {detailedGroup.records[0].title}
+                                </span>
+                              )}
+                            </div>
                           )}
                           <span className="opacity-30">|</span>
                           <span>{detailedGroup.records.length} Findings</span>
@@ -5062,6 +5343,31 @@ export default function App() {
                             {detailedGroup.description}
                           </div>
                         </div>
+                        {detailedGroup.type === 'SCA' && (() => {
+                          const cves = extractCveCodes(detailedGroup);
+                          if (cves.length === 0) return null;
+                          return (
+                            <div className="mt-4 pt-4 border-t border-slate-800/50">
+                              <h4 className="text-[10px] font-bold uppercase text-slate-500 mb-2 tracking-widest flex items-center gap-1.5">
+                                <Shield size={12} className="text-blue-400" /> CVE References (Click to view NVD Details)
+                              </h4>
+                              <div className="flex flex-wrap gap-2">
+                                {cves.map((cveCode) => (
+                                  <a
+                                    key={cveCode}
+                                    href={getCveNvdUrl(cveCode)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-950/60 hover:bg-blue-900/80 border border-blue-800/60 hover:border-blue-600 text-blue-300 hover:text-white rounded-lg text-xs font-mono font-bold transition-all shadow-sm"
+                                  >
+                                    <span>{cveCode}</span>
+                                    <ExternalLink size={12} className="text-blue-400 shrink-0" />
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 
