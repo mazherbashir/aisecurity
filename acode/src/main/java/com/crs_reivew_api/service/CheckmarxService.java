@@ -1162,7 +1162,7 @@ public class CheckmarxService {
                 predicate.put("similarityId", simId.trim());
                 predicate.put("scanId", scanId.trim());
                 predicate.put("projectId", projectId);
-                predicate.put("severity", effectiveSeverity.toUpperCase());
+                predicate.put("severity", normalizeSeverity(effectiveSeverity));
                 predicate.put("state", mappedState);
                 predicate.put("comment", comment != null ? comment : "");
                 predicateList.add(predicate);
@@ -1250,7 +1250,7 @@ public class CheckmarxService {
                     predicate.put("similarityId", simId);
                     predicate.put("scanId", scanId.trim());
                     predicate.put("projectId", projectId);
-                    predicate.put("severity", effectiveSeverity.toUpperCase());
+                    predicate.put("severity", normalizeSeverity(effectiveSeverity));
                     predicate.put("state", mappedState);
                     predicate.put("comment", comment);
                     predicateList.add(predicate);
@@ -1308,6 +1308,39 @@ public class CheckmarxService {
             }
         }
         return "NOT_EXPLOITABLE"; // default fallback
+    }
+
+    private String normalizeSeverity(String severity) {
+        if (severity == null) {
+            return "HIGH";
+        }
+        String upper = severity.trim().toUpperCase();
+        switch (upper) {
+            case "CRITICAL":
+                return "CRITICAL";
+            case "HIGH":
+                return "HIGH";
+            case "MEDIUM":
+                return "MEDIUM";
+            case "LOW":
+                return "LOW";
+            case "INFO":
+            case "INFORMATIONAL":
+                return "INFO";
+            default:
+                if (upper.contains("INFO")) {
+                    return "INFO";
+                } else if (upper.contains("CRIT")) {
+                    return "CRITICAL";
+                } else if (upper.contains("HIGH")) {
+                    return "HIGH";
+                } else if (upper.contains("MED")) {
+                    return "MEDIUM";
+                } else if (upper.contains("LOW")) {
+                    return "LOW";
+                }
+                return "HIGH";
+        }
     }
 
     public String findSeverityForSimilarityId(String projectId, String similarityId) {

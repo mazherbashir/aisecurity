@@ -2845,7 +2845,8 @@ export default function App() {
         flawIdList,
         action: actionStr,
         comment: group.aiComment,
-        type: "SAST"
+        type: "SAST",
+        severity: group.severity || ""
       } : {
         buildId,
         appId: activeOverview.appId || "",
@@ -2854,6 +2855,7 @@ export default function App() {
         comment: group.aiComment,
         cveId,
         type: group.type,
+        severity: group.severity || ""
       };
 
       try {
