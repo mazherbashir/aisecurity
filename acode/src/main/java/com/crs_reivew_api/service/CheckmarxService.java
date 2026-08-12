@@ -555,23 +555,9 @@ public class CheckmarxService {
         }
 
         System.out.println("Fetching new Checkmarx Token...");
-        String effectiveApiKey = apiKey;
-        
+        String effectiveApiKey = veracodeConfig.getCheckmarxApiKey();
         if (effectiveApiKey == null || effectiveApiKey.isEmpty()) {
-            try {
-                Path credPath = Paths.get(System.getProperty("user.home"), ".crs-tool", "credentials");
-                if (Files.exists(credPath)) {
-                    for (String line : Files.readAllLines(credPath)) {
-                        String trimmed = line.trim();
-                        if (trimmed.startsWith("crs.checkmarx.api.key")) {
-                            effectiveApiKey = trimmed.substring(trimmed.indexOf("=") + 1).trim();
-                            break;
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                System.err.println("Warning: Could not read credentials file: " + e.getMessage());
-            }
+            effectiveApiKey = apiKey;
         }
 
         if (effectiveApiKey == null || effectiveApiKey.isEmpty()) {

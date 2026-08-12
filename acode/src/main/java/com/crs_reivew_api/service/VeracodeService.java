@@ -27,6 +27,8 @@ public class VeracodeService {
     @Autowired
     private VeracodeConfig veracodeConfig;
 
+    private final java.util.concurrent.ExecutorService pdfExecutor = java.util.concurrent.Executors.newFixedThreadPool(2);
+
     private DocumentBuilderFactory createSecureDocumentBuilderFactory() {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         try {
@@ -688,8 +690,12 @@ public class VeracodeService {
             return loadHistoryFile(applicationName);
         }
 
-        String effectiveAppId = (appId != null && !appId.isEmpty()) ? appId : getAppId(applicationName);
-        String effectiveBuildId = (buildId != null && !buildId.isEmpty()) ? buildId : getLatestBuildId(effectiveAppId);
+        String effectiveBuildId = buildId;
+        String effectiveAppId = appId;
+        if (effectiveBuildId == null || effectiveBuildId.isEmpty()) {
+            effectiveAppId = (appId != null && !appId.isEmpty()) ? appId : getAppId(applicationName);
+            effectiveBuildId = getLatestBuildId(effectiveAppId);
+        }
 
         VeracodeReport report = getDetailedReportObject(effectiveBuildId);
 
@@ -2030,5 +2036,113 @@ public class VeracodeService {
         }
 
         throw new RuntimeException("Could not find a matching internal Veracode Finding ID for SCA CVE: " + cveId);
+    }
+
+    public static class ReportStatus {
+        public String uuid;
+        public String buildId;
+        public String status; // PENDING, PROCESSING, COMPLETED, FAILED
+        public String errorMessage;
+        public long timestamp;
+
+        public ReportStatus() {}
+        public ReportStatus(String uuid, String buildId, String status, String errorMessage) {
+            this.uuid = uuid;
+            this.buildId = buildId;
+            this.status = status;
+            this.errorMessage = errorMessage;
+            this.timestamp = System.currentTimeMillis();
+        }
+    }
+
+    private void saveReportStatus(ReportStatus status) {
+        try {
+            java.nio.file.Path statusPath = java.nio.file.Paths.get("veracode", "reports", status.uuid + ".json");
+            java.nio.file.Files.createDirectories(statusPath.getParent());
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            mapper.writeValue(statusPath.toFile(), status);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public ReportStatus getPdfReportStatus(String uuid) {
+        try {
+            java.nio.file.Path statusPath = java.nio.file.Paths.get("veracode", "reports", uuid + ".json");
+            if (!java.nio.file.Files.exists(statusPath)) {
+                return null;
+            }
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.readValue(statusPath.toFile(), ReportStatus.class);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public byte[] getPdfReportBytes(String uuid) {
+        try {
+            java.nio.file.Path pdfPath = java.nio.file.Paths.get("veracode", "reports", uuid + ".pdf");
+            if (!java.nio.file.Files.exists(pdfPath)) {
+                return null;
+            }
+            return java.nio.file.Files.readAllBytes(pdfPath);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public String startPdfGeneration(String applicationName, String appId, String buildId) {
+        String resolvedBuildId = buildId;
+        if (resolvedBuildId == null || resolvedBuildId.isEmpty()) {
+            String resolvedAppId = appId;
+            if (resolvedAppId == null || resolvedAppId.isEmpty()) {
+                if (applicationName == null || applicationName.isEmpty()) {
+                    throw new IllegalArgumentException("At least one of buildId, appId, or applicationName must be provided");
+                }
+                resolvedAppId = getAppId(applicationName);
+            }
+            resolvedBuildId = getBuildId(resolvedAppId);
+        }
+
+        if (resolvedBuildId == null || resolvedBuildId.isEmpty()) {
+            throw new RuntimeException("Could not resolve a valid build ID.");
+        }
+
+        String uuid = UUID.randomUUID().toString();
+        saveReportStatus(new ReportStatus(uuid, resolvedBuildId, "PENDING", null));
+
+        final String finalBuildId = resolvedBuildId;
+        pdfExecutor.submit(() -> {
+            try {
+                saveReportStatus(new ReportStatus(uuid, finalBuildId, "PROCESSING", null));
+
+                ResultsAPIWrapper resultsWrapper = new ResultsAPIWrapper();
+                setupCredentials(resultsWrapper);
+
+                byte[] pdfBytes = resultsWrapper.detailedReportPdf(finalBuildId);
+                if (pdfBytes == null || pdfBytes.length == 0) {
+                    throw new RuntimeException("Veracode API returned empty PDF content");
+                }
+                if (pdfBytes.length < 100) {
+                    String checkError = new String(pdfBytes, java.nio.charset.StandardCharsets.UTF_8);
+                    if (checkError.contains("<error>")) {
+                        throw new RuntimeException("Veracode API Error: " + checkError);
+                    }
+                }
+
+                java.nio.file.Path pdfPath = java.nio.file.Paths.get("veracode", "reports", uuid + ".pdf");
+                java.nio.file.Files.createDirectories(pdfPath.getParent());
+                java.nio.file.Files.write(pdfPath, pdfBytes);
+
+                saveReportStatus(new ReportStatus(uuid, finalBuildId, "COMPLETED", null));
+            } catch (Exception e) {
+                e.printStackTrace();
+                saveReportStatus(new ReportStatus(uuid, finalBuildId, "FAILED", e.getMessage()));
+            }
+        });
+
+        return uuid;
     }
 }

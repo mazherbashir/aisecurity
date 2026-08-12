@@ -71,13 +71,23 @@ public class VeracodeConfig {
     private boolean intakeRequest = false;
     private Key key = new Key();
 
+    private String checkmarxApiKey;
+
+    public String getCheckmarxApiKey() {
+        return checkmarxApiKey;
+    }
+
+    public void setCheckmarxApiKey(String checkmarxApiKey) {
+        this.checkmarxApiKey = checkmarxApiKey;
+    }
+
     @PostConstruct
     public void loadExternalConfig() {
         String userHome = System.getProperty("user.home");
         File credentialsFile = new File(userHome, ".crs-tool/credentials");
+        Properties props = new Properties();
         if (credentialsFile.exists()) {
             logger.info("Loading external credentials from {}", credentialsFile.getAbsolutePath());
-            Properties props = new Properties();
             try (FileInputStream fis = new FileInputStream(credentialsFile)) {
                 props.load(fis);
                 this.geminiKey = getProp(props, "geminiKey", this.geminiKey);
@@ -94,6 +104,12 @@ public class VeracodeConfig {
                 
                 // GCaaS API Keys
                 this.gcaasSecretKey = props.getProperty("gcaas-secret-key");
+                
+                // Checkmarx API Key
+                this.checkmarxApiKey = props.getProperty("crs.checkmarx.api.key");
+                if (this.checkmarxApiKey == null || this.checkmarxApiKey.isEmpty()) {
+                    this.checkmarxApiKey = props.getProperty("crs.checkmarx.api");
+                }
                 
                 logger.info("Successfully loaded AI, GitHub, Veracode, and GCaaS credentials from {}", credentialsFile.getAbsolutePath());
             } catch (IOException e) {
@@ -120,9 +136,9 @@ public class VeracodeConfig {
             }
         }
 
+        Properties appProps = new Properties();
         if (appPropsFile != null) {
             logger.info("Found external properties file at: {}", appPropsFile.getAbsolutePath());
-            Properties appProps = new Properties();
             try (FileInputStream fis = new FileInputStream(appPropsFile)) {
                 appProps.load(fis);
                 
@@ -202,7 +218,209 @@ public class VeracodeConfig {
             } catch (IOException e) {
                 logger.error("Failed to manually load application.properties: {}", e.getMessage());
             }
+        } else {
+            // Load checkmarx key from environment variable if set
+            if (this.checkmarxApiKey == null || this.checkmarxApiKey.isEmpty()) {
+                this.checkmarxApiKey = System.getenv("CRS_CHECKMARX_API_KEY");
+            }
+            if (this.checkmarxApiKey == null || this.checkmarxApiKey.isEmpty()) {
+                this.checkmarxApiKey = System.getenv("crs.checkmarx.api.key");
+            }
         }
+
+        // If it was loaded from appProps but not yet set
+        if (this.checkmarxApiKey == null || this.checkmarxApiKey.isEmpty()) {
+            // we will check inside validateKeysAndPrintReport
+        }
+
+        // Fallback: load from ~/.veracode/credentials if still missing
+        File veracodeCredFile = new File(System.getProperty("user.home"), ".veracode/credentials");
+        if (this.key.getId() == null || this.key.getId().isEmpty() || this.key.getSecret() == null || this.key.getSecret().isEmpty()) {
+            if (veracodeCredFile.exists()) {
+                try {
+                    List<String> lines = java.nio.file.Files.readAllLines(veracodeCredFile.toPath());
+                    for (String line : lines) {
+                        String trimmed = line.trim();
+                        if (trimmed.startsWith("veracode_api_key_id")) {
+                            this.key.setId(trimmed.split("=")[1].trim());
+                        } else if (trimmed.startsWith("veracode_api_key_secret")) {
+                            this.key.setSecret(trimmed.split("=")[1].trim());
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.error("Failed to read ~/.veracode/credentials file: {}", e.getMessage());
+                }
+            }
+        }
+
+        validateKeysAndPrintReport(credentialsFile, appPropsFile, props, appProps);
+    }
+
+    private boolean hasVeracodeKeyInOfficialFile(File file, String keyPrefix) {
+        try {
+            List<String> lines = java.nio.file.Files.readAllLines(file.toPath());
+            for (String line : lines) {
+                if (line.trim().startsWith(keyPrefix)) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {}
+        return false;
+    }
+
+    private void validateKeysAndPrintReport(File credentialsFile, File appPropsFile, Properties credProps, Properties appProps) {
+        // 1. Veracode ID
+        String vId = this.key.getId();
+        String vIdSrc = "MISSING";
+        File veracodeCredFile = new File(System.getProperty("user.home"), ".veracode/credentials");
+        if (vId != null && !vId.isEmpty()) {
+            if (credProps != null && credProps.containsKey("id")) {
+                vIdSrc = credentialsFile.getAbsolutePath();
+            } else if (veracodeCredFile.exists() && hasVeracodeKeyInOfficialFile(veracodeCredFile, "veracode_api_key_id")) {
+                vIdSrc = veracodeCredFile.getAbsolutePath();
+            } else if (appProps != null && appProps.containsKey("veracode.api.key.id")) {
+                vIdSrc = appPropsFile.getAbsolutePath();
+            } else if (System.getenv("VERACODE_API_KEY_ID") != null) {
+                vIdSrc = "Environment Variable (VERACODE_API_KEY_ID)";
+            } else {
+                vIdSrc = "Spring Properties Configuration";
+            }
+        }
+
+        // 2. Veracode Secret
+        String vSec = this.key.getSecret();
+        String vSecSrc = "MISSING";
+        if (vSec != null && !vSec.isEmpty()) {
+            if (credProps != null && credProps.containsKey("secret")) {
+                vSecSrc = credentialsFile.getAbsolutePath();
+            } else if (veracodeCredFile.exists() && hasVeracodeKeyInOfficialFile(veracodeCredFile, "veracode_api_key_secret")) {
+                vSecSrc = veracodeCredFile.getAbsolutePath();
+            } else if (appProps != null && appProps.containsKey("veracode.api.key.secret")) {
+                vSecSrc = appPropsFile.getAbsolutePath();
+            } else if (System.getenv("VERACODE_API_KEY_SECRET") != null) {
+                vSecSrc = "Environment Variable (VERACODE_API_KEY_SECRET)";
+            } else {
+                vSecSrc = "Spring Properties Configuration";
+            }
+        }
+
+        // 3. Checkmarx API Key
+        String cxKey = this.checkmarxApiKey;
+        if (cxKey == null || cxKey.isEmpty()) {
+            if (appProps != null) {
+                cxKey = appProps.getProperty("crs.checkmarx.api.key");
+                if (cxKey == null || cxKey.isEmpty()) {
+                    cxKey = appProps.getProperty("crs.checkmarx.api");
+                }
+            }
+        }
+        String cxSrc = "MISSING";
+        if (cxKey != null && !cxKey.isEmpty()) {
+            if (credProps != null && (credProps.containsKey("crs.checkmarx.api.key") || credProps.containsKey("crs.checkmarx.api"))) {
+                cxSrc = credentialsFile.getAbsolutePath();
+            } else if (appProps != null && (appProps.containsKey("crs.checkmarx.api.key") || appProps.containsKey("crs.checkmarx.api"))) {
+                cxSrc = appPropsFile.getAbsolutePath();
+            } else if (System.getenv("CRS_CHECKMARX_API_KEY") != null) {
+                cxSrc = "Environment Variable (CRS_CHECKMARX_API_KEY)";
+            } else {
+                cxSrc = "Spring Properties Configuration";
+            }
+        }
+
+        // 4. Gemini Key
+        String gemKey = this.geminiKey;
+        String gemSrc = "MISSING";
+        if (gemKey != null && !gemKey.isEmpty()) {
+            if (credProps != null && (credProps.containsKey("crs.api.geminiKey") || credProps.containsKey("veracode.api.geminiKey"))) {
+                gemSrc = credentialsFile.getAbsolutePath();
+            } else if (appProps != null && (appProps.containsKey("veracode.api.geminiKey") || appProps.containsKey("crs.api.geminiKey"))) {
+                gemSrc = appPropsFile.getAbsolutePath();
+            } else if (System.getenv("CRS_API_GEMINIKEY") != null || System.getenv("VERACODE_API_GEMINIKEY") != null || System.getenv("GEMINI_API_KEY") != null) {
+                gemSrc = "Environment Variable";
+            } else {
+                gemSrc = "Spring Properties Configuration";
+            }
+        }
+
+        // 5. Azure Key
+        String azKey = this.azureKey;
+        String azSrc = "MISSING / OPTIONAL";
+        if (azKey != null && !azKey.isEmpty()) {
+            if (credProps != null && (credProps.containsKey("crs.api.azureKey") || credProps.containsKey("veracode.api.azureKey"))) {
+                azSrc = credentialsFile.getAbsolutePath();
+            } else if (appProps != null && (appProps.containsKey("veracode.api.azureKey") || appProps.containsKey("crs.api.azureKey"))) {
+                azSrc = appPropsFile.getAbsolutePath();
+            } else if (System.getenv("CRS_API_AZUREKEY") != null || System.getenv("VERACODE_API_AZUREKEY") != null) {
+                azSrc = "Environment Variable";
+            } else {
+                azSrc = "Spring Properties Configuration";
+            }
+        }
+
+        // 6. GitHub Token
+        String ghToken = this.githubToken;
+        String ghSrc = "MISSING";
+        if (ghToken != null && !ghToken.isEmpty()) {
+            if (credProps != null && (credProps.containsKey("githubToken") || credProps.containsKey("veracode.api.githubToken"))) {
+                ghSrc = credentialsFile.getAbsolutePath();
+            } else if (appProps != null && (appProps.containsKey("veracode.api.githubToken") || appProps.containsKey("githubToken"))) {
+                ghSrc = appPropsFile.getAbsolutePath();
+            } else if (System.getenv("GITHUB_TOKEN") != null || System.getenv("VERACODE_API_GITHUBTOKEN") != null) {
+                ghSrc = "Environment Variable";
+            } else {
+                ghSrc = "Spring Properties Configuration";
+            }
+        }
+
+        // 7. GCaaS Secret Key
+        String gcKey = this.gcaasSecretKey;
+        String gcSrc = "MISSING";
+        if (gcKey != null && !gcKey.isEmpty()) {
+            if (credProps != null && credProps.containsKey("gcaas-secret-key")) {
+                gcSrc = credentialsFile.getAbsolutePath();
+            } else if (appProps != null && (appProps.containsKey("gcaas-secret-key") || appProps.containsKey("veracode.api.gcaasSecretKey"))) {
+                gcSrc = appPropsFile.getAbsolutePath();
+            } else if (System.getenv("GCAAS_SECRET_KEY") != null) {
+                gcSrc = "Environment Variable";
+            } else {
+                gcSrc = "Spring Properties Configuration";
+            }
+        }
+
+        System.out.println("==========================================================================================");
+        System.out.println("                         STARTUP API KEY DIAGNOSTICS REPORT");
+        System.out.println("==========================================================================================");
+        System.out.printf(" %-28s | %-12s | %-50s\n", "KEY NAME", "STATUS", "SOURCE / RESOLVED PATH");
+        System.out.println("------------------------------------------------------------------------------------------");
+        printRow("Veracode API Key ID", vId, vIdSrc, veracodeCredFile.getAbsolutePath() + " OR application.properties");
+        printRow("Veracode API Key Secret", vSec, vSecSrc, veracodeCredFile.getAbsolutePath() + " OR application.properties");
+        printRow("Checkmarx API Key", cxKey, cxSrc, credentialsFile.getAbsolutePath() + " (as crs.checkmarx.api.key) OR application.properties");
+        printRow("Gemini API Key", gemKey, gemSrc, credentialsFile.getAbsolutePath() + " (as crs.api.geminiKey) OR application.properties");
+        printRow("Azure OpenAI API Key", azKey, azSrc, credentialsFile.getAbsolutePath() + " (as crs.api.azureKey) OR application.properties");
+        printRow("GitHub Token", ghToken, ghSrc, credentialsFile.getAbsolutePath() + " (as veracode.api.githubToken) OR application.properties");
+        printRow("GCaaS Secret Key", gcKey, gcSrc, credentialsFile.getAbsolutePath() + " (as gcaas-secret-key) OR application.properties");
+        System.out.println("==========================================================================================");
+
+        boolean hasMissingRequired = (vId == null || vId.isEmpty()) || (vSec == null || vSec.isEmpty()) 
+            || (cxKey == null || cxKey.isEmpty()) || ((gemKey == null || gemKey.isEmpty()) && (azKey == null || azKey.isEmpty()))
+            || (ghToken == null || ghToken.isEmpty()) || (gcKey == null || gcKey.isEmpty());
+
+        if (hasMissingRequired) {
+            System.err.println(" WARNING: Some required API keys are missing! Check the MISSING lines in the report above.");
+            System.err.println("          Please verify your application.properties or credentials file configuration.");
+        } else {
+            System.out.println(" SUCCESS: All required API keys successfully loaded!");
+        }
+        System.out.println("==========================================================================================");
+    }
+
+    private void printRow(String name, String value, String source, String expectedPath) {
+        String status = (value != null && !value.isEmpty()) ? "[LOADED]" : "[MISSING]";
+        if ("Azure OpenAI API Key".equals(name) && "[MISSING]".equals(status)) {
+            status = "[NOT USED]";
+        }
+        String resolvedSource = "[MISSING]".equals(status) ? "Expected in: " + expectedPath : source;
+        System.out.printf(" %-28s | %-12s | %-50s\n", name, status, resolvedSource);
     }
 
     private String getProp(Properties props, String key, String defaultValue) {

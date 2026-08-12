@@ -58,4 +58,26 @@ public class VeracodeServiceTest {
         assertTrue(veracodeService.isModuleIgnored("my-library.js.map", null));
         assertFalse(veracodeService.isModuleIgnored("CustomLibrary.dll", null));
     }
+
+    @Test
+    public void testReportStatusSerialization() throws Exception {
+        String uuid = java.util.UUID.randomUUID().toString();
+        VeracodeService.ReportStatus status = new VeracodeService.ReportStatus(uuid, "22000568", "PENDING", null);
+        
+        java.nio.file.Path statusPath = java.nio.file.Paths.get("veracode", "reports", uuid + ".json");
+        java.nio.file.Files.createDirectories(statusPath.getParent());
+        
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        mapper.writeValue(statusPath.toFile(), status);
+        
+        assertTrue(java.nio.file.Files.exists(statusPath));
+        
+        VeracodeService.ReportStatus loaded = mapper.readValue(statusPath.toFile(), VeracodeService.ReportStatus.class);
+        org.junit.jupiter.api.Assertions.assertEquals(uuid, loaded.uuid);
+        org.junit.jupiter.api.Assertions.assertEquals("22000568", loaded.buildId);
+        org.junit.jupiter.api.Assertions.assertEquals("PENDING", loaded.status);
+        
+        // Clean up
+        java.nio.file.Files.deleteIfExists(statusPath);
+    }
 }

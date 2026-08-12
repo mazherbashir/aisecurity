@@ -73,4 +73,61 @@ public class VeracodeController {
         }
         return response;
     }
+
+    @org.springframework.web.bind.annotation.PostMapping(value = "/report/pdf", consumes = "application/json", produces = "application/json")
+    public org.springframework.http.ResponseEntity<?> generatePdfReport(@org.springframework.web.bind.annotation.RequestBody java.util.Map<String, String> payload) {
+        String applicationName = payload.get("applicationName");
+        String appId = payload.get("appId");
+        String buildId = payload.get("buildId");
+
+        System.out.println("Received request to generate Veracode PDF Report. AppName: " + applicationName + ", AppID: " + appId + ", BuildID: " + buildId);
+
+        try {
+            String uuid = veracodeService.startPdfGeneration(applicationName, appId, buildId);
+            java.util.Map<String, Object> response = new java.util.HashMap<>();
+            response.put("uuid", uuid);
+            response.put("status", "PENDING");
+            return org.springframework.http.ResponseEntity.accepted().body(response);
+        } catch (IllegalArgumentException e) {
+            java.util.Map<String, Object> response = new java.util.HashMap<>();
+            response.put("status", "error");
+            response.put("message", e.getMessage());
+            return org.springframework.http.ResponseEntity.badRequest().body(response);
+        } catch (Exception e) {
+            java.util.Map<String, Object> response = new java.util.HashMap<>();
+            response.put("status", "error");
+            response.put("message", "Failed to start PDF generation: " + e.getMessage());
+            return org.springframework.http.ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/report/pdf/{uuid}")
+    public org.springframework.http.ResponseEntity<?> getPdfReport(@org.springframework.web.bind.annotation.PathVariable("uuid") String uuid) {
+        com.crs_reivew_api.service.VeracodeService.ReportStatus status = veracodeService.getPdfReportStatus(uuid);
+        if (status == null) {
+            java.util.Map<String, Object> response = new java.util.HashMap<>();
+            response.put("status", "error");
+            response.put("message", "Report not found for UUID: " + uuid);
+            return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(response);
+        }
+
+        if ("COMPLETED".equals(status.status)) {
+            byte[] pdfBytes = veracodeService.getPdfReportBytes(uuid);
+            if (pdfBytes == null) {
+                java.util.Map<String, Object> response = new java.util.HashMap<>();
+                response.put("status", "error");
+                response.put("message", "Failed to retrieve PDF file contents.");
+                return org.springframework.http.ResponseEntity.internalServerError().body(response);
+            }
+
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_PDF);
+            headers.setContentDisposition(org.springframework.http.ContentDisposition.builder("attachment")
+                    .filename("veracode_report_" + status.buildId + ".pdf")
+                    .build());
+            return new org.springframework.http.ResponseEntity<>(pdfBytes, headers, org.springframework.http.HttpStatus.OK);
+        }
+
+        return org.springframework.http.ResponseEntity.ok(status);
+    }
 }
