@@ -1241,7 +1241,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
             Showing <span className="text-slate-300 font-bold">{filteredRecords.length}</span> of <span className="text-slate-300 font-bold">{records.length}</span> Intake Records
           </div>
           <div className="text-[9px] text-slate-600 font-bold uppercase tracking-[0.2em] font-mono">
-            ServiceNow API Client Layer v1.0.0
+            ServiceNow API Client Layer v1.4.1
           </div>
         </div>
       </div>

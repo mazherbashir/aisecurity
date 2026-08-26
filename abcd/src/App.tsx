@@ -59,6 +59,7 @@ import { extractCveCodes, getCveNvdUrl } from "./lib/cveUtils";
 import { calculateIsScanTooOld, updateBackendSummary, updateMitigationProposal } from "./lib/state-update-utils";
 import { generateReviewSummary } from "./lib/summary-logic";
 import { StaticContent } from "./staticContent";
+import { safeStorage, PersistedCommentEntry } from "./lib/storage";
 
 // --- Error Boundary and Debug Logger Support ---
 interface ErrorBoundaryProps {
@@ -101,34 +102,51 @@ class ErrorBoundary extends React.Component<
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-[#050608] flex items-center justify-center p-6 text-white font-sans">
-          <div className="max-w-2xl w-full bento-card p-8 border-red-500/30 bg-red-500/5 space-y-6 shadow-2xl">
+          <div className="max-w-2xl w-full bento-card p-8 border-red-500/30 bg-red-500/5 space-y-6 shadow-2xl rounded-2xl border">
             <div className="flex items-center gap-4 text-red-500">
               <div className="p-3 bg-red-500/20 rounded-xl">
                 <AlertCircle size={32} />
               </div>
               <div>
-                <h2 className="text-xl font-black uppercase tracking-tight">
+                <h2 className="text-xl font-black uppercase tracking-tight text-white">
                   System Halted
                 </h2>
-                <p className="text-[10px] text-red-400/60 font-mono">
+                <p className="text-[10px] text-red-400 font-mono tracking-widest uppercase">
                   ERROR_CORE_RECOVERY
                 </p>
               </div>
             </div>
 
             <div className="space-y-4">
-              <div className="p-4 bg-black/60 rounded-xl border border-red-500/20 font-mono text-[10px] text-red-400/80 leading-relaxed overflow-auto max-h-48 whitespace-pre">
+              <div className="p-4 bg-black/70 rounded-xl border border-red-500/20 font-mono text-[11px] text-red-400/90 leading-relaxed overflow-auto max-h-48 whitespace-pre">
                 {this.state.error?.stack || this.state.error?.message}
               </div>
             </div>
 
-            <button
-              onClick={() => window.location.reload()}
-              className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl transition-all shadow-xl shadow-blue-900/40 text-xs tracking-widest uppercase flex items-center justify-center gap-2"
-            >
-              <RefreshCcw size={16} />
-              Re-initialize Session
-            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    safeStorage.clearAllStorage(true);
+                  } catch (e) {}
+                  window.location.reload();
+                }}
+                className="py-3.5 px-4 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-xl transition-all shadow-xl shadow-rose-900/40 text-xs tracking-widest uppercase flex items-center justify-center gap-2"
+              >
+                <Trash2 size={16} />
+                Reset Storage & Reload
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="py-3.5 px-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl transition-all shadow-xl shadow-blue-900/40 text-xs tracking-widest uppercase flex items-center justify-center gap-2"
+              >
+                <RefreshCcw size={16} />
+                Re-initialize Session
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -254,110 +272,59 @@ function aggregateFindings(
 }
 
 function restorePersistedComments(groups: AggregatedGroup[], profileName: string, scanSource: 'json' | 'live' | null): AggregatedGroup[] {
-  let persistedComments: Record<string, Record<string, {
-    groupId?: string;
-    baseGroupId?: string;
-    type?: string;
-    cweId?: string;
-    identifier?: string;
-    comments?: string;
-    aiComment?: string;
-    aiMetrics?: any;
-    status?: 'approved' | 'rejected';
-    isDevDependency?: boolean;
-  }>> = {};
-
   try {
-    const raw = localStorage.getItem("crs_persisted_comments");
-    if (raw) {
-      persistedComments = JSON.parse(raw);
+    const profileComments = safeStorage.getProfileComments(profileName, scanSource);
+    if (!profileComments || Object.keys(profileComments).length === 0) {
+      return groups;
     }
-  } catch (e) {
-    console.warn("Failed to parse persisted comments:", e);
-  }
 
-  const pName = (profileName || "").trim();
-  const keysToTry = [
-    pName,
-    pName.toLowerCase(),
-    pName.replace(/\.json$/i, ""),
-    `${pName}.json`,
-  ].filter(Boolean);
+    return groups.map((g) => {
+      if (!g) return g;
+      const baseGroupId = (g.groupId || "").split("-IDS-")[0];
 
-  let profileComments: Record<string, any> | undefined;
-  for (const k of keysToTry) {
-    if (persistedComments[k]) {
-      profileComments = persistedComments[k];
-      break;
-    }
-  }
+      // 1. Exact match on full groupId
+      // 2. Exact match on baseGroupId
+      let saved: PersistedCommentEntry | undefined = profileComments[g.groupId] || (baseGroupId ? profileComments[baseGroupId] : undefined);
 
-  // Fallback 1: Partial case-insensitive match across keys
-  if (!profileComments && pName) {
-    const lower = pName.toLowerCase();
-    const matchedKey = Object.keys(persistedComments).find((k) => {
-      const kLower = k.toLowerCase();
-      return kLower === lower || kLower.includes(lower) || lower.includes(kLower);
+      // 3. Signature fallback (type, CWE/identifier, comments)
+      if (!saved) {
+        const gCommentsNorm = (g.comments || "").trim().toLowerCase();
+        const gCwe = String(g.cweId || "");
+        const gIdentNorm = (g.identifier || "").trim().toLowerCase();
+
+        saved = Object.values(profileComments).find((val: any) => {
+          if (!val || typeof val !== "object") return false;
+          if (val.type && val.type !== g.type) return false;
+
+          const valCwe = String(val.cweId || "");
+          const valIdentNorm = (val.identifier || "").trim().toLowerCase();
+          const valCommentsNorm = (val.comments || "").trim().toLowerCase();
+
+          const cweOrIdentMatch =
+            (gCwe && valCwe && gCwe === valCwe) ||
+            (gIdentNorm && valIdentNorm && gIdentNorm === valIdentNorm);
+          const commentsMatch =
+            !gCommentsNorm || !valCommentsNorm || gCommentsNorm === valCommentsNorm;
+
+          return cweOrIdentMatch && commentsMatch;
+        });
+      }
+
+      if (saved) {
+        return {
+          ...g,
+          aiComment: saved.aiComment || g.aiComment,
+          aiMetrics: saved.aiMetrics || g.aiMetrics,
+          status: saved.status || g.status,
+          isDevDependency: saved.isDevDependency || g.isDevDependency,
+        };
+      }
+      return g;
     });
-    if (matchedKey) {
-      profileComments = persistedComments[matchedKey];
-    }
-  }
-
-  // Fallback 2: If profileName wasn't matched but scanSource is 'json', try the most recent key
-  if (!profileComments && scanSource === 'json') {
-    const keys = Object.keys(persistedComments);
-    if (keys.length > 0) {
-      profileComments = persistedComments[keys[keys.length - 1]];
-    }
-  }
-
-  if (!profileComments || Object.keys(profileComments).length === 0) {
+  } catch (e) {
+    console.warn("[SafeStorage] Failed to restore persisted comments safely:", e);
     return groups;
   }
-
-  return groups.map((g) => {
-    const baseGroupId = g.groupId.split("-IDS-")[0];
-
-    // 1. Exact match on full groupId
-    // 2. Exact match on baseGroupId
-    let saved = profileComments[g.groupId] || profileComments[baseGroupId];
-
-    // 3. Signature fallback (type, CWE/identifier, comments)
-    if (!saved) {
-      const gCommentsNorm = (g.comments || "").trim().toLowerCase();
-      const gCwe = String(g.cweId || "");
-      const gIdentNorm = (g.identifier || "").trim().toLowerCase();
-
-      saved = Object.values(profileComments).find((val: any) => {
-        if (!val || typeof val !== "object") return false;
-        if (val.type && val.type !== g.type) return false;
-
-        const valCwe = String(val.cweId || "");
-        const valIdentNorm = (val.identifier || "").trim().toLowerCase();
-        const valCommentsNorm = (val.comments || "").trim().toLowerCase();
-
-        const cweOrIdentMatch =
-          (gCwe && valCwe && gCwe === valCwe) ||
-          (gIdentNorm && valIdentNorm && gIdentNorm === valIdentNorm);
-        const commentsMatch =
-          !gCommentsNorm || !valCommentsNorm || gCommentsNorm === valCommentsNorm;
-
-        return cweOrIdentMatch && commentsMatch;
-      });
-    }
-
-    if (saved) {
-      return {
-        ...g,
-        aiComment: saved.aiComment || g.aiComment,
-        aiMetrics: saved.aiMetrics || g.aiMetrics,
-        status: saved.status || g.status,
-        isDevDependency: saved.isDevDependency || g.isDevDependency,
-      };
-    }
-    return g;
-  });
 }
 
 
@@ -1283,13 +1250,12 @@ export default function App() {
   const [scaMitigationProposal, setScaMitigationProposal] = useState<any>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [aiProvider, setAiProvider] = useState<AIProvider>(() => {
-    const saved = localStorage.getItem("preferred_ai_provider");
-    return (saved as AIProvider) || "Gemini";
+    return safeStorage.getItem("preferred_ai_provider", "Gemini" as AIProvider);
   });
 
-  // Persist user preferences
+  // Persist user preferences safely
   useEffect(() => {
-    localStorage.setItem("preferred_ai_provider", aiProvider);
+    safeStorage.setItem("preferred_ai_provider", aiProvider);
   }, [aiProvider]);
 
   // Unified Configuration State
@@ -1301,18 +1267,18 @@ export default function App() {
   const [newLangCategory, setNewLangCategory] = useState("");
   
   const [hideProcessedFindings, setHideProcessedFindings] = useState<boolean>(() => {
-    return localStorage.getItem("hide_processed_findings") === "true";
+    return safeStorage.getItem("hide_processed_findings", false);
   });
 
   useEffect(() => {
-    localStorage.setItem("hide_processed_findings", String(hideProcessedFindings));
+    safeStorage.setItem("hide_processed_findings", hideProcessedFindings);
   }, [hideProcessedFindings]);
 
   const [detailedGroup, setDetailedGroup] = useState<AggregatedGroup | null>(
     null,
   );
 
-  // Persist pulled AI recommendations and status to localStorage so they are not lost on page reload/back navigation
+  // Persist pulled AI recommendations and status to safeStorage so they are not lost on page reload/back navigation
   useEffect(() => {
     if (scanSourceType !== "json" && (!appProfile || appProfile.trim() === "")) {
       return;
@@ -1327,54 +1293,23 @@ export default function App() {
     if (!targetProfile) return;
 
     if (aggregatedData.sast.length > 0 || aggregatedData.sca.length > 0) {
-      let persistedComments: Record<string, Record<string, any>> = {};
+      const allFindings = [...aggregatedData.sast, ...aggregatedData.sca];
+      const entriesToSave: PersistedCommentEntry[] = allFindings
+        .filter((g) => g && (g.aiComment || g.status || g.isDevDependency))
+        .map((g) => ({
+          groupId: g.groupId,
+          type: g.type,
+          cweId: g.cweId,
+          identifier: g.identifier,
+          comments: g.comments,
+          aiComment: g.aiComment,
+          aiMetrics: g.aiMetrics,
+          status: g.status,
+          isDevDependency: g.isDevDependency,
+        }));
 
-      try {
-        const existingRaw = localStorage.getItem("crs_persisted_comments");
-        if (existingRaw) {
-          persistedComments = JSON.parse(existingRaw);
-        }
-      } catch (e) {
-        console.warn("Failed to parse existing persisted comments:", e);
-      }
-
-      const lowerKey = targetProfile.toLowerCase();
-      const profileComments =
-        persistedComments[targetProfile] || persistedComments[lowerKey] || {};
-      let hasUpdates = false;
-
-      [...aggregatedData.sast, ...aggregatedData.sca].forEach((g) => {
-        if (g.aiComment || g.status || g.isDevDependency) {
-          const baseGroupId = g.groupId.split("-IDS-")[0];
-          const entry = {
-            groupId: g.groupId,
-            baseGroupId,
-            type: g.type,
-            cweId: g.cweId,
-            identifier: g.identifier,
-            comments: g.comments,
-            aiComment: g.aiComment,
-            aiMetrics: g.aiMetrics,
-            status: g.status,
-            isDevDependency: g.isDevDependency,
-          };
-          profileComments[g.groupId] = entry;
-          if (baseGroupId && baseGroupId !== g.groupId) {
-            profileComments[baseGroupId] = entry;
-          }
-          hasUpdates = true;
-        }
-      });
-
-      if (hasUpdates) {
-        persistedComments[targetProfile] = profileComments;
-        if (lowerKey !== targetProfile) {
-          persistedComments[lowerKey] = profileComments;
-        }
-        localStorage.setItem(
-          "crs_persisted_comments",
-          JSON.stringify(persistedComments),
-        );
+      if (entriesToSave.length > 0) {
+        safeStorage.saveProfileComments(targetProfile, entriesToSave);
       }
     }
   }, [aggregatedData, appProfile, scanSourceType, overview]);
@@ -1386,33 +1321,7 @@ export default function App() {
       ""
     ).trim();
 
-    try {
-      const existingRaw = localStorage.getItem("crs_persisted_comments");
-      if (existingRaw) {
-        const persistedComments = JSON.parse(existingRaw);
-        if (targetProfile) {
-          const lower = targetProfile.toLowerCase();
-          Object.keys(persistedComments).forEach((key) => {
-            if (
-              key === targetProfile ||
-              key.toLowerCase() === lower ||
-              key.toLowerCase().includes(lower)
-            ) {
-              delete persistedComments[key];
-            }
-          });
-        } else {
-          // If no profile, clear all keys
-          Object.keys(persistedComments).forEach((key) => delete persistedComments[key]);
-        }
-        localStorage.setItem(
-          "crs_persisted_comments",
-          JSON.stringify(persistedComments),
-        );
-      }
-    } catch (e) {
-      console.warn("Failed to clear memory:", e);
-    }
+    safeStorage.clearProfileComments(targetProfile);
 
     setAggregatedData((prev) => ({
       sast: prev.sast.map((g) => ({
@@ -1452,16 +1361,11 @@ export default function App() {
   ]);
   const [configHistory, setConfigHistory] = useState<string[]>([]);
   const [veracodeHistory, setVeracodeHistory] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem("veracode_history");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const filtered = parsed.filter((item: any) => typeof item === 'string' && item.toLowerCase().endsWith('.json'));
-          if (filtered.length > 0) return filtered;
-        }
-      }
-    } catch (e) {}
+    const saved = safeStorage.getItem<string[]>("veracode_history", []);
+    if (Array.isArray(saved) && saved.length > 0) {
+      const filtered = saved.filter((item: any) => typeof item === 'string' && item.toLowerCase().endsWith('.json'));
+      if (filtered.length > 0) return filtered.slice(0, 30);
+    }
     return [
       "GBL_ASR_NGA_ADMIN_CROSS_BORDERS.json",
       "GBL_ADV_CDE_Junction_US_2_03.json",
@@ -1476,16 +1380,11 @@ export default function App() {
     ];
   });
   const [checkmarxHistory, setCheckmarxHistory] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem("checkmarx_history");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const filtered = parsed.filter((item: any) => typeof item === 'string' && item.toLowerCase().endsWith('.json'));
-          if (filtered.length > 0) return filtered;
-        }
-      }
-    } catch (e) {}
+    const saved = safeStorage.getItem<string[]>("checkmarx_history", []);
+    if (Array.isArray(saved) && saved.length > 0) {
+      const filtered = saved.filter((item: any) => typeof item === 'string' && item.toLowerCase().endsWith('.json'));
+      if (filtered.length > 0) return filtered.slice(0, 30);
+    }
     return [
       "FIT_Honeybee_develop.json",
       "FIT_Honeybee_1781906942677.json"
@@ -1722,17 +1621,21 @@ export default function App() {
       })
       .then((data) => {
         if (Array.isArray(data.history) && data.history.length > 0) {
-          const validList = data.history.filter((n: any) => typeof n === 'string' && n.toLowerCase().endsWith('.json'));
+          const validList = data.history
+            .filter((n: any) => typeof n === 'string' && n.toLowerCase().endsWith('.json'))
+            .slice(0, 30);
           if (validList.length > 0) {
             setVeracodeHistory(validList);
-            try { localStorage.setItem("veracode_history", JSON.stringify(validList)); } catch (e) {}
+            safeStorage.setItem("veracode_history", validList);
           }
         }
         if (Array.isArray(data["history-checkmarx"]) && data["history-checkmarx"].length > 0) {
-          const validList = data["history-checkmarx"].filter((n: any) => typeof n === 'string' && n.toLowerCase().endsWith('.json'));
+          const validList = data["history-checkmarx"]
+            .filter((n: any) => typeof n === 'string' && n.toLowerCase().endsWith('.json'))
+            .slice(0, 30);
           if (validList.length > 0) {
             setCheckmarxHistory(validList);
-            try { localStorage.setItem("checkmarx_history", JSON.stringify(validList)); } catch (e) {}
+            safeStorage.setItem("checkmarx_history", validList);
           }
         }
         if (Array.isArray(data.engines)) setConfigEngines(data.engines);
@@ -1794,18 +1697,14 @@ export default function App() {
 
     if (isCheckmarx) {
       setCheckmarxHistory((prev) => {
-        const next = Array.from(new Set([...validCandidates, ...prev]));
-        try {
-          localStorage.setItem("checkmarx_history", JSON.stringify(next));
-        } catch (e) {}
+        const next = Array.from(new Set([...validCandidates, ...prev])).slice(0, 30);
+        safeStorage.setItem("checkmarx_history", next);
         return next;
       });
     } else {
       setVeracodeHistory((prev) => {
-        const next = Array.from(new Set([...validCandidates, ...prev]));
-        try {
-          localStorage.setItem("veracode_history", JSON.stringify(next));
-        } catch (e) {}
+        const next = Array.from(new Set([...validCandidates, ...prev])).slice(0, 30);
+        safeStorage.setItem("veracode_history", next);
         return next;
       });
     }
@@ -3115,7 +3014,7 @@ export default function App() {
                     CRS Review Tool
                   </h1>
                   <p className="text-[9px] text-slate-500 font-mono tracking-widest uppercase mt-0.5">
-                    v1.0.0
+                    v1.4.1
                   </p>
                 </div>
               </div>
@@ -4495,6 +4394,49 @@ export default function App() {
                                </label>
                              </div>
                            )}
+                        </section>
+
+                        {/* Storage & Local Cache Health Section */}
+                        <section className="space-y-4 pt-4 border-t border-slate-800/80">
+                          <div>
+                            <h4 className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                              <Database size={14} className="text-blue-400" />
+                              Local Storage & Cache Health
+                            </h4>
+                            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                              Manage locally cached scan profiles, mitigation comments, and historical entries. Automated LRU cleanup keeps memory lightweight and prevents memory overflows.
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                safeStorage.sanitizeOnStartup();
+                                setSuccessMessage("Storage cache optimized successfully.");
+                                setTimeout(() => setSuccessMessage(null), 3000);
+                              }}
+                              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg border border-slate-700 transition-colors flex items-center gap-2"
+                            >
+                              <RefreshCcw size={13} />
+                              Optimize Cache
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm("Are you sure you want to clear all locally cached scan comments and profile histories? (System settings will be preserved)")) {
+                                  safeStorage.clearAllStorage(false);
+                                  setSuccessMessage("Scan comments and history cache cleared.");
+                                  setTimeout(() => setSuccessMessage(null), 3000);
+                                }
+                              }}
+                              className="px-3.5 py-2 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 text-xs font-bold rounded-lg border border-rose-800/50 transition-colors flex items-center gap-2"
+                            >
+                              <Trash2 size={13} />
+                              Clear Saved Scan Comments & History
+                            </button>
+                          </div>
                         </section>
                       </div>
                     )}
