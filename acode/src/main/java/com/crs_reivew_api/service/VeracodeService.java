@@ -262,6 +262,11 @@ public class VeracodeService {
 
     public String updateMitigation(String buildId, String appId, String flawIdList, String action, String comment,
             String cveId, String type) {
+        return updateMitigation(buildId, appId, flawIdList, action, comment, cveId, type, null);
+    }
+
+    public String updateMitigation(String buildId, String appId, String flawIdList, String action, String comment,
+            String cveId, String type, String apiDebug) {
         // Map UI actions to Veracode expected actions
         String mappedAction = action;
         if (action != null) {
@@ -280,7 +285,7 @@ public class VeracodeService {
                     "Mitigation Configuration is disabled. Please enabled it if you want to send the equest to Veracode");
         }
 
-        if ("debug".equalsIgnoreCase(mode)) {
+        if ("debug".equalsIgnoreCase(mode) || "debug".equalsIgnoreCase(apiDebug)) {
             debugLog("DEBUG: Mitigation Proposal Bypass (Debug Mode). Build: " + buildId + ", Action: " + mappedAction);
             return "Success (Debug Mode - Request Bypassed)";
         }
@@ -835,10 +840,8 @@ public class VeracodeService {
                     if (moduleName == null)
                         continue;
 
-                    boolean isDep = m.isDependency() && !moduleName.toLowerCase().endsWith(".zip")
-                            && !moduleName.toLowerCase().endsWith(".jar") &&
-                            (finalFileName == null || (!finalFileName.toLowerCase().endsWith(".zip")
-                                    && !finalFileName.toLowerCase().endsWith(".jar")));
+                    boolean isDep = m.isDependency() && !moduleName.toLowerCase().endsWith(".zip") &&
+                            (finalFileName == null || !finalFileName.toLowerCase().endsWith(".zip"));
 
                     if (isDep) {
                         skippedDependencies.add(moduleName.toLowerCase());
@@ -864,7 +867,7 @@ public class VeracodeService {
                         continue;
                     }
 
-                    // Filter: Skip if explicitly a dependency (unless it's a jar/zip), has fatal
+                    // Filter: Skip if explicitly a dependency (unless it's a zip), has fatal
                     // errors,
                     // or if it was marked as a dependency elsewhere in the upload.
                     if (m.hasFatalErrors()) {
@@ -872,10 +875,8 @@ public class VeracodeService {
                         continue;
                     }
 
-                    boolean isDependencyOrSkipped = (m.isDependency() && !moduleName.toLowerCase().endsWith(".zip")
-                            && !moduleName.toLowerCase().endsWith(".jar") &&
-                            (finalFileName == null || (!finalFileName.toLowerCase().endsWith(".zip")
-                                    && !finalFileName.toLowerCase().endsWith(".jar"))))
+                    boolean isDependencyOrSkipped = (m.isDependency() && !moduleName.toLowerCase().endsWith(".zip") &&
+                            (finalFileName == null || !finalFileName.toLowerCase().endsWith(".zip")))
                             || skippedDependencies.contains(moduleName.toLowerCase())
                             || (finalFileName != null && skippedDependencies.contains(finalFileName.toLowerCase()));
 

@@ -1118,8 +1118,12 @@ public class CheckmarxService {
     }
 
     public String updatePredicate(String projectId, String scanId, String similarityIdList, String state, String comment, String severity) {
+        return updatePredicate(projectId, scanId, similarityIdList, state, comment, severity, null);
+    }
+
+    public String updatePredicate(String projectId, String scanId, String similarityIdList, String state, String comment, String severity, String apiDebug) {
         String mode = veracodeConfig != null ? veracodeConfig.getMitigationProposalEnabled() : "true";
-        if ("debug".equalsIgnoreCase(mode)) {
+        if ("debug".equalsIgnoreCase(mode) || "debug".equalsIgnoreCase(apiDebug)) {
             System.out.println("DEBUG: Checkmarx Mitigation Proposal Bypass (Debug Mode). Project: " + projectId + ", Scan: " + scanId + ", State: " + state);
             return "Success (Debug Mode - Request Bypassed)";
         }
@@ -1190,8 +1194,12 @@ public class CheckmarxService {
     }
 
     public String updatePredicatesList(JsonNode arrayNode) {
+        return updatePredicatesList(arrayNode, null);
+    }
+
+    public String updatePredicatesList(JsonNode arrayNode, String apiDebug) {
         String mode = veracodeConfig != null ? veracodeConfig.getMitigationProposalEnabled() : "true";
-        if ("debug".equalsIgnoreCase(mode)) {
+        if ("debug".equalsIgnoreCase(mode) || "debug".equalsIgnoreCase(apiDebug)) {
             System.out.println("DEBUG: Checkmarx Mitigation Proposal Bypass (Debug Mode) for batch predicates.");
             return "Success (Debug Mode - Request Bypassed)";
         }

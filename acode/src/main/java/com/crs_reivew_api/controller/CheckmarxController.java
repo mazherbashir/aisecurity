@@ -33,9 +33,16 @@ public class CheckmarxController {
             com.fasterxml.jackson.databind.JsonNode rootNode = mapper.readTree(requestBody);
             
             String result;
+            String apiDebug = null;
             if (rootNode.isArray()) {
+                if (rootNode.size() > 0) {
+                    com.fasterxml.jackson.databind.JsonNode firstItem = rootNode.get(0);
+                    if (firstItem.hasNonNull("apiDebug")) {
+                        apiDebug = firstItem.get("apiDebug").asText();
+                    }
+                }
                 System.out.println("Received Checkmarx mitigation update request as JSON Array (batch predicates update).");
-                result = checkmarxService.updatePredicatesList(rootNode);
+                result = checkmarxService.updatePredicatesList(rootNode, apiDebug);
             } else {
                 String projectId = rootNode.hasNonNull("projectId") ? rootNode.get("projectId").asText() : rootNode.path("appId").asText(null);
                 String scanId = rootNode.hasNonNull("scanId") ? rootNode.get("scanId").asText() : rootNode.path("buildId").asText(null);
@@ -43,9 +50,12 @@ public class CheckmarxController {
                 String state = rootNode.path("state").isMissingNode() ? rootNode.path("action").asText(null) : rootNode.path("state").asText(null);
                 String comment = rootNode.path("comment").asText("");
                 String severity = rootNode.path("severity").asText(null);
+                if (rootNode.hasNonNull("apiDebug")) {
+                    apiDebug = rootNode.get("apiDebug").asText();
+                }
                 
-                System.out.println("Received Checkmarx mitigation update request. Project: " + projectId + ", Scan: " + scanId + ", Similarities: " + similarityIdList + ", State: " + state + ", Severity: " + severity);
-                result = checkmarxService.updatePredicate(projectId, scanId, similarityIdList, state, comment, severity);
+                System.out.println("Received Checkmarx mitigation update request. Project: " + projectId + ", Scan: " + scanId + ", Similarities: " + similarityIdList + ", State: " + state + ", Severity: " + severity + ", apiDebug: " + apiDebug);
+                result = checkmarxService.updatePredicate(projectId, scanId, similarityIdList, state, comment, severity, apiDebug);
             }
             
             response.put("status", "success");

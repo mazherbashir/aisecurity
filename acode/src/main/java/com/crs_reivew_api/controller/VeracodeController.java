@@ -59,12 +59,13 @@ public class VeracodeController {
         String comment = payload.get("comment");
         String cveId = payload.get("cveId");
         String type = payload.get("type");
+        String apiDebug = payload.get("apiDebug");
         
-        System.out.println("Received mitigation update request for Build ID: " + buildId + ", App ID: " + appId + ", Flaws: " + flawIdList + ", Action: " + action + ", Type: " + type);
+        System.out.println("Received mitigation update request for Build ID: " + buildId + ", App ID: " + appId + ", Flaws: " + flawIdList + ", Action: " + action + ", Type: " + type + ", apiDebug: " + apiDebug);
         
         java.util.Map<String, Object> response = new java.util.HashMap<>();
         try {
-            String result = veracodeService.updateMitigation(buildId, appId, flawIdList, action, comment, cveId, type);
+            String result = veracodeService.updateMitigation(buildId, appId, flawIdList, action, comment, cveId, type, apiDebug);
             response.put("status", "success");
             response.put("result", org.owasp.encoder.Encode.forJava(result));
         } catch (Exception e) {
