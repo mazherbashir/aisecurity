@@ -57,7 +57,7 @@ import { CWE_BASE_URL } from "./constants";
 import { getEndpoint } from "./config";
 import { extractCveCodes, getCveNvdUrl } from "./lib/cveUtils";
 import { calculateIsScanTooOld, updateBackendSummary, updateMitigationProposal } from "./lib/state-update-utils";
-import { generateReviewSummary } from "./lib/summary-logic";
+import { generateReviewSummary, isPackageMatchingFinding } from "./lib/summary-logic";
 import { StaticContent } from "./staticContent";
 import { safeStorage, PersistedCommentEntry } from "./lib/storage";
 
@@ -1756,11 +1756,13 @@ export default function App() {
           componentsMap.set(key, {
             id: key,
             packageName: pkgName,
+            fileName: detail.fileName,
             version: ver,
             severityCounts: detail.severityCounts || "N/A",
             severities: new Set<string>(),
             groups: [],
-            detailStatus: detail.status
+            detailStatus: detail.status,
+            cveList: detail.cveList
           });
         }
       });
@@ -1775,6 +1777,8 @@ export default function App() {
         const dVer = (item.version || "").toLowerCase().trim();
 
         const hasMatch = g.records && g.records.some((r: any) => {
+          if (isPackageMatchingFinding(r, item)) return true;
+
           const rPkg = (r.packageName || r.title || r.location || g.identifier || "").toLowerCase().trim();
           const dPkg_lower = dPkg.toLowerCase().trim();
           const rVer = (r.version || "").toLowerCase().trim();
@@ -2370,8 +2374,7 @@ export default function App() {
         if (findings.length > 0) {
           enhanced = data.scaDetails.map((detail: any) => {
             const match = findings.find((f: any) => 
-               (f.location === detail.packageName || f.packageName === detail.packageName) &&
-               f.fileName
+               isPackageMatchingFinding(f, detail) && f.fileName
             );
             return {
               ...detail,

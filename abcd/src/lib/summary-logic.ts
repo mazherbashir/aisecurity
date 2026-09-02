@@ -30,6 +30,61 @@ export function isSeverityMatching(gSev: string, detailSevCounts: string): boole
   return dSev.includes(rSev);
 }
 
+export function isPackageMatchingFinding(r: any, detail: any): boolean {
+  if (!r || !detail) return false;
+
+  // The exact Component column rendered in the Review Comment Editor Software Composition Analysis table
+  const componentCol = (detail.packageName || detail.fileName || "").toLowerCase().trim();
+  if (!componentCol) return false;
+
+  const rFileName = (r.fileName || "").toLowerCase().trim();
+  const rPackageName = (r.packageName || "").toLowerCase().trim();
+  const rLocation = (r.location || "").toLowerCase().trim();
+
+  // 1. Exact match against the Component column (matches jsoup-1.15.3.jar, rhino-1.7.13.jar, logback-core-1.2.13.jar, etc.)
+  if (rFileName && rFileName === componentCol) return true;
+  if (rPackageName && rPackageName === componentCol) return true;
+  if (rLocation && rLocation === componentCol) return true;
+
+  // Check without directory paths (e.g. "lib/jsoup-1.15.3.jar" -> "jsoup-1.15.3.jar")
+  const getBasename = (p: string) => {
+    const parts = p.split(/[\/\\]/);
+    return parts[parts.length - 1] || p;
+  };
+  if (rFileName && getBasename(rFileName) === componentCol) return true;
+  if (getBasename(componentCol) === rFileName) return true;
+
+  // 2. Safe, proven original fallback logic (preserves 99% legacy behavior)
+  // Check fileName first, then packageName, then location so fileName is never hidden by location
+  const rPkg = rFileName || rPackageName || rLocation;
+  if (!rPkg) return false;
+
+  const getArtId = (p: string) => {
+    if (!p) return "";
+    const parts = p.split(/[:\/]/);
+    return parts[parts.length - 1] || p;
+  };
+  const rArtId = getArtId(rPkg);
+  const dArtId = getArtId(componentCol);
+
+  if (rArtId && dArtId && rArtId === dArtId) return true;
+  if (rPkg.includes(componentCol) || componentCol.includes(rPkg)) return true;
+
+  const getSignificantWords = (p: string) => p.split(/[:.\-_]/).filter((w) => w.length > 3);
+  const rWords = getSignificantWords(rPkg);
+  const dWords = getSignificantWords(componentCol);
+  const hasSharedWord = rWords.some((w) => dWords.includes(w));
+  if (hasSharedWord) return true;
+
+  // Also check location with original word matching if rPkg was fileName
+  if (rLocation && rLocation !== rPkg) {
+    const rLocWords = getSignificantWords(rLocation);
+    if (rLocWords.some((w) => dWords.includes(w))) return true;
+  }
+
+  return false;
+}
+
 export interface SummaryInput {
   backendSastSummary: any;
   backendScaSummary: any;
@@ -42,6 +97,7 @@ export interface SummaryInput {
   scaDetails: any[];
   scaSafeVersionEnabled?: boolean;
   selectedTools?: string[];
+  scaComponents?: any[];
 }
 
 export function generateReviewSummary(input: SummaryInput) {
@@ -53,7 +109,8 @@ export function generateReviewSummary(input: SummaryInput) {
     configNoSca,
     scaDetails,
     scaSafeVersionEnabled = false,
-    selectedTools
+    selectedTools,
+    scaComponents
   } = input;
 
   const isCheckmarx = !!(selectedTools?.includes("Checkmarx") || overview?.scanType === "checkmarx");
@@ -334,26 +391,18 @@ export function generateReviewSummary(input: SummaryInput) {
             for (let i = 0; i < count; i++) {
               const isDetailApproved = detail.status === "Dev Dependency" || detail.status === "Approved";
               let isApproved = isDetailApproved;
+              if (!isApproved && scaComponents) {
+                const comp = scaComponents.find((c: any) =>
+                  (c.packageName || "").toLowerCase().trim() === (detail.packageName || "").toLowerCase().trim()
+                );
+                if (comp && (comp.status === "Approved" || comp.status === "Dev Dependency")) {
+                  isApproved = true;
+                }
+              }
               if (!isApproved && aggregatedData?.sca) {
                 isApproved = aggregatedData.sca.some((g: any) => {
                   if (g.status !== "approved") return false;
-                  const matchesPkg = g.records && g.records.some((r: any) => {
-                    const rPkg = (r.packageName || r.location || r.fileName || "").toLowerCase().trim();
-                    const getArtId = (p: string) => {
-                      if (!p) return "";
-                      const parts = p.split(":");
-                      return parts[parts.length - 1] || p;
-                    };
-                    const rArtId = getArtId(rPkg);
-                    const dArtId = getArtId(pkgName);
-                    
-                    const getSignificantWords = (p: string) => p.toLowerCase().split(/[:.\-_]/).filter(w => w.length > 3);
-                    const rWords = getSignificantWords(rPkg);
-                    const dWords = getSignificantWords(pkgName);
-                    const hasSharedWord = rWords.some(w => dWords.includes(w));
-                    
-                    return rPkg === pkgName || (rArtId && dArtId && rArtId === dArtId) || rPkg.includes(pkgName) || pkgName.includes(rPkg) || hasSharedWord;
-                  });
+                  const matchesPkg = g.records && g.records.some((r: any) => isPackageMatchingFinding(r, detail));
                   return matchesPkg && isSameSeverity(g.severity, severity);
                 });
               }
@@ -370,35 +419,26 @@ export function generateReviewSummary(input: SummaryInput) {
           cvesInDetail.forEach((cve) => {
             const isDetailApproved = detail.status === "Dev Dependency" || detail.status === "Approved";
             let isApproved = isDetailApproved;
+            if (!isApproved && scaComponents) {
+              const comp = scaComponents.find((c: any) =>
+                (c.packageName || "").toLowerCase().trim() === (detail.packageName || "").toLowerCase().trim()
+              );
+              if (comp && (comp.status === "Approved" || comp.status === "Dev Dependency")) {
+                isApproved = true;
+              }
+            }
             if (!isApproved && aggregatedData?.sca) {
               isApproved = aggregatedData.sca.some((g: any) => {
                 if (g.status !== "approved") return false;
 
-                return g.records && g.records.some((r: any) => {
-                  const rPkg = (r.packageName || r.location || r.fileName || "").toLowerCase().trim();
+                const cveTarget = cve.toLowerCase();
+                const cveMatch = g.records && g.records.some((r: any) => {
                   const rCveList = (r.cveList || r.title || r.id || "").toLowerCase();
-
-                  const getArtId = (p: string) => {
-                    if (!p) return "";
-                    const parts = p.split(":");
-                    return parts[parts.length - 1] || p;
-                  };
-                  const rArtId = getArtId(rPkg);
-                  const dArtId = getArtId(pkgName);
-                  
-                  const getSignificantWords = (p: string) => p.toLowerCase().split(/[:.\-_]/).filter(w => w.length > 3);
-                  const rWords = getSignificantWords(rPkg);
-                  const dWords = getSignificantWords(pkgName);
-                  const hasSharedWord = rWords.some(w => dWords.includes(w));
-                  
-                  const pkgMatch = rPkg === pkgName || (rArtId && dArtId && rArtId === dArtId) || rPkg.includes(pkgName) || pkgName.includes(rPkg) || hasSharedWord;
-                  const cveMatch =
-                    rCveList.includes(cve) ||
-                    cve.includes(rCveList) ||
-                    (g.identifier && g.identifier.toLowerCase().includes(cve));
-
-                  return pkgMatch && cveMatch;
+                  return rCveList.includes(cveTarget) || cveTarget.includes(rCveList) || (g.identifier && g.identifier.toLowerCase().includes(cveTarget));
                 });
+                if (!cveMatch) return false;
+
+                return g.records && g.records.some((r: any) => isPackageMatchingFinding(r, detail));
               });
             }
 
@@ -408,13 +448,15 @@ export function generateReviewSummary(input: SummaryInput) {
               let cveSeverity = "Medium";
               let foundInGroup = false;
               if (aggregatedData?.sca) {
+                const cveTarget = cve.toLowerCase();
                 for (const g of aggregatedData.sca) {
                   const match = g.records && g.records.find((r: any) => {
                     const rCveList = (r.cveList || r.title || r.id || "").toLowerCase();
-                    return rCveList.includes(cve) || cve.includes(rCveList);
+                    const matchesCve = rCveList.includes(cveTarget) || cveTarget.includes(rCveList) || (g.identifier && g.identifier.toLowerCase().includes(cveTarget));
+                    return matchesCve && isPackageMatchingFinding(r, detail);
                   });
-                  console.log("cve", cve, "match", match, "status", g.status, "isDev", g.isDevDependency); if (match) {
-                    let sName = match.severity || "Medium";
+                  if (match) {
+                    let sName = match.severity || g.severity || "Medium";
                     if (sName === "VeryHigh" || sName === "Critical") sName = "Very High";
                     cveSeverity = sName;
                     foundInGroup = true;
@@ -681,29 +723,15 @@ Code Review Services recommends upgrading the third-party component with a vulne
             let foundInGroup = false;
 
             if (aggregatedData?.sca) {
+              const cveTarget = cve.toLowerCase();
               const matchedGroup = aggregatedData.sca.find((g: any) => {
-                const matchesPkg = g.records && g.records.some((r: any) => {
-                  const rPkg = (r.packageName || r.location || r.fileName || "").toLowerCase().trim();
-                  const pkgName = (detail.packageName || "").toLowerCase().trim();
-                  const getArtId = (p: string) => {
-                    if (!p) return "";
-                    const parts = p.split(":");
-                    return parts[parts.length - 1] || p;
-                  };
-                  const rArtId = getArtId(rPkg);
-                  const dArtId = getArtId(pkgName);
-                  const getSignificantWords = (p: string) => p.toLowerCase().split(/[:.\-_]/).filter(w => w.length > 3);
-                  const rWords = getSignificantWords(rPkg);
-                  const dWords = getSignificantWords(pkgName);
-                  const hasSharedWord = rWords.some(w => dWords.includes(w));
-                  return rPkg === pkgName || (rArtId && dArtId && rArtId === dArtId) || rPkg.includes(pkgName) || pkgName.includes(rPkg) || hasSharedWord;
-                });
-                if (!matchesPkg) return false;
-
-                return g.records && g.records.some((r: any) => {
+                const matchesCve = g.records && g.records.some((r: any) => {
                   const rCveList = (r.cveList || r.title || r.id || "").toLowerCase();
-                  return rCveList.includes(cve.toLowerCase()) || cve.toLowerCase().includes(rCveList) || (g.identifier && g.identifier.toLowerCase().includes(cve.toLowerCase()));
+                  return rCveList.includes(cveTarget) || cveTarget.includes(rCveList) || (g.identifier && g.identifier.toLowerCase().includes(cveTarget));
                 });
+                if (!matchesCve) return false;
+
+                return g.records && g.records.some((r: any) => isPackageMatchingFinding(r, detail));
               });
 
               if (matchedGroup) {
@@ -736,6 +764,15 @@ Code Review Services recommends upgrading the third-party component with a vulne
               itemStatus = "Approved";
             } else if (detail.status === "Rejected") {
               itemStatus = "Rejected";
+            } else if (scaComponents) {
+              const comp = scaComponents.find((c: any) =>
+                (c.packageName || "").toLowerCase().trim() === (detail.packageName || "").toLowerCase().trim()
+              );
+              if (comp) {
+                if (comp.status === "Dev Dependency") itemStatus = "Dev Dependency";
+                else if (comp.status === "Approved") itemStatus = "Approved";
+                else if (comp.status === "Rejected") itemStatus = "Rejected";
+              }
             }
 
             itemsWithStatus.push({ cve, severity: cveSeverity, status: itemStatus });
@@ -747,30 +784,7 @@ Code Review Services recommends upgrading the third-party component with a vulne
 
               if (aggregatedData?.sca) {
                 const matchedGroup = aggregatedData.sca.find((g: any) => {
-                  const matchesPkg = g.records && g.records.some((r: any) => {
-                    const rPkg = (r.packageName || r.location || r.fileName || "").toLowerCase().trim();
-                    const pkgName = (detail.packageName || "").toLowerCase().trim();
-                    const getArtId = (p: string) => {
-                      if (!p) return "";
-                      const parts = p.split(":");
-                      return parts[parts.length - 1] || p;
-                    };
-                    const rArtId = getArtId(rPkg);
-                    const dArtId = getArtId(pkgName);
-                    const getSignificantWords = (p: string) => p.toLowerCase().split(/[:.\-_]/).filter(w => w.length > 3);
-                    const rWords = getSignificantWords(rPkg);
-                    const dWords = getSignificantWords(pkgName);
-                    const hasSharedWord = rWords.some(w => dWords.includes(w));
-                    return rPkg === pkgName || (rArtId && dArtId && rArtId === dArtId) || rPkg.includes(pkgName) || pkgName.includes(rPkg) || hasSharedWord;
-                  });
-                  const isSameSeverity = (a: string, b: string) => {
-                    const norm = (s: string) => {
-                      const l = s.toLowerCase().trim();
-                      if (l === "critical" || l === "very high" || l === "veryhigh") return "very high";
-                      return l;
-                    };
-                    return norm(a) === norm(b);
-                  };
+                  const matchesPkg = g.records && g.records.some((r: any) => isPackageMatchingFinding(r, detail));
                   return matchesPkg && isSameSeverity(g.severity, severity);
                 });
 
@@ -789,6 +803,15 @@ Code Review Services recommends upgrading the third-party component with a vulne
                 itemStatus = "Approved";
               } else if (detail.status === "Rejected") {
                 itemStatus = "Rejected";
+              } else if (scaComponents) {
+                const comp = scaComponents.find((c: any) =>
+                  (c.packageName || "").toLowerCase().trim() === (detail.packageName || "").toLowerCase().trim()
+                );
+                if (comp) {
+                  if (comp.status === "Dev Dependency") itemStatus = "Dev Dependency";
+                  else if (comp.status === "Approved") itemStatus = "Approved";
+                  else if (comp.status === "Rejected") itemStatus = "Rejected";
+                }
               }
 
               itemsWithStatus.push({ cve: null, severity, status: itemStatus });

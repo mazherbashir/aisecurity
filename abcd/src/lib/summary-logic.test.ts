@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateReviewSummary, isSameSeverity, isSeverityMatching } from './summary-logic';
+import { generateReviewSummary, isSameSeverity, isSeverityMatching, isPackageMatchingFinding } from './summary-logic';
 
 describe('generateReviewSummary', () => {
   const mockInput = {
@@ -253,4 +253,205 @@ describe('isSeverityMatching', () => {
     expect(isSeverityMatching('High', 'empty')).toBe(true);
   });
 });
+
+describe('isPackageMatchingFinding', () => {
+  it('should match jsoup finding with location "jsoup Java HTML Parser" and fileName "jsoup-1.15.3.jar" to "jsoup-1.15.3.jar"', () => {
+    const finding = {
+      location: 'jsoup Java HTML Parser',
+      fileName: 'jsoup-1.15.3.jar',
+      title: 'CVE-2026-71497'
+    };
+    const detail = {
+      packageName: 'jsoup-1.15.3.jar',
+      version: '1.15.3',
+      cveList: 'CVE-2026-71497'
+    };
+    expect(isPackageMatchingFinding(finding, detail)).toBe(true);
+  });
+
+  it('should match rhino finding with location "rhino" and fileName "rhino-1.7.13.jar" to "rhino-1.7.13.jar"', () => {
+    const finding = {
+      location: 'rhino',
+      fileName: 'rhino-1.7.13.jar',
+      title: 'CVE-2025-66453'
+    };
+    const detail = {
+      packageName: 'rhino-1.7.13.jar',
+      version: '1.7.13',
+      cveList: 'CVE-2025-66453'
+    };
+    expect(isPackageMatchingFinding(finding, detail)).toBe(true);
+  });
+
+  it('should match logback finding with location "Logback Core Module" and fileName "logback-core-1.2.13.jar" to "logback-core-1.2.13.jar"', () => {
+    const finding = {
+      location: 'Logback Core Module',
+      fileName: 'logback-core-1.2.13.jar',
+      title: 'CVE-2026-1225'
+    };
+    const detail = {
+      packageName: 'logback-core-1.2.13.jar',
+      version: '1.2.13',
+      cveList: 'CVE-2026-1225'
+    };
+    expect(isPackageMatchingFinding(finding, detail)).toBe(true);
+  });
+
+  it('should NOT falsely match rhino to logback', () => {
+    const finding = {
+      location: 'rhino',
+      fileName: 'rhino-1.7.13.jar',
+      title: 'CVE-2025-66453'
+    };
+    const detail = {
+      packageName: 'logback-core-1.2.13.jar',
+      version: '1.2.13',
+      cveList: 'CVE-2026-1225'
+    };
+    expect(isPackageMatchingFinding(finding, detail)).toBe(false);
+  });
+});
+
+describe('CVE-2026-71497 reflection in review summary', () => {
+  const baseScanInput = {
+    backendSastSummary: { vulnerabilities: 0, breakdown: {} },
+    backendScaSummary: {
+      vulnerabilities: 6,
+      totalPackages: 130,
+      totalVulnerablePackages: 3,
+      breakdown: {
+        'Very High': { total: 0, findings: [] },
+        'High': { total: 2, findings: [] },
+        'Medium': { total: 3, findings: [] },
+        'Low': { total: 1, findings: [] }
+      }
+    },
+    overview: {
+      applicationName: 'USA-ADV-Value Store - PwC IT',
+      scaEcosystems: '[Java, JavaScript]'
+    },
+    configNoSca: [],
+    scaDetails: [
+      {
+        packageName: 'logback-core-1.2.13.jar',
+        version: '1.2.13',
+        severityCounts: 'Medium: 2, Low: 1, High: 1',
+        cveList: 'CVE-2026-1225,CVE-2025-11226,CVE-2024-12801,CVE-2024-12798'
+      },
+      {
+        packageName: 'rhino-1.7.13.jar',
+        version: '1.7.13',
+        severityCounts: 'High: 1',
+        cveList: 'CVE-2025-66453'
+      },
+      {
+        packageName: 'jsoup-1.15.3.jar',
+        version: '1.15.3',
+        severityCounts: 'Medium: 1',
+        cveList: 'CVE-2026-71497'
+      }
+    ]
+  };
+
+  it('should reflect Approved status for jsoup when CVE-2026-71497 is approved', () => {
+    const input = {
+      ...baseScanInput,
+      aggregatedData: {
+        sast: [],
+        sca: [
+          {
+            groupId: 'g-jsoup',
+            identifier: 'CVE-2026-71497 - d06b805f',
+            severity: 'Medium',
+            status: 'approved',
+            type: 'SCA',
+            records: [
+              {
+                title: 'CVE-2026-71497',
+                location: 'jsoup Java HTML Parser',
+                fileName: 'jsoup-1.15.3.jar'
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const result = generateReviewSummary(input as any);
+    expect(result.scaSection).toContain('jsoup-1.15.3.jar');
+    expect(result.scaSection).toContain('CVE-2026-71497');
+    expect(result.scaSection).toContain('Approved');
+    expect(result.scaSection).toContain('bg-green');
+  });
+
+  it('should reflect Rejected status for jsoup when CVE-2026-71497 is rejected', () => {
+    const input = {
+      ...baseScanInput,
+      aggregatedData: {
+        sast: [],
+        sca: [
+          {
+            groupId: 'g-jsoup',
+            identifier: 'CVE-2026-71497 - d06b805f',
+            severity: 'Medium',
+            status: 'rejected',
+            type: 'SCA',
+            records: [
+              {
+                title: 'CVE-2026-71497',
+                location: 'jsoup Java HTML Parser',
+                fileName: 'jsoup-1.15.3.jar'
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const result = generateReviewSummary(input as any);
+    expect(result.scaSection).toContain('jsoup-1.15.3.jar');
+    expect(result.scaSection).toContain('CVE-2026-71497');
+    expect(result.scaSection).toContain('Rejected');
+    expect(result.scaSection).toContain('bg-red');
+  });
+
+  it('should match exactly the Component column from the Review comment editor and reflect status', () => {
+    const input = {
+      ...baseScanInput,
+      scaComponents: [
+        {
+          id: 'jsoup-1.15.3.jar::1.15.3',
+          packageName: 'jsoup-1.15.3.jar',
+          version: '1.15.3',
+          status: 'Approved'
+        },
+        {
+          id: 'rhino-1.7.13.jar::1.7.13',
+          packageName: 'rhino-1.7.13.jar',
+          version: '1.7.13',
+          status: 'Rejected'
+        }
+      ],
+      aggregatedData: { sast: [], sca: [] }
+    };
+
+    const result = generateReviewSummary(input as any);
+    expect(result.scaSection).toContain('jsoup-1.15.3.jar');
+    expect(result.scaSection).toContain('Approved');
+    expect(result.scaSection).toContain('rhino-1.7.13.jar');
+    expect(result.scaSection).toContain('Rejected');
+  });
+
+  it('should perform exact match on Component column fileName or packageName', () => {
+    // Review comment editor Component column is detail.packageName
+    const detail = { packageName: 'jsoup-1.15.3.jar', version: '1.15.3' };
+    const findingExactFile = { fileName: 'jsoup-1.15.3.jar', location: 'jsoup Java HTML Parser' };
+    expect(isPackageMatchingFinding(findingExactFile, detail)).toBe(true);
+
+    const npmDetail = { packageName: 'express', version: '4.18.2' };
+    const npmFinding = { packageName: 'express', location: 'node_modules/express' };
+    expect(isPackageMatchingFinding(npmFinding, npmDetail)).toBe(true);
+  });
+});
+
 
