@@ -216,6 +216,11 @@ public class CheckmarxService {
                         }
 
                         String severityStr = vuln.path("severity").asText("Medium");
+                        if ("Info".equalsIgnoreCase(severityStr) || "INFO".equalsIgnoreCase(severityStr) || "Informational".equalsIgnoreCase(severityStr)) {
+                            severityStr = "Information";
+                        } else if ("VeryHigh".equalsIgnoreCase(severityStr) || "Very High".equalsIgnoreCase(severityStr)) {
+                            severityStr = "High";
+                        }
                         String firstFoundDate = vuln.path("firstFoundDate").asText();
 
                         // 1. Logic for sastSummary (All that are NOT 'Not Exploitable', i.e. To Verify & Proposed Not Exploitable)
@@ -302,6 +307,32 @@ public class CheckmarxService {
 
         dto.scaSummary.vulnerabilities = scaSummaryTotal;
 
+        // Pre-build packageOverview map for fallback severity lookups
+        Map<String, Map<String, Integer>> packageOverviewMap = new java.util.HashMap<>();
+        JsonNode packageOverviewArray = root.path("packageOverview");
+        if (packageOverviewArray.isArray()) {
+            for (JsonNode pkgOverviewNode : packageOverviewArray) {
+                String pkgName = pkgOverviewNode.path("packageName").asText();
+                Map<String, Integer> sevMap = new java.util.LinkedHashMap<>();
+                JsonNode breakdownArray = pkgOverviewNode.path("severityBreakdown");
+                if (breakdownArray.isArray()) {
+                    for (JsonNode bNode : breakdownArray) {
+                        String lvl = bNode.path("level").asText();
+                        int val = bNode.path("value").asInt(0);
+                        if (val > 0) {
+                            if ("Info".equalsIgnoreCase(lvl) || "INFO".equalsIgnoreCase(lvl) || "Informational".equalsIgnoreCase(lvl)) {
+                                lvl = "Information";
+                            }
+                            sevMap.put(lvl, val);
+                        }
+                    }
+                }
+                if (!pkgName.isEmpty()) {
+                    packageOverviewMap.put(pkgName, sevMap);
+                }
+            }
+        }
+
         // 4. Parse scaScanResults
         JsonNode scaScanResults = root.path("scaScanResults");
         int apiTotalPackages = -1;
@@ -318,6 +349,11 @@ public class CheckmarxService {
             if (sevBreakdownArray.isArray()) {
                 for (JsonNode sevNode : sevBreakdownArray) {
                     String level = sevNode.path("level").asText();
+                    if ("Info".equalsIgnoreCase(level) || "INFO".equalsIgnoreCase(level) || "Informational".equalsIgnoreCase(level)) {
+                        level = "Information";
+                    } else if ("VeryHigh".equalsIgnoreCase(level) || "Very High".equalsIgnoreCase(level)) {
+                        level = "High";
+                    }
                     int value = sevNode.path("value").asInt(0);
                     if (value > 0) {
                         com.crs_reivew_api.dto.VeracodeReportDTO.SeverityBreakdownDTO sevBreakdown = new com.crs_reivew_api.dto.VeracodeReportDTO.SeverityBreakdownDTO();
@@ -370,7 +406,25 @@ public class CheckmarxService {
                                     }
 
                                     String severity = resNode.path("severity").asText();
+                                    if (severity == null || severity.trim().isEmpty()) {
+                                        String pkgId = pkgNode.path("packageId").asText();
+                                        String pkgName = pkgNode.path("packageName").asText();
+                                        Map<String, Integer> overviewBreakdown = packageOverviewMap.get(pkgId);
+                                        if (overviewBreakdown == null || overviewBreakdown.isEmpty()) {
+                                            overviewBreakdown = packageOverviewMap.get(pkgName);
+                                        }
+                                        if (overviewBreakdown != null && !overviewBreakdown.isEmpty()) {
+                                            severity = overviewBreakdown.keySet().iterator().next();
+                                        } else if (dto.scaSummary.breakdown.containsKey("Information") && dto.scaSummary.breakdown.get("Information").total > 0) {
+                                            severity = "Information";
+                                        }
+                                    }
                                     if (severity != null && !severity.isEmpty()) {
+                                        if ("Info".equalsIgnoreCase(severity) || "INFO".equalsIgnoreCase(severity) || "Informational".equalsIgnoreCase(severity)) {
+                                            severity = "Information";
+                                        } else if ("VeryHigh".equalsIgnoreCase(severity) || "Very High".equalsIgnoreCase(severity)) {
+                                            severity = "High";
+                                        }
                                         sevCounts.put(severity, sevCounts.getOrDefault(severity, 0) + 1);
                                     }
                                     
@@ -417,10 +471,12 @@ public class CheckmarxService {
                     scaDetail.firstFoundDate = earliestDate;
                     
                     // calculate remediation_due_date based on highest severity
-                    String highestSev = "Low";
+                    String highestSev = "Information";
                     if (sevCounts.containsKey("Critical") || sevCounts.containsKey("VeryHigh") || sevCounts.containsKey("Very High")) highestSev = "High";
                     else if (sevCounts.containsKey("High")) highestSev = "High";
                     else if (sevCounts.containsKey("Medium")) highestSev = "Medium";
+                    else if (sevCounts.containsKey("Low")) highestSev = "Low";
+                    else if (sevCounts.containsKey("Information")) highestSev = "Information";
                     
                     scaDetail.remediation_due_date = calculateDueDate(earliestDate, tierValue, highestSev);
                     
@@ -906,6 +962,7 @@ public class CheckmarxService {
 
         String normalizedSeverity = severity != null ? severity.replace(" ", "") : "";
         if (normalizedSeverity.equalsIgnoreCase("Critical")) normalizedSeverity = "VeryHigh";
+        if (normalizedSeverity.equalsIgnoreCase("Info") || normalizedSeverity.equalsIgnoreCase("Informational")) normalizedSeverity = "Information";
 
         Integer days = gracePeriods.get(effectiveTier).get(normalizedSeverity);
         if (days == null)
