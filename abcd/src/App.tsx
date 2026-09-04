@@ -337,20 +337,44 @@ function adaptBreakdown(breakdownObj: any): {
 } {
   const result = { "Very High": 0, High: 0, Medium: 0, Low: 0, Information: 0 };
 
-  if (!breakdownObj || typeof breakdownObj !== "object") return result;
+  if (!breakdownObj) return result;
+
+  if (typeof breakdownObj === "string") {
+    const matches = Array.from(
+      breakdownObj.matchAll(/(Critical|Very\s*High|VeryHigh|High|Medium|Low|Information|Info):\s*(\d+)/gi)
+    );
+    matches.forEach((m) => {
+      const rawSev = m[1].toLowerCase().replace(/\s+/g, "");
+      let normalizedSev: keyof typeof result = "Medium";
+      if (rawSev === "veryhigh" || rawSev === "critical") normalizedSev = "Very High";
+      else if (rawSev === "high") normalizedSev = "High";
+      else if (rawSev === "medium") normalizedSev = "Medium";
+      else if (rawSev === "low") normalizedSev = "Low";
+      else if (rawSev === "information" || rawSev === "info") normalizedSev = "Information";
+
+      result[normalizedSev] += parseInt(m[2], 10) || 0;
+    });
+    return result;
+  }
+
+  if (typeof breakdownObj !== "object") return result;
 
   Object.entries(breakdownObj).forEach(([sev, data]: [string, any]) => {
-    let normalizedSev = sev;
-    if (sev === "VeryHigh" || sev === "Very High" || sev === "Critical") normalizedSev = "Very High";
-    if (sev === "Information" || sev === "Info") normalizedSev = "Information";
+    const s = sev.toLowerCase().replace(/\s+/g, "");
+    let normalizedSev: keyof typeof result | null = null;
+    if (s === "veryhigh" || s === "critical") normalizedSev = "Very High";
+    else if (s === "high") normalizedSev = "High";
+    else if (s === "medium") normalizedSev = "Medium";
+    else if (s === "low") normalizedSev = "Low";
+    else if (s === "information" || s === "info") normalizedSev = "Information";
 
-    if (normalizedSev in result) {
+    if (normalizedSev && normalizedSev in result) {
       const value = typeof data === "number" 
         ? data 
         : typeof data?.total === "number" 
           ? data.total 
           : parseInt(data?.total) || 0;
-      result[normalizedSev as keyof typeof result] += value;
+      result[normalizedSev] += value;
     }
   });
 
@@ -414,6 +438,9 @@ function ReviewTabContent({
   scaSafeVersionEnabled = false,
   aggregatedData,
   selectedTools,
+  removedMissingSca = [],
+  removedNoPrecompile = [],
+  removedMinifiedFiles = [],
 }: {
   overview: any;
   backendSastSummary: any;
@@ -426,6 +453,9 @@ function ReviewTabContent({
   scaSafeVersionEnabled?: boolean;
   aggregatedData: { sast: AggregatedGroup[]; sca: AggregatedGroup[] };
   selectedTools?: string[];
+  removedMissingSca?: string[];
+  removedNoPrecompile?: string[];
+  removedMinifiedFiles?: string[];
 }) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -444,15 +474,19 @@ function ReviewTabContent({
     } else if (Array.isArray(ecoObj)) {
       ecos = ecoObj;
     }
+    const allEcos = [...ecos, ...(configNoSca || [])];
     const missing = archs.filter(
       (a: string) =>
-        !ecos.some(
+        !allEcos.some(
           (e: string) =>
-            e.toLowerCase() === a.toLowerCase(),
+            e.toLowerCase().trim() === a.toLowerCase().trim(),
+        ) &&
+        !(removedMissingSca || []).some(
+          (r: string) => r.toLowerCase().trim() === a.toLowerCase().trim(),
         ),
     );
     return missing.length === 0;
-  }, [overview]);
+  }, [overview, configNoSca, removedMissingSca]);
 
   // Determine if sastSummary AND scaSummary have only LOW findings or less (i.e. zero Very High, High, Medium)
   const hasOnlyLowFindings = React.useMemo(() => {
@@ -554,7 +588,13 @@ function ReviewTabContent({
       );
     }
 
-    const { sastSection, scaSection, missingScaMessages } = generateReviewSummary({
+    const {
+      sastSection,
+      scaSection,
+      missingScaMessages,
+      noPrecompileSection,
+      minifiedFilesSection,
+    } = generateReviewSummary({
       backendSastSummary,
       backendScaSummary,
       aggregatedData,
@@ -562,7 +602,10 @@ function ReviewTabContent({
       configNoSca,
       scaDetails,
       scaSafeVersionEnabled,
-      selectedTools
+      selectedTools,
+      removedMissingSca,
+      removedNoPrecompile,
+      removedMinifiedFiles,
     });
 
     let moduleSelectionSection = "";
@@ -576,24 +619,6 @@ function ReviewTabContent({
         overview.selectedModules || [],
         overview.unselectedModules,
       );
-    }
-
-    let noPrecompileSection = "";
-    if (
-      overview.noPrecompile &&
-      Array.isArray(overview.noPrecompile) &&
-      overview.noPrecompile.length > 0
-    ) {
-      noPrecompileSection = StaticContent.noPrecompileMsg();
-    }
-
-    let minifiedFilesSection = "";
-    if (
-      overview.minifedFiles &&
-      Array.isArray(overview.minifedFiles) &&
-      overview.minifedFiles.length > 0
-    ) {
-      minifiedFilesSection = StaticContent.minifiedFilesMsg(overview.minifedFiles);
     }
 
     return (
@@ -617,7 +642,10 @@ function ReviewTabContent({
     configNoSca,
     configScanValidityDays,
     selectedTools,
-    scaSafeVersionEnabled
+    scaSafeVersionEnabled,
+    removedMissingSca,
+    removedNoPrecompile,
+    removedMinifiedFiles,
   ]);
 
 
@@ -659,6 +687,58 @@ function ReviewTabContent({
       setOverrideHtml(newText);
     }
   };
+
+  useEffect(() => {
+    if (overrideHtml !== null) {
+      let updated = overrideHtml;
+      if (removedMissingSca && removedMissingSca.length > 0) {
+        removedMissingSca.forEach((arch) => {
+          const cleanArch = arch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const regex = new RegExp(
+            `(?:<hr\\s*\\/?>\\s*)?<h3 class="heading bg-red">Missing Software Composition Analysis for ${cleanArch}<\\/h3>[\\s\\S]*?supported language\\(s\\)\\.<\\/a>\\.\\s*`,
+            "gi"
+          );
+          updated = updated.replace(regex, "");
+        });
+      }
+
+      // Check if all noPrecompile are removed
+      const rawNoPrecompile: string[] = overview?.noPrecompile || [];
+      const remainingPrecompile = rawNoPrecompile.filter(
+        (item: string) =>
+          !(removedNoPrecompile || []).some(
+            (r) => r.toLowerCase().trim() === item.toLowerCase().trim()
+          )
+      );
+      if (rawNoPrecompile.length > 0 && remainingPrecompile.length === 0) {
+        const precompileRegex = /(?:<hr\s*\/?>\s*)?<h3 class="heading bg-red">Missing Precompiled Files<\/h3>[\s\S]*?(?:Packaging ASP\.NET Web Applications<\/a> for more information\.|<\/a>\.)\s*/gi;
+        updated = updated.replace(precompileRegex, "");
+      }
+
+      // Check minified files removal
+      const rawMinified: string[] = overview?.minifedFiles || [];
+      const remainingMinified = rawMinified.filter(
+        (item: string) =>
+          !(removedMinifiedFiles || []).some(
+            (r) => r.toLowerCase().trim() === item.toLowerCase().trim()
+          )
+      );
+      if (rawMinified.length > 0 && remainingMinified.length === 0) {
+        const minifiedRegex = /(?:<hr\s*\/?>\s*)?<h3 class="heading bg-red">Minified Files<\/h3>[\s\S]*?(?:lines with a length of 500 or more characters\.|<\/ul>)\s*/gi;
+        updated = updated.replace(minifiedRegex, "");
+      } else if (removedMinifiedFiles && removedMinifiedFiles.length > 0) {
+        removedMinifiedFiles.forEach((file) => {
+          const cleanFile = file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const liRegex = new RegExp(`\\s*<li><code>${cleanFile}<\\/code><\\/li>`, "gi");
+          updated = updated.replace(liRegex, "");
+        });
+      }
+
+      if (updated !== overrideHtml) {
+        setOverrideHtml(updated);
+      }
+    }
+  }, [removedMissingSca, removedNoPrecompile, removedMinifiedFiles, overview, overrideHtml]);
 
   useEffect(() => {
     if (overrideHtml !== null) {
@@ -1400,6 +1480,150 @@ export default function App() {
   const [selectedTier, setSelectedTier] = useState<string>("tier-1");
   const [configTiers, setConfigTiers] = useState<string[]>(["tier-1", "tier-2", "tier-3a", "tier-3b"]);
 
+  const [removedMissingSca, setRemovedMissingSca] = useState<string[]>([]);
+  const [selectedMissingSca, setSelectedMissingSca] = useState<string | null>(null);
+  const [showCrossCodebases, setShowCrossCodebases] = useState<Set<string>>(new Set());
+
+  const handleRemoveMissingSca = (archToRemove: string) => {
+    setRemovedMissingSca((prev) => {
+      if (prev.some((r) => r.toLowerCase().trim() === archToRemove.toLowerCase().trim())) {
+        return prev;
+      }
+      return [...prev, archToRemove];
+    });
+    setShowCrossCodebases((prev) => {
+      const next = new Set(prev);
+      next.delete(archToRemove);
+      return next;
+    });
+    if (selectedMissingSca === archToRemove) {
+      setSelectedMissingSca(null);
+    }
+    setSuccessMessage(`Removed ${archToRemove} from SCA Missing and Review comments.`);
+    setTimeout(() => setSuccessMessage(null), 4000);
+  };
+
+  const handleRestoreMissingSca = (archToRestore?: string) => {
+    if (archToRestore) {
+      setRemovedMissingSca((prev) =>
+        prev.filter((r) => r.toLowerCase().trim() !== archToRestore.toLowerCase().trim()),
+      );
+      setSuccessMessage(`Restored ${archToRestore} to SCA Missing findings.`);
+    } else {
+      setRemovedMissingSca([]);
+      setSuccessMessage("Restored all excluded SCA Missing findings.");
+    }
+    setTimeout(() => setSuccessMessage(null), 4000);
+  };
+
+  // Precompile state & handlers
+  const [removedNoPrecompile, setRemovedNoPrecompile] = useState<string[]>([]);
+  const [selectedNoPrecompile, setSelectedNoPrecompile] = useState<string | null>(null);
+  const [showCrossPrecompile, setShowCrossPrecompile] = useState<Set<string>>(new Set());
+  const [isPrecompileOpen, setIsPrecompileOpen] = useState(false);
+
+  const handleRemoveNoPrecompile = (fileToRemove: string) => {
+    setRemovedNoPrecompile((prev) => {
+      if (prev.some((r) => r.toLowerCase().trim() === fileToRemove.toLowerCase().trim())) {
+        return prev;
+      }
+      return [...prev, fileToRemove];
+    });
+    setShowCrossPrecompile((prev) => {
+      const next = new Set(prev);
+      next.delete(fileToRemove);
+      return next;
+    });
+    if (selectedNoPrecompile === fileToRemove) {
+      setSelectedNoPrecompile(null);
+    }
+    setSuccessMessage(`Removed ${fileToRemove} from Precompile findings and Review comments.`);
+    setTimeout(() => setSuccessMessage(null), 4000);
+  };
+
+  const handleRemoveAllPrecompile = () => {
+    const list: string[] = (activeOverview as any).noPrecompile || [];
+    setRemovedNoPrecompile([...list]);
+    setShowCrossPrecompile(new Set());
+    setSelectedNoPrecompile(null);
+    setIsPrecompileOpen(false);
+    setSuccessMessage("Removed all unprecompiled module findings from Review comments.");
+    setTimeout(() => setSuccessMessage(null), 4000);
+  };
+
+  const handleRestoreNoPrecompile = (fileToRestore?: string) => {
+    if (fileToRestore) {
+      setRemovedNoPrecompile((prev) =>
+        prev.filter((r) => r.toLowerCase().trim() !== fileToRestore.toLowerCase().trim()),
+      );
+      setSuccessMessage(`Restored ${fileToRestore} to Precompile findings.`);
+    } else {
+      setRemovedNoPrecompile([]);
+      setSuccessMessage("Restored all excluded Precompile findings.");
+    }
+    setTimeout(() => setSuccessMessage(null), 4000);
+  };
+
+  // Minified files state & handlers
+  const [removedMinifiedFiles, setRemovedMinifiedFiles] = useState<string[]>([]);
+  const [selectedMinifiedFile, setSelectedMinifiedFile] = useState<string | null>(null);
+  const [showCrossMinified, setShowCrossMinified] = useState<Set<string>>(new Set());
+  const [isMinifiedOpen, setIsMinifiedOpen] = useState(false);
+
+  const handleRemoveMinifiedFile = (fileToRemove: string) => {
+    setRemovedMinifiedFiles((prev) => {
+      if (prev.some((r) => r.toLowerCase().trim() === fileToRemove.toLowerCase().trim())) {
+        return prev;
+      }
+      return [...prev, fileToRemove];
+    });
+    setShowCrossMinified((prev) => {
+      const next = new Set(prev);
+      next.delete(fileToRemove);
+      return next;
+    });
+    if (selectedMinifiedFile === fileToRemove) {
+      setSelectedMinifiedFile(null);
+    }
+    setSuccessMessage(`Removed ${fileToRemove} from Minified files and Review comments.`);
+    setTimeout(() => setSuccessMessage(null), 4000);
+  };
+
+  const handleRemoveAllMinified = () => {
+    const list: string[] = (activeOverview as any).minifedFiles || [];
+    setRemovedMinifiedFiles([...list]);
+    setShowCrossMinified(new Set());
+    setSelectedMinifiedFile(null);
+    setIsMinifiedOpen(false);
+    setSuccessMessage("Removed all minified file findings from Review comments.");
+    setTimeout(() => setSuccessMessage(null), 4000);
+  };
+
+  const handleRestoreMinifiedFiles = (fileToRestore?: string) => {
+    if (fileToRestore) {
+      setRemovedMinifiedFiles((prev) =>
+        prev.filter((r) => r.toLowerCase().trim() !== fileToRestore.toLowerCase().trim()),
+      );
+      setSuccessMessage(`Restored ${fileToRestore} to Minified file findings.`);
+    } else {
+      setRemovedMinifiedFiles([]);
+      setSuccessMessage("Restored all excluded Minified file findings.");
+    }
+    setTimeout(() => setSuccessMessage(null), 4000);
+  };
+
+  const getCodebaseColor = (name: string) => {
+    const n = name.toLowerCase();
+    if (n.includes("javascript") || n === "js") return "bg-yellow-400";
+    if (n.includes(".net") || n.includes("cil32") || n.includes("c#") || n.includes("csharp")) return "bg-indigo-400";
+    if (n.includes("python") || n === "py") return "bg-blue-400";
+    if (n.includes("java") && !n.includes("script")) return "bg-orange-500";
+    if (n.includes("go") || n.includes("golang")) return "bg-cyan-400";
+    if (n.includes("ruby")) return "bg-red-400";
+    if (n.includes("php")) return "bg-purple-400";
+    return "bg-rose-400";
+  };
+
   useEffect(() => {
     if (selectedTools.includes("Checkmarx")) {
       setConfigHistory(checkmarxHistory);
@@ -1939,7 +2163,7 @@ export default function App() {
     } else if (backendSastSummary) {
       baseSummary = {
         vulnerabilities: backendSastSummary.vulnerabilities || 0,
-        breakdown: backendSastSummary.breakdown || {},
+        breakdown: adaptBreakdown(backendSastSummary.breakdown),
       };
     } else if (IS_PRODUCTION) {
       return {
@@ -1959,7 +2183,7 @@ export default function App() {
       if (breakdown[sev] !== undefined) {
         breakdown[sev] = Math.max(0, breakdown[sev] - count);
       } else {
-        const mappedSev = sev === "Critical" ? "Very High" : (sev === "Information" ? "Low" : sev);
+        const mappedSev = sev === "Critical" ? "Very High" : (sev === "Information" || sev === "Info" ? "Information" : sev);
         if (breakdown[mappedSev] !== undefined) {
           breakdown[mappedSev] = Math.max(0, breakdown[mappedSev] - count);
         }
@@ -1979,7 +2203,7 @@ export default function App() {
 
     let baseSummary = IS_PRODUCTION ? {
       vulnerabilities: 0,
-      breakdown: { "Very High": 0, High: 0, Medium: 0, Low: 0 },
+      breakdown: { "Very High": 0, High: 0, Medium: 0, Low: 0, Information: 0 },
       totalPackages: 0,
       totalVulnerablePackages: 0,
     } : {
@@ -2002,14 +2226,14 @@ export default function App() {
     } else if (backendScaSummary) {
       baseSummary = {
         vulnerabilities: backendScaSummary.vulnerabilities || 0,
-        breakdown: backendScaSummary.breakdown || {},
+        breakdown: adaptBreakdown(backendScaSummary.breakdown),
         totalPackages: backendScaSummary.totalPackages || 0,
         totalVulnerablePackages: backendScaSummary.totalVulnerablePackages || 0,
       };
     } else if (IS_PRODUCTION) {
       return {
         vulnerabilities: 0,
-        breakdown: { "Very High": 0, High: 0, Medium: 0, Low: 0 },
+        breakdown: { "Very High": 0, High: 0, Medium: 0, Low: 0, Information: 0 },
         totalPackages: 0,
         totalVulnerablePackages: 0,
       };
@@ -2022,7 +2246,7 @@ export default function App() {
     // Deduct approved / devDependency findings using the parsed counts from scaComponents
     scaComponents.forEach(c => {
       if (c.status === "Approved" || c.status === "Dev Dependency") {
-        const counts = (c as any).counts || { critical: 0, high: 0, medium: 0, low: 0 };
+        const counts = (c as any).counts || { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
         
         // Deduct Very High (Critical)
         if (counts.critical > 0) {
@@ -2043,6 +2267,11 @@ export default function App() {
         if (counts.low > 0) {
           breakdown["Low"] = Math.max(0, (breakdown["Low"] || 0) - counts.low);
           deductedCount += counts.low;
+        }
+        // Deduct Info / Information
+        if (counts.info > 0) {
+          breakdown["Information"] = Math.max(0, (breakdown["Information"] || 0) - counts.info);
+          deductedCount += counts.info;
         }
       }
     });
@@ -2253,13 +2482,15 @@ export default function App() {
     parts.push(`- Vulnerable Components: ${scaSummary.totalVulnerablePackages || 0}`);
     parts.push(`- Vulnerabilities: ${scaSummary.vulnerabilities || 0}`);
 
-    const sevOrder = ["Very High", "High", "Medium", "Low"];
+    const sevOrder = ["Very High", "High", "Medium", "Low", "Information"];
     sevOrder.forEach(sev => {
-      const count = scaSummary.breakdown?.[sev] || 0;
+      const count = (scaSummary.breakdown as any)?.[sev] ?? (sev === "Information" ? (scaSummary.breakdown as any)?.["Info"] : 0) ?? 0;
       if (count > 0) {
         let label = sev;
         if (sev === "Very High") {
-          label = (selectedTools.includes("Checkmarx") || overview?.scanType === "checkmarx") ? "Critical" : "Very High";
+          label = (selectedTools.includes("Checkmarx") || (overview as any)?.scanType === "checkmarx" || (activeOverview as any)?.scanType === "checkmarx") ? "Critical" : "Very High";
+        } else if (sev === "Information") {
+          label = "Info";
         }
         parts.push(`-- ${label}: ${count}`);
       }
@@ -2362,6 +2593,17 @@ export default function App() {
 
         console.log("Updating Overview State.");
         setOverview(mergedOverview);
+        setRemovedMissingSca([]);
+        setSelectedMissingSca(null);
+        setShowCrossCodebases(new Set());
+        setRemovedNoPrecompile([]);
+        setSelectedNoPrecompile(null);
+        setShowCrossPrecompile(new Set());
+        setIsPrecompileOpen(false);
+        setRemovedMinifiedFiles([]);
+        setSelectedMinifiedFile(null);
+        setShowCrossMinified(new Set());
+        setIsMinifiedOpen(false);
       }
 
       if (data && data.sastSummary) setBackendSastSummary(data.sastSummary);
@@ -2587,6 +2829,17 @@ export default function App() {
         setSastMitigationProposal({ Total: 17, Medium: 16, Info: 1 });
         setScaMitigationProposal({ Total: 0, Medium: 0, Info: 0 });
         setOverview(mockOverview);
+        setRemovedMissingSca([]);
+        setSelectedMissingSca(null);
+        setShowCrossCodebases(new Set());
+        setRemovedNoPrecompile([]);
+        setSelectedNoPrecompile(null);
+        setShowCrossPrecompile(new Set());
+        setIsPrecompileOpen(false);
+        setRemovedMinifiedFiles([]);
+        setSelectedMinifiedFile(null);
+        setShowCrossMinified(new Set());
+        setIsMinifiedOpen(false);
         const stype = appProfile.toLowerCase().endsWith(".json") ? "json" : "live";
         setAggregatedData({
           sast: restorePersistedComments(sastGroups, appProfile, stype),
@@ -2988,6 +3241,51 @@ export default function App() {
     return resultsLoaded ? overview : mockOverview;
   }, [resultsLoaded, overview]);
 
+  const missingScaArchs = React.useMemo(() => {
+    const archs: string[] = (activeOverview as any).architectures || [];
+    const ecoObj = (activeOverview as any).scaEcosystems || "";
+    let ecos: string[] = [];
+    if (typeof ecoObj === "string") {
+      ecos = ecoObj
+        .replace(/[\[\]]/g, "")
+        .split(",")
+        .map((s: string) => s.trim())
+        .filter(Boolean);
+    } else if (Array.isArray(ecoObj)) {
+      ecos = ecoObj;
+    }
+    const allEcos = [...ecos, ...(configNoSca || [])];
+    return archs.filter(
+      (a: string) =>
+        !allEcos.some(
+          (e: string) => e.toLowerCase().trim() === a.toLowerCase().trim(),
+        ) &&
+        !removedMissingSca.some(
+          (r: string) => r.toLowerCase().trim() === a.toLowerCase().trim(),
+        ),
+    );
+  }, [activeOverview, configNoSca, removedMissingSca]);
+
+  const activeNoPrecompile = React.useMemo(() => {
+    const list: string[] = (activeOverview as any).noPrecompile || [];
+    return list.filter(
+      (item: string) =>
+        !removedNoPrecompile.some(
+          (r: string) => r.toLowerCase().trim() === item.toLowerCase().trim(),
+        ),
+    );
+  }, [activeOverview, removedNoPrecompile]);
+
+  const activeMinifiedFiles = React.useMemo(() => {
+    const list: string[] = (activeOverview as any).minifedFiles || [];
+    return list.filter(
+      (item: string) =>
+        !removedMinifiedFiles.some(
+          (r: string) => r.toLowerCase().trim() === item.toLowerCase().trim(),
+        ),
+    );
+  }, [activeOverview, removedMinifiedFiles]);
+
   useEffect(() => {
     const tierVal = (activeOverview as any)?.tier;
     if (tierVal && configTiers.includes(tierVal)) {
@@ -3268,14 +3566,14 @@ export default function App() {
                       <div className="flex flex-wrap gap-1">
                         {["Very High", "High", "Medium", "Low", "Information"].map((sev) => {
                           const count =
-                            (sastSummary.breakdown as any)[sev] || 0;
+                            (sastSummary.breakdown as any)[sev] ?? (sev === "Information" ? (sastSummary.breakdown as any)["Info"] : 0) ?? 0;
                           return (
                             <div
                               key={sev}
                               className="flex-1 min-w-[48px] p-2 rounded-lg border border-slate-800/50 flex flex-col items-center justify-center text-center bg-slate-800/10"
                             >
                               <span className="text-[8px] text-slate-500 uppercase font-black tracking-tighter mb-0.5 select-none">
-                                {sev === "Very High" ? (selectedTools.includes("Checkmarx") ? "CRITICAL" : "V. HIGH") : sev === "Information" ? "INFO" : sev}
+                                {sev === "Very High" ? ((selectedTools.includes("Checkmarx") || (activeOverview as any)?.scanType === "checkmarx") ? "CRITICAL" : "V. HIGH") : sev === "Information" ? "INFO" : sev}
                               </span>
                               <span
                                 className={`text-[13px] font-mono font-black ${
@@ -3322,15 +3620,15 @@ export default function App() {
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-1">
-                        {["Very High", "High", "Medium", "Low"].map((sev) => {
-                          const count = (scaSummary.breakdown as any)[sev] || 0;
+                        {["Very High", "High", "Medium", "Low", "Information"].map((sev) => {
+                          const count = (scaSummary.breakdown as any)[sev] ?? (sev === "Information" ? (scaSummary.breakdown as any)["Info"] : 0) ?? 0;
                           return (
                             <div
                               key={sev}
                               className="flex-1 min-w-[48px] p-2 rounded-lg border border-slate-800/50 flex flex-col items-center justify-center text-center bg-slate-800/10"
                             >
                               <span className="text-[8px] text-slate-500 uppercase font-black tracking-tighter mb-0.5 select-none">
-                                {sev === "Very High" ? (selectedTools.includes("Checkmarx") ? "CRITICAL" : "V. HIGH") : sev}
+                                {sev === "Very High" ? ((selectedTools.includes("Checkmarx") || (activeOverview as any)?.scanType === "checkmarx") ? "CRITICAL" : "V. HIGH") : sev === "Information" ? "INFO" : sev}
                               </span>
                               <span
                                 className={`text-[13px] font-mono font-black ${
@@ -3401,65 +3699,138 @@ export default function App() {
                         )}
                       </div>
                     </div>
-                    <div className="flex justify-between items-center py-1 border-b border-slate-800/50 gap-2 flex-wrap">
-                      <span className="text-[10px] text-slate-500 uppercase font-black shrink-0">
-                        SCA MISSING
-                      </span>
-                      <span
-                        className={`text-[10px] font-black uppercase text-right break-words min-w-0 ${(() => {
-                          const archs =
-                            (activeOverview as any).architectures || [];
-                          const ecoObj =
-                            (activeOverview as any).scaEcosystems || "";
-                          let ecos: string[] = [];
-                          if (typeof ecoObj === "string") {
-                            ecos = ecoObj
-                              .replace(/[\[\]]/g, "")
-                              .split(",")
-                              .map((s: string) => s.trim())
-                              .filter(Boolean);
-                          } else if (Array.isArray(ecoObj)) {
-                            ecos = ecoObj;
-                          }
-                          const missing = archs.filter(
-                            (a: string) =>
-                              !ecos.some(
-                                (e: string) =>
-                                  e.toLowerCase() === a.toLowerCase(),
-                              ),
-                          );
-                          return missing.length === 0
-                            ? "text-emerald-500"
-                            : "text-red-400";
-                        })()}`}
-                      >
-                        {(() => {
-                          const archs =
-                            (activeOverview as any).architectures || [];
-                          const ecoObj =
-                            (activeOverview as any).scaEcosystems || "";
-                          let ecos: string[] = [];
-                          if (typeof ecoObj === "string") {
-                            ecos = ecoObj
-                              .replace(/[\[\]]/g, "")
-                              .split(",")
-                              .map((s: string) => s.trim())
-                              .filter(Boolean);
-                          } else if (Array.isArray(ecoObj)) {
-                            ecos = ecoObj;
-                          }
-                          const missing = archs.filter(
-                            (a: string) =>
-                              !ecos.some(
-                                (e: string) =>
-                                  e.toLowerCase() === a.toLowerCase(),
-                              ),
-                          );
-                          return missing.length === 0
-                            ? "NORMAL"
-                            : missing.join(", ");
-                        })()}
-                      </span>
+                    <div className="flex flex-col py-1 border-b border-slate-800/50 gap-1 relative">
+                      <div className="flex justify-between items-center gap-2 flex-wrap relative">
+                        <span className="text-[10px] text-slate-500 uppercase font-black shrink-0">
+                          SCA MISSING
+                        </span>
+                        {missingScaArchs.length === 0 ? (
+                          <span className="text-[10px] font-black uppercase text-emerald-500 font-mono">
+                            NORMAL
+                          </span>
+                        ) : (
+                          <div className="flex gap-1 flex-wrap justify-end items-center">
+                            {missingScaArchs.map((arch: string) => {
+                              const isCrossVisible = showCrossCodebases.has(arch) || selectedMissingSca === arch;
+                              const isSelected = selectedMissingSca === arch;
+                              const dotColor = getCodebaseColor(arch);
+                              return (
+                                <div
+                                  key={arch}
+                                  id={`sca-missing-chip-${arch.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
+                                  onClick={() => {
+                                    setSelectedMissingSca((prev) => (prev === arch ? null : arch));
+                                    setShowCrossCodebases((prev) => new Set(prev).add(arch));
+                                  }}
+                                  onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowCrossCodebases((prev) => new Set(prev).add(arch));
+                                    setSelectedMissingSca(arch);
+                                  }}
+                                  className={`relative group inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer select-none ${
+                                    isSelected
+                                      ? "bg-red-500/20 border border-red-500 text-red-200 ring-1 ring-red-500/50 shadow-sm"
+                                      : "bg-red-950/40 border border-red-500/30 text-red-300 hover:border-red-500/60 hover:bg-red-900/30"
+                                  }`}
+                                  title="Click for remove option, or double-click to display cross sign (✕) to remove finding"
+                                >
+                                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+                                  <span>{arch}</span>
+
+                                  {/* Cross sign button */}
+                                  <button
+                                    id={`btn-remove-sca-${arch.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveMissingSca(arch);
+                                    }}
+                                    className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[10px] font-black transition-all cursor-pointer ${
+                                      isCrossVisible
+                                        ? "bg-red-500/50 hover:bg-red-600 text-white opacity-100 scale-100"
+                                        : "opacity-0 group-hover:opacity-100 bg-red-500/30 hover:bg-red-600 text-white"
+                                    }`}
+                                    title={`Remove ${arch} finding from SCA Missing & Review Comments`}
+                                  >
+                                    ✕
+                                  </button>
+
+                                  {/* Popover option to remove when clicked */}
+                                  {isSelected && (
+                                    <div
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="absolute right-0 top-full mt-1.5 z-50 bg-slate-900 border border-red-500/50 rounded-lg p-2.5 shadow-2xl flex flex-col gap-2 min-w-[200px] backdrop-blur-md"
+                                    >
+                                      <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-1">
+                                        <div className="flex items-center gap-1.5">
+                                          <div className={`w-2 h-2 rounded-full ${dotColor}`} />
+                                          <span className="text-[10px] font-bold text-slate-200">
+                                            {arch}
+                                          </span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => setSelectedMissingSca(null)}
+                                          className="text-slate-500 hover:text-slate-300 text-[10px] font-bold cursor-pointer"
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                      <p className="text-[9px] text-slate-400 font-normal leading-tight">
+                                        Remove this missing codebase finding from scan analysis and review comments?
+                                      </p>
+                                      <div className="flex items-center justify-end gap-1.5 pt-0.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => setSelectedMissingSca(null)}
+                                          className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-bold cursor-pointer transition-colors"
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          id={`confirm-remove-sca-${arch.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
+                                          type="button"
+                                          onClick={() => handleRemoveMissingSca(arch)}
+                                          className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white text-[9px] font-black uppercase flex items-center gap-1 cursor-pointer transition-all shadow-md"
+                                        >
+                                          <span>✕</span>
+                                          <span>Remove</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Excluded / Removed findings indicator with restore action */}
+                      {removedMissingSca.length > 0 && (
+                        <div className="flex items-center justify-between text-[9px] text-slate-500 pt-0.5 flex-wrap gap-1">
+                          <span className="truncate max-w-[170px]" title={`Excluded: ${removedMissingSca.join(", ")}`}>
+                            Excluded: <span className="text-slate-400 line-through font-mono">{removedMissingSca.join(", ")}</span>
+                          </span>
+                          <button
+                            id="btn-restore-sca-missing"
+                            type="button"
+                            onClick={() => handleRestoreMissingSca()}
+                            className="text-[9px] font-bold text-emerald-400 hover:text-emerald-300 underline shrink-0 cursor-pointer ml-auto"
+                            title="Restore all removed SCA missing findings"
+                          >
+                            Restore
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Backdrop for closing popover when clicking outside */}
+                      {selectedMissingSca && (
+                        <div
+                          className="fixed inset-0 z-40 bg-transparent"
+                          onClick={() => setSelectedMissingSca(null)}
+                        />
+                      )}
                     </div>
                     <div className="flex justify-between items-center py-1 gap-2 flex-wrap">
                       <span className="text-[10px] text-slate-500 uppercase font-black shrink-0">
@@ -3477,88 +3848,414 @@ export default function App() {
 
                     {/* Minified Files Status */}
                     {(activeOverview as any).scanType !== "checkmarx" && (
-                    <div id="scan-analysis-minified" className="flex justify-between items-center py-1 border-t border-slate-800/50 gap-2 flex-wrap relative group">
-                      <span className="text-[10px] text-slate-500 uppercase font-black shrink-0">
-                        MINIFIED FILES
-                      </span>
-                      <div className="flex items-center gap-1.5 cursor-pointer leading-none">
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            ((activeOverview as any).minifedFiles || []).length === 0
-                              ? "bg-emerald-500 shadow-[0_0_8px_#10b981]"
-                              : "bg-red-500 shadow-[0_0_8px_#ef4444] animate-pulse"
-                          }`}
-                        />
-                        <span
-                          className={`text-[10px] font-black uppercase ${
-                            ((activeOverview as any).minifedFiles || []).length === 0
-                              ? "text-emerald-400"
-                              : "text-red-400"
-                          }`}
-                        >
-                          {((activeOverview as any).minifedFiles || []).length === 0
-                            ? "None"
-                            : `${((activeOverview as any).minifedFiles || []).length} Found`}
+                    <div id="scan-analysis-minified" className="flex flex-col py-1 border-t border-slate-800/50 gap-1 relative">
+                      <div className="flex justify-between items-center gap-2 flex-wrap relative">
+                        <span className="text-[10px] text-slate-500 uppercase font-black shrink-0">
+                          MINIFIED FILES
                         </span>
-                      </div>
-                      {((activeOverview as any).minifedFiles || []).length > 0 && (
-                        <div id="scan-analysis-minified-tooltip" className="absolute right-0 bottom-full mb-1.5 z-50 hidden group-hover:block w-72 bg-slate-950 border border-slate-800 rounded-lg p-2.5 shadow-2xl transition-all duration-150">
-                          <div className="text-[9px] uppercase font-black text-red-400 mb-1 border-b border-slate-800/60 pb-0.5 font-mono">
-                            Minified Files ({((activeOverview as any).minifedFiles || []).length})
+                        {activeMinifiedFiles.length === 0 ? (
+                          <div className="flex items-center gap-1.5 leading-none">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
+                            <span className="text-[10px] font-black uppercase text-emerald-400 font-mono">
+                              None
+                            </span>
                           </div>
-                          <ul className="text-[8px] font-mono text-slate-300 space-y-1 max-h-36 overflow-y-auto scrollbar-thin">
-                            {((activeOverview as any).minifedFiles || []).map((file: string, idx: number) => (
-                              <li key={idx} className="flex items-start gap-1">
-                                <span className="text-red-400 select-none shrink-0">•</span>
-                                <span className="break-all">{file}</span>
-                              </li>
-                            ))}
+                        ) : (
+                          <button
+                            id="btn-toggle-minified-list"
+                            type="button"
+                            onClick={() => setIsMinifiedOpen((prev) => !prev)}
+                            className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-950/40 border border-red-500/30 hover:border-red-500/60 hover:bg-red-900/30 transition-all cursor-pointer leading-none"
+                            title="Click to view and remove minified files"
+                          >
+                            <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444] animate-pulse" />
+                            <span className="text-[10px] font-black uppercase text-red-400 font-mono">
+                              {activeMinifiedFiles.length} Found
+                            </span>
+                            <span className="text-[8px] text-slate-400 font-mono ml-0.5">
+                              {isMinifiedOpen ? "▲" : "▼"}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Interactive Popover Card for Minified Files */}
+                      {activeMinifiedFiles.length > 0 && isMinifiedOpen && (
+                        <div
+                          id="scan-analysis-minified-card"
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute right-0 bottom-full mb-1.5 z-50 w-80 bg-slate-950 border border-slate-800 rounded-lg p-2.5 shadow-2xl transition-all duration-150 backdrop-blur-md"
+                        >
+                          <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5 mb-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] uppercase font-black text-red-400 font-mono">
+                                Minified Files ({activeMinifiedFiles.length})
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {activeMinifiedFiles.length > 1 && (
+                                <button
+                                  id="btn-remove-all-minified"
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveAllMinified();
+                                  }}
+                                  className="text-[8px] font-bold uppercase text-red-400 hover:text-red-300 underline cursor-pointer"
+                                  title="Remove all minified file findings from review comments"
+                                >
+                                  Remove All
+                                </button>
+                              )}
+                              <button
+                                id="btn-close-minified-card"
+                                type="button"
+                                onClick={() => {
+                                  setIsMinifiedOpen(false);
+                                  setSelectedMinifiedFile(null);
+                                }}
+                                className="text-slate-500 hover:text-slate-300 text-[10px] font-bold cursor-pointer"
+                                title="Close"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="text-[8px] text-slate-400 font-normal mb-1.5">
+                            Click to select &amp; remove, or double-click to display cross sign (✕).
+                          </div>
+
+                          <ul className="text-[8px] font-mono space-y-1 max-h-40 overflow-y-auto scrollbar-thin">
+                            {activeMinifiedFiles.map((file: string, idx: number) => {
+                              const isSelected = selectedMinifiedFile === file;
+                              const isCrossVisible = showCrossMinified.has(file) || isSelected;
+                              const cleanId = `minified-item-${idx}`;
+                              return (
+                                <li
+                                  key={file}
+                                  id={cleanId}
+                                  onClick={() => {
+                                    setSelectedMinifiedFile((prev) => (prev === file ? null : file));
+                                    setShowCrossMinified((prev) => new Set(prev).add(file));
+                                  }}
+                                  onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowCrossMinified((prev) => new Set(prev).add(file));
+                                    setSelectedMinifiedFile(file);
+                                  }}
+                                  className={`group/item flex items-center justify-between gap-1.5 p-1 rounded transition-all cursor-pointer select-none ${
+                                    isSelected
+                                      ? "bg-red-500/20 border border-red-500/60 ring-1 ring-red-500/40 text-red-200"
+                                      : "hover:bg-slate-900 border border-transparent hover:border-slate-800 text-slate-300"
+                                  }`}
+                                  title="Click for remove option, or double-click to display cross sign (✕)"
+                                >
+                                  <div className="flex items-start gap-1 min-w-0 flex-1">
+                                    <span className="text-amber-400 select-none shrink-0 text-[10px] leading-tight">•</span>
+                                    <span className="break-all leading-tight">{file}</span>
+                                  </div>
+
+                                  {/* Cross sign button */}
+                                  <button
+                                    id={`btn-remove-minified-${idx}`}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveMinifiedFile(file);
+                                    }}
+                                    className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 transition-all cursor-pointer ${
+                                      isCrossVisible
+                                        ? "bg-red-500/50 hover:bg-red-600 text-white opacity-100 scale-100"
+                                        : "opacity-0 group-hover/item:opacity-100 bg-red-500/30 hover:bg-red-600 text-white"
+                                    }`}
+                                    title={`Remove ${file} from minified files finding`}
+                                  >
+                                    ✕
+                                  </button>
+                                </li>
+                              );
+                            })}
                           </ul>
+
+                          {/* Selected item confirmation popover */}
+                          {selectedMinifiedFile && (
+                            <div className="mt-2 p-2 bg-slate-900 border border-red-500/40 rounded flex flex-col gap-1.5 animate-fadeIn">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9px] font-bold text-red-300">
+                                  Remove Minified Finding?
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedMinifiedFile(null)}
+                                  className="text-[9px] text-slate-400 hover:text-slate-200 cursor-pointer"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                              <p className="text-[8px] text-slate-400 font-mono break-all leading-tight">
+                                {selectedMinifiedFile}
+                              </p>
+                              <div className="flex items-center justify-end gap-1.5 pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedMinifiedFile(null)}
+                                  className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[8px] font-bold cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  id="confirm-remove-minified-btn"
+                                  type="button"
+                                  onClick={() => handleRemoveMinifiedFile(selectedMinifiedFile)}
+                                  className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white text-[8px] font-black uppercase flex items-center gap-1 cursor-pointer shadow-md"
+                                >
+                                  <span>✕</span>
+                                  <span>Remove</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
+                      )}
+
+                      {/* Excluded minified files row with restore button */}
+                      {removedMinifiedFiles.length > 0 && (
+                        <div className="flex items-center justify-between text-[9px] text-slate-500 pt-0.5 flex-wrap gap-1">
+                          <span
+                            className="truncate max-w-[170px]"
+                            title={`Excluded: ${removedMinifiedFiles.join(", ")}`}
+                          >
+                            Excluded: <span className="text-slate-400 line-through font-mono">{removedMinifiedFiles.length} file{removedMinifiedFiles.length > 1 ? "s" : ""}</span>
+                          </span>
+                          <button
+                            id="btn-restore-minified"
+                            type="button"
+                            onClick={() => handleRestoreMinifiedFiles()}
+                            className="text-[9px] font-bold text-emerald-400 hover:text-emerald-300 underline shrink-0 cursor-pointer ml-auto"
+                            title="Restore all removed minified files"
+                          >
+                            Restore
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Backdrop for closing minified card */}
+                      {isMinifiedOpen && (
+                        <div
+                          className="fixed inset-0 z-40 bg-transparent"
+                          onClick={() => {
+                            setIsMinifiedOpen(false);
+                            setSelectedMinifiedFile(null);
+                          }}
+                        />
                       )}
                     </div>
                     )}
 
                     {/* Precompile Status */}
                     {(activeOverview as any).scanType !== "checkmarx" && (
-                    <div id="scan-analysis-precompile" className="flex justify-between items-center py-1 border-t border-slate-800/50 gap-2 flex-wrap relative group">
-                      <span className="text-[10px] text-slate-500 uppercase font-black shrink-0">
-                        PRECOMPILE
-                      </span>
-                      <div className="flex items-center gap-1.5 cursor-pointer leading-none">
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            ((activeOverview as any).noPrecompile || []).length === 0
-                              ? "bg-emerald-500 shadow-[0_0_8px_#10b981]"
-                              : "bg-red-500 shadow-[0_0_8px_#ef4444] animate-pulse"
-                          }`}
-                        />
-                        <span
-                          className={`text-[10px] font-black uppercase ${
-                            ((activeOverview as any).noPrecompile || []).length === 0
-                              ? "text-emerald-400"
-                              : "text-red-400"
-                          }`}
-                        >
-                          {((activeOverview as any).noPrecompile || []).length === 0
-                            ? "None"
-                            : `${((activeOverview as any).noPrecompile || []).length} Missing`}
+                    <div id="scan-analysis-precompile" className="flex flex-col py-1 border-t border-slate-800/50 gap-1 relative">
+                      <div className="flex justify-between items-center gap-2 flex-wrap relative">
+                        <span className="text-[10px] text-slate-500 uppercase font-black shrink-0">
+                          PRECOMPILE
                         </span>
-                      </div>
-                      {((activeOverview as any).noPrecompile || []).length > 0 && (
-                        <div id="scan-analysis-precompile-tooltip" className="absolute right-0 bottom-full mb-1.5 z-50 hidden group-hover:block w-72 bg-slate-950 border border-slate-800 rounded-lg p-2.5 shadow-2xl transition-all duration-150">
-                          <div className="text-[9px] uppercase font-black text-red-400 mb-1 border-b border-slate-800/60 pb-0.5 font-mono">
-                            Unprecompiled Modules ({((activeOverview as any).noPrecompile || []).length})
+                        {activeNoPrecompile.length === 0 ? (
+                          <div className="flex items-center gap-1.5 leading-none">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
+                            <span className="text-[10px] font-black uppercase text-emerald-400 font-mono">
+                              None
+                            </span>
                           </div>
-                          <ul className="text-[8px] font-mono text-slate-300 space-y-1 max-h-36 overflow-y-auto scrollbar-thin">
-                            {((activeOverview as any).noPrecompile || []).map((file: string, idx: number) => (
-                              <li key={idx} className="flex items-start gap-1">
-                                <span className="text-red-400 select-none shrink-0">•</span>
-                                <span className="break-all">{file}</span>
-                              </li>
-                            ))}
+                        ) : (
+                          <button
+                            id="btn-toggle-precompile-list"
+                            type="button"
+                            onClick={() => setIsPrecompileOpen((prev) => !prev)}
+                            className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-950/40 border border-red-500/30 hover:border-red-500/60 hover:bg-red-900/30 transition-all cursor-pointer leading-none"
+                            title="Click to view and remove unprecompiled modules"
+                          >
+                            <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444] animate-pulse" />
+                            <span className="text-[10px] font-black uppercase text-red-400 font-mono">
+                              {activeNoPrecompile.length} Missing
+                            </span>
+                            <span className="text-[8px] text-slate-400 font-mono ml-0.5">
+                              {isPrecompileOpen ? "▲" : "▼"}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Interactive Popover Card for Precompile Modules */}
+                      {activeNoPrecompile.length > 0 && isPrecompileOpen && (
+                        <div
+                          id="scan-analysis-precompile-card"
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute right-0 bottom-full mb-1.5 z-50 w-80 bg-slate-950 border border-slate-800 rounded-lg p-2.5 shadow-2xl transition-all duration-150 backdrop-blur-md"
+                        >
+                          <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5 mb-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] uppercase font-black text-red-400 font-mono">
+                                Unprecompiled Modules ({activeNoPrecompile.length})
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {activeNoPrecompile.length > 1 && (
+                                <button
+                                  id="btn-remove-all-precompile"
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveAllPrecompile();
+                                  }}
+                                  className="text-[8px] font-bold uppercase text-red-400 hover:text-red-300 underline cursor-pointer"
+                                  title="Remove all unprecompiled module findings from review comments"
+                                >
+                                  Remove All
+                                </button>
+                              )}
+                              <button
+                                id="btn-close-precompile-card"
+                                type="button"
+                                onClick={() => {
+                                  setIsPrecompileOpen(false);
+                                  setSelectedNoPrecompile(null);
+                                }}
+                                className="text-slate-500 hover:text-slate-300 text-[10px] font-bold cursor-pointer"
+                                title="Close"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="text-[8px] text-slate-400 font-normal mb-1.5">
+                            Click to select &amp; remove, or double-click to display cross sign (✕).
+                          </div>
+
+                          <ul className="text-[8px] font-mono space-y-1 max-h-40 overflow-y-auto scrollbar-thin">
+                            {activeNoPrecompile.map((file: string, idx: number) => {
+                              const isSelected = selectedNoPrecompile === file;
+                              const isCrossVisible = showCrossPrecompile.has(file) || isSelected;
+                              const cleanId = `precompile-item-${idx}`;
+                              return (
+                                <li
+                                  key={file}
+                                  id={cleanId}
+                                  onClick={() => {
+                                    setSelectedNoPrecompile((prev) => (prev === file ? null : file));
+                                    setShowCrossPrecompile((prev) => new Set(prev).add(file));
+                                  }}
+                                  onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowCrossPrecompile((prev) => new Set(prev).add(file));
+                                    setSelectedNoPrecompile(file);
+                                  }}
+                                  className={`group/item flex items-center justify-between gap-1.5 p-1 rounded transition-all cursor-pointer select-none ${
+                                    isSelected
+                                      ? "bg-red-500/20 border border-red-500/60 ring-1 ring-red-500/40 text-red-200"
+                                      : "hover:bg-slate-900 border border-transparent hover:border-slate-800 text-slate-300"
+                                  }`}
+                                  title="Click for remove option, or double-click to display cross sign (✕)"
+                                >
+                                  <div className="flex items-start gap-1 min-w-0 flex-1">
+                                    <span className="text-indigo-400 select-none shrink-0 text-[10px] leading-tight">•</span>
+                                    <span className="break-all leading-tight">{file}</span>
+                                  </div>
+
+                                  {/* Cross sign button */}
+                                  <button
+                                    id={`btn-remove-precompile-${idx}`}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveNoPrecompile(file);
+                                    }}
+                                    className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 transition-all cursor-pointer ${
+                                      isCrossVisible
+                                        ? "bg-red-500/50 hover:bg-red-600 text-white opacity-100 scale-100"
+                                        : "opacity-0 group-hover/item:opacity-100 bg-red-500/30 hover:bg-red-600 text-white"
+                                    }`}
+                                    title={`Remove ${file} from unprecompiled modules finding`}
+                                  >
+                                    ✕
+                                  </button>
+                                </li>
+                              );
+                            })}
                           </ul>
+
+                          {/* Selected item confirmation popover */}
+                          {selectedNoPrecompile && (
+                            <div className="mt-2 p-2 bg-slate-900 border border-red-500/40 rounded flex flex-col gap-1.5 animate-fadeIn">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9px] font-bold text-red-300">
+                                  Remove Precompile Finding?
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedNoPrecompile(null)}
+                                  className="text-[9px] text-slate-400 hover:text-slate-200 cursor-pointer"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                              <p className="text-[8px] text-slate-400 font-mono break-all leading-tight">
+                                {selectedNoPrecompile}
+                              </p>
+                              <div className="flex items-center justify-end gap-1.5 pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedNoPrecompile(null)}
+                                  className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[8px] font-bold cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  id="confirm-remove-precompile-btn"
+                                  type="button"
+                                  onClick={() => handleRemoveNoPrecompile(selectedNoPrecompile)}
+                                  className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white text-[8px] font-black uppercase flex items-center gap-1 cursor-pointer shadow-md"
+                                >
+                                  <span>✕</span>
+                                  <span>Remove</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
+                      )}
+
+                      {/* Excluded precompile files row with restore button */}
+                      {removedNoPrecompile.length > 0 && (
+                        <div className="flex items-center justify-between text-[9px] text-slate-500 pt-0.5 flex-wrap gap-1">
+                          <span
+                            className="truncate max-w-[170px]"
+                            title={`Excluded: ${removedNoPrecompile.join(", ")}`}
+                          >
+                            Excluded: <span className="text-slate-400 line-through font-mono">{removedNoPrecompile.length} module{removedNoPrecompile.length > 1 ? "s" : ""}</span>
+                          </span>
+                          <button
+                            id="btn-restore-precompile"
+                            type="button"
+                            onClick={() => handleRestoreNoPrecompile()}
+                            className="text-[9px] font-bold text-emerald-400 hover:text-emerald-300 underline shrink-0 cursor-pointer ml-auto"
+                            title="Restore all removed precompile findings"
+                          >
+                            Restore
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Backdrop for closing precompile card */}
+                      {isPrecompileOpen && (
+                        <div
+                          className="fixed inset-0 z-40 bg-transparent"
+                          onClick={() => {
+                            setIsPrecompileOpen(false);
+                            setSelectedNoPrecompile(null);
+                          }}
+                        />
                       )}
                     </div>
                     )}
@@ -3861,6 +4558,9 @@ export default function App() {
                       scaSafeVersionEnabled={scaSafeVersionEnabled}
                       aggregatedData={aggregatedData}
                       selectedTools={selectedTools}
+                      removedMissingSca={removedMissingSca}
+                      removedNoPrecompile={removedNoPrecompile}
+                      removedMinifiedFiles={removedMinifiedFiles}
                     />
                   ) : activeTab === "DevDeps" ? (
                     <div className="p-6 flex flex-col gap-4 min-h-0 flex-1">

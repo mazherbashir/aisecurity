@@ -17,7 +17,10 @@ export const mockOverview = {
   "packagingAnomalies": [],
   "unselectedModules": ["FusionCommonLib.dll"],
   "gracePeriod": "veryhigh/high:60 , Medium:90 , Low:180",
-  "minifedFiles": [],
+  "minifedFiles": [
+    "assets/js/bundle.min.js",
+    "vendor/libs/jquery.min.js"
+  ],
   "noPrecompile": [
     "Pwc.Cde.Junction.Core.Benchmarking.Api.dll",
     "PwC.Cde.Junction.Core.Grunt.Library.Api.dll",
@@ -58,7 +61,8 @@ export const mockScaSummary = {
     "Very High": 0,
     "High": 0,
     "Medium": 0,
-    "Low": 1
+    "Low": 1,
+    "Information": 0
   },
   totalPackages: 707,
   totalVulnerablePackages: 1

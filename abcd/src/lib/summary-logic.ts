@@ -5,6 +5,7 @@ export function isSameSeverity(sev1: string, sev2: string): boolean {
   const s1 = sev1.toLowerCase().replace(/\s+/g, "");
   const s2 = sev2.toLowerCase().replace(/\s+/g, "");
   if ((s1 === "critical" || s1 === "veryhigh") && (s2 === "critical" || s2 === "veryhigh")) return true;
+  if ((s1 === "info" || s1 === "information") && (s2 === "info" || s2 === "information")) return true;
   return s1 === s2;
 }
 
@@ -20,11 +21,13 @@ export function isSeverityMatching(gSev: string, detailSevCounts: string): boole
   const isRHigh = rSev === "high";
   const isRMedium = rSev === "medium";
   const isRLow = rSev === "low";
+  const isRInfo = rSev === "info" || rSev === "information";
   
   if (isRVeryHigh && (dSev.includes("critical") || dSev.includes("very high") || dSev.includes("veryhigh"))) return true;
   if (isRHigh && dSev.includes("high")) return true;
   if (isRMedium && dSev.includes("medium")) return true;
   if (isRLow && dSev.includes("low")) return true;
+  if (isRInfo && (dSev.includes("info") || dSev.includes("information"))) return true;
   
   // Fallback: check raw inclusion
   return dSev.includes(rSev);
@@ -98,6 +101,9 @@ export interface SummaryInput {
   scaSafeVersionEnabled?: boolean;
   selectedTools?: string[];
   scaComponents?: any[];
+  removedMissingSca?: string[];
+  removedNoPrecompile?: string[];
+  removedMinifiedFiles?: string[];
 }
 
 export function generateReviewSummary(input: SummaryInput) {
@@ -110,7 +116,10 @@ export function generateReviewSummary(input: SummaryInput) {
     scaDetails,
     scaSafeVersionEnabled = false,
     selectedTools,
-    scaComponents
+    scaComponents,
+    removedMissingSca = [],
+    removedNoPrecompile = [],
+    removedMinifiedFiles = [],
   } = input;
 
   const isCheckmarx = !!(selectedTools?.includes("Checkmarx") || overview?.scanType === "checkmarx");
@@ -314,7 +323,16 @@ export function generateReviewSummary(input: SummaryInput) {
       }
     });
 
+    const removedSet = new Set(
+      (removedMissingSca || []).map((r: string) =>
+        String(r).trim().toUpperCase(),
+      ),
+    );
+
     overview.architectures.forEach((arch: string) => {
+      if (removedSet.has(String(arch).trim().toUpperCase())) {
+        return;
+      }
       if (!scaEcosystemsArray.includes(arch.toUpperCase())) {
         missingScaMessages += StaticContent.missingScaMsg(arch);
       }
@@ -328,11 +346,12 @@ export function generateReviewSummary(input: SummaryInput) {
     const totalVulnerabilities = backendScaSummary?.vulnerabilities || 0;
     const totalVulnerablePackages = backendScaSummary?.totalVulnerablePackages || 0;
 
-    const parsedOriginalBreakdown: Record<string, number> = { "Very High": 0, High: 0, Medium: 0, Low: 0 };
+    const parsedOriginalBreakdown: Record<string, number> = { "Very High": 0, High: 0, Medium: 0, Low: 0, Information: 0 };
     if (backendScaSummary?.breakdown) {
       Object.entries(backendScaSummary.breakdown).forEach(([sev, val]: [string, any]) => {
         let normSev = sev;
         if (sev === "VeryHigh" || sev === "Critical") normSev = "Very High";
+        if (sev === "Information" || sev === "Info") normSev = "Information";
         if (parsedOriginalBreakdown[normSev] !== undefined) {
           parsedOriginalBreakdown[normSev] = typeof val === "number" ? val : (val?.total || 0);
         }
@@ -349,7 +368,7 @@ export function generateReviewSummary(input: SummaryInput) {
 
     let unapprovedCvesInAll = 0;
     let unapprovedPkgsInAll = 0;
-    const dynamicBreakdown: Record<string, number> = { "Very High": 0, High: 0, Medium: 0, Low: 0 };
+    const dynamicBreakdown: Record<string, number> = { "Very High": 0, High: 0, Medium: 0, Low: 0, Information: 0 };
 
     if (scaDetails && scaDetails.length > 0) {
       scaDetails.forEach((detail: any) => {
@@ -362,10 +381,10 @@ export function generateReviewSummary(input: SummaryInput) {
         let unapprovedCvesInPkg = 0;
 
         // Parse severityCounts for this package: e.g. "High: 4 Critical: 2"
-        const parsedCounts: Record<string, number> = { "Very High": 0, High: 0, Medium: 0, Low: 0 };
+        const parsedCounts: Record<string, number> = { "Very High": 0, High: 0, Medium: 0, Low: 0, Information: 0 };
         const severityMatches = Array.from(
           (detail.severityCounts || "").matchAll(
-            /(Very\s*High|VeryHigh|Critical|High|Medium|Low):\s*(\d+)/gi
+            /(Very\s*High|VeryHigh|Critical|High|Medium|Low|Information|Info):\s*(\d+)/gi
           )
         );
         severityMatches.forEach((match) => {
@@ -378,6 +397,8 @@ export function generateReviewSummary(input: SummaryInput) {
             sName = "Medium";
           } else if (/^Low$/i.test(sName)) {
             sName = "Low";
+          } else if (/^Info$/i.test(sName) || /^Information$/i.test(sName)) {
+            sName = "Information";
           }
           const count = parseInt(match[2], 10) || 0;
           if (parsedCounts[sName] !== undefined) {
@@ -466,7 +487,7 @@ export function generateReviewSummary(input: SummaryInput) {
               }
 
               if (!foundInGroup) {
-                for (const sev of ["Very High", "High", "Medium", "Low"]) {
+                for (const sev of ["Very High", "High", "Medium", "Low", "Information"]) {
                   if (parsedCounts[sev] > 0) {
                     cveSeverity = sev;
                     parsedCounts[sev]--;
@@ -550,6 +571,7 @@ export function generateReviewSummary(input: SummaryInput) {
         class: "medium",
       },
       { name: "Low", count: remainingBreakdown["Low"] || 0, class: "low" },
+      { name: "Info", count: remainingBreakdown["Information"] || 0, class: "info" },
     ];
     const activeSeverities = severities.filter((s) => s.count > 0);
     const vulnerablePackages = remainingVulnerablePackages;
@@ -618,6 +640,7 @@ Code Review Services recommends upgrading the third-party component with a vulne
       if (s.includes("high")) return 2;
       if (s.includes("medium")) return 3;
       if (s.includes("low")) return 4;
+      if (s.includes("info") || s.includes("information")) return 5;
       return 99;
     };
 
@@ -632,16 +655,25 @@ Code Review Services recommends upgrading the third-party component with a vulne
         let countsStr = detail.severityCounts || "";
         const severityMatches = Array.from(
           countsStr.matchAll(
-            /(Very High|VeryHigh|Critical|High|Medium|Low):\s*(\d+)/g,
+            /(Very High|VeryHigh|Critical|High|Medium|Low|Information|Info):\s*(\d+)/gi,
           ),
         );
         let parsedSeverities: { sev: string; count: string }[] = [];
 
         if (severityMatches.length > 0) {
-          parsedSeverities = severityMatches.map((m) => ({
-            sev: (m[1] === "VeryHigh" || m[1] === "Critical") ? "Very High" : m[1],
-            count: m[2],
-          }));
+          parsedSeverities = severityMatches.map((m) => {
+            const raw = m[1].toLowerCase().replace(/\s+/g, "");
+            let sev = "Medium";
+            if (raw === "veryhigh" || raw === "critical") sev = "Very High";
+            else if (raw === "high") sev = "High";
+            else if (raw === "medium") sev = "Medium";
+            else if (raw === "low") sev = "Low";
+            else if (raw === "information" || raw === "info") sev = "Information";
+            return {
+              sev,
+              count: m[2],
+            };
+          });
         } else {
           const parts = countsStr
             .split(",")
@@ -660,14 +692,16 @@ Code Review Services recommends upgrading the third-party component with a vulne
           High: 2,
           Medium: 3,
           Low: 4,
+          Information: 5,
+          Info: 5,
         };
 
-        let totalCounts: Record<string, number> = { "Very High": 0, "High": 0, "Medium": 0, "Low": 0 };
+        let totalCounts: Record<string, number> = { "Very High": 0, "High": 0, "Medium": 0, "Low": 0, "Information": 0 };
         parsedSeverities.forEach((p) => {
           let s = p.sev.trim();
           if (s === "VeryHigh" || s === "Critical") s = "Very High";
-          if (s === "Info" || s === "Information") s = "Low";
-          if (s !== "Very High" && s !== "High" && s !== "Medium" && s !== "Low") return;
+          if (s === "Info" || s === "Information") s = "Information";
+          if (s !== "Very High" && s !== "High" && s !== "Medium" && s !== "Low" && s !== "Information") return;
           totalCounts[s] = (totalCounts[s] || 0) + (parseInt(p.count, 10) || 0);
         });
 
@@ -688,6 +722,9 @@ Code Review Services recommends upgrading the third-party component with a vulne
                   displayedSev = "Very High";
                   sevClass = "veryhigh";
                 }
+              } else if (sev === "Information" || sev === "Info") {
+                displayedSev = "Info";
+                sevClass = "info";
               }
               return `<span class="crs-rounded minwidth ${sevClass}">${displayedSev}</span>: ${c}`;
             });
@@ -749,7 +786,7 @@ Code Review Services recommends upgrading the third-party component with a vulne
             }
 
             if (!foundInGroup) {
-              for (const sev of ["Very High", "High", "Medium", "Low"]) {
+              for (const sev of ["Very High", "High", "Medium", "Low", "Information"]) {
                 if (fallbackCounts[sev] > 0) {
                   cveSeverity = sev;
                   fallbackCounts[sev]--;
@@ -824,7 +861,7 @@ Code Review Services recommends upgrading the third-party component with a vulne
         itemsWithStatus.forEach((item) => {
           const s = item.status;
           if (!statusGroups[s]) {
-            statusGroups[s] = { cves: [], counts: { "Very High": 0, "High": 0, "Medium": 0, "Low": 0 } };
+            statusGroups[s] = { cves: [], counts: { "Very High": 0, "High": 0, "Medium": 0, "Low": 0, "Information": 0 } };
           }
           if (item.cve) {
             statusGroups[s].cves.push(item.cve);
@@ -907,5 +944,39 @@ ${scaTableRows}
     }
   }
 
-  return { sastSection, scaSection, missingScaMessages };
+  let noPrecompileSection = "";
+  const rawNoPrecompile = overview?.noPrecompile || [];
+  if (Array.isArray(rawNoPrecompile) && rawNoPrecompile.length > 0) {
+    const activeNoPrecompile = rawNoPrecompile.filter(
+      (item: string) =>
+        !removedNoPrecompile.some(
+          (r) => r.toLowerCase().trim() === item.toLowerCase().trim()
+        )
+    );
+    if (activeNoPrecompile.length > 0) {
+      noPrecompileSection = StaticContent.noPrecompileMsg();
+    }
+  }
+
+  let minifiedFilesSection = "";
+  const rawMinified = overview?.minifedFiles || [];
+  if (Array.isArray(rawMinified) && rawMinified.length > 0) {
+    const activeMinified = rawMinified.filter(
+      (item: string) =>
+        !removedMinifiedFiles.some(
+          (r) => r.toLowerCase().trim() === item.toLowerCase().trim()
+        )
+    );
+    if (activeMinified.length > 0) {
+      minifiedFilesSection = StaticContent.minifiedFilesMsg(activeMinified);
+    }
+  }
+
+  return {
+    sastSection,
+    scaSection,
+    missingScaMessages,
+    noPrecompileSection,
+    minifiedFilesSection,
+  };
 }

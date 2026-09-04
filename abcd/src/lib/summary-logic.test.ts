@@ -452,6 +452,147 @@ describe('CVE-2026-71497 reflection in review summary', () => {
     const npmFinding = { packageName: 'express', location: 'node_modules/express' };
     expect(isPackageMatchingFinding(npmFinding, npmDetail)).toBe(true);
   });
+
+  it('should support Information severity in SCA summary breakdown and table rows', () => {
+    const infoInput = {
+      ...baseScanInput,
+      backendScaSummary: {
+        vulnerabilities: 1,
+        totalVulnerablePackages: 1,
+        totalPackages: 5,
+        breakdown: {
+          'Information': {
+            total: 1,
+            findings: [
+              { packageName: 'debug-pkg', packageVersion: '1.0.0', count: '1', severity: 'Information' }
+            ]
+          }
+        }
+      },
+      scaDetails: [
+        { packageName: 'debug-pkg', version: '1.0.0', severityCounts: 'Information: 1', cveList: 'CVE-2026-99999' }
+      ],
+      aggregatedData: {
+        sast: [],
+        sca: [
+          {
+            groupId: 'g-info',
+            identifier: 'CVE-2026-99999',
+            severity: 'Information',
+            status: 'approved',
+            records: [
+              {
+                title: 'CVE-2026-99999',
+                location: 'debug-pkg',
+                fileName: 'debug-pkg-1.0.0.jar'
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const result = generateReviewSummary(infoInput as any);
+    expect(result.scaSection).toContain('Info');
+    expect(result.scaSection).toContain('debug-pkg');
+    expect(result.scaSection).toContain('info');
+    expect(result.scaSection).toContain('Approved');
+  });
+
+  const baseMissingInput: any = {
+    backendSastSummary: { vulnerabilities: 0, breakdown: {} },
+    backendScaSummary: { vulnerabilities: 0, totalVulnerablePackages: 0, totalPackages: 0, breakdown: {} },
+    aggregatedData: { sast: [], sca: [] },
+    overview: { architectures: [], scaEcosystems: '' },
+    configNoSca: [],
+    scaDetails: []
+  };
+
+  it('should include missing SCA message when architecture is missing and not removed', () => {
+    const inputWithMissing: any = {
+      ...baseMissingInput,
+      overview: {
+        architectures: ['JavaScript', 'Python', '.NET'],
+        scaEcosystems: '[JavaScript]' // Only JavaScript is present, Python and .NET missing
+      },
+      configNoSca: [],
+      removedMissingSca: []
+    };
+    const result = generateReviewSummary(inputWithMissing);
+    expect(result.missingScaMessages).toContain('Missing Software Composition Analysis for Python');
+    expect(result.missingScaMessages).toContain('Missing Software Composition Analysis for .NET');
+    expect(result.missingScaMessages).not.toContain('Missing Software Composition Analysis for JavaScript');
+  });
+
+  it('should exclude missing SCA message when architecture is in removedMissingSca', () => {
+    const inputWithRemoved: any = {
+      ...baseMissingInput,
+      overview: {
+        architectures: ['JavaScript', 'Python', '.NET'],
+        scaEcosystems: ''
+      },
+      configNoSca: [],
+      removedMissingSca: ['JavaScript', '.NET']
+    };
+    const result = generateReviewSummary(inputWithRemoved);
+    expect(result.missingScaMessages).not.toContain('Missing Software Composition Analysis for JavaScript');
+    expect(result.missingScaMessages).not.toContain('Missing Software Composition Analysis for .NET');
+    expect(result.missingScaMessages).toContain('Missing Software Composition Analysis for Python');
+  });
+
+  it('should include noPrecompileSection when overview has noPrecompile items', () => {
+    const inputWithPrecompile: any = {
+      ...baseMissingInput,
+      overview: {
+        architectures: [],
+        noPrecompile: ['App.Api.dll', 'App.Core.dll'],
+      },
+      removedNoPrecompile: [],
+    };
+    const result = generateReviewSummary(inputWithPrecompile);
+    expect(result.noPrecompileSection).toContain('Missing Precompiled Files');
+  });
+
+  it('should exclude noPrecompileSection when all items are in removedNoPrecompile', () => {
+    const inputWithRemovedPrecompile: any = {
+      ...baseMissingInput,
+      overview: {
+        architectures: [],
+        noPrecompile: ['App.Api.dll', 'App.Core.dll'],
+      },
+      removedNoPrecompile: ['App.Api.dll', 'App.Core.dll'],
+    };
+    const result = generateReviewSummary(inputWithRemovedPrecompile);
+    expect(result.noPrecompileSection).toBe('');
+  });
+
+  it('should include minifiedFilesSection and exclude removed minified files', () => {
+    const inputWithMinified: any = {
+      ...baseMissingInput,
+      overview: {
+        architectures: [],
+        minifedFiles: ['assets/vendor.min.js', 'assets/bundle.min.js'],
+      },
+      removedMinifiedFiles: ['assets/vendor.min.js'],
+    };
+    const result = generateReviewSummary(inputWithMinified);
+    expect(result.minifiedFilesSection).toContain('Minified Files');
+    expect(result.minifiedFilesSection).toContain('assets/bundle.min.js');
+    expect(result.minifiedFilesSection).not.toContain('assets/vendor.min.js');
+  });
+
+  it('should exclude minifiedFilesSection when all minified files are in removedMinifiedFiles', () => {
+    const inputWithAllMinifiedRemoved: any = {
+      ...baseMissingInput,
+      overview: {
+        architectures: [],
+        minifedFiles: ['assets/vendor.min.js', 'assets/bundle.min.js'],
+      },
+      removedMinifiedFiles: ['assets/vendor.min.js', 'assets/bundle.min.js'],
+    };
+    const result = generateReviewSummary(inputWithAllMinifiedRemoved);
+    expect(result.minifiedFilesSection).toBe('');
+  });
 });
 
 

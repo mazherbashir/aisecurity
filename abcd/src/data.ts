@@ -67,6 +67,10 @@ export const sampleReportData = {
       "Low" : {
         "total" : 3,
         "findings" : [ ]
+      },
+      "Information" : {
+        "total" : 0,
+        "findings" : [ ]
       }
     },
     "totalPackages" : 995,
