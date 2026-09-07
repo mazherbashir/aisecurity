@@ -20,6 +20,7 @@ export interface PersistedCommentEntry {
   };
   status?: 'approved' | 'rejected';
   isDevDependency?: boolean;
+  crsComments?: string;
   updatedAt?: number;
 }
 
@@ -34,6 +35,7 @@ const STORAGE_KEYS = {
   CHECKMARX_HISTORY: 'checkmarx_history',
   PREFERRED_AI_PROVIDER: 'preferred_ai_provider',
   HIDE_PROCESSED: 'hide_processed_findings',
+  THEME: 'crs_theme_mode',
 } as const;
 
 const MAX_PROFILES_STORED = 20; // Keep at most 20 recent profiles in local cache
@@ -192,7 +194,7 @@ class SafeStorageManager {
 
       entries.forEach((entry) => {
         if (!entry || !entry.groupId) return;
-        if (entry.aiComment || entry.status || entry.isDevDependency) {
+        if (entry.aiComment || entry.status || entry.isDevDependency || entry.crsComments) {
           const baseGroupId = entry.groupId.split('-IDS-')[0];
           
           // Compact metrics to only essential numbers to save space
@@ -214,6 +216,7 @@ class SafeStorageManager {
             aiMetrics: compactMetrics,
             status: entry.status,
             isDevDependency: entry.isDevDependency,
+            crsComments: entry.crsComments ? entry.crsComments.slice(0, 4000) : undefined,
             updatedAt: now,
           };
 
@@ -419,16 +422,18 @@ class SafeStorageManager {
   }
 
   /**
-   * Safe complete storage reset (preserves user provider preference if requested)
+   * Safe complete storage reset (preserves user provider preference and theme if requested)
    */
   clearAllStorage(preserveSettings = true): void {
     try {
       let aiProvider = 'Azure OpenAI';
       let hideProcessed = false;
+      let theme: 'dark' | 'light' = 'dark';
 
       if (preserveSettings) {
         aiProvider = this.getItem(STORAGE_KEYS.PREFERRED_AI_PROVIDER, 'Azure OpenAI');
         hideProcessed = this.getItem(STORAGE_KEYS.HIDE_PROCESSED, false);
+        theme = this.getItem(STORAGE_KEYS.THEME, 'dark');
       }
 
       if (typeof window !== 'undefined' && window.localStorage) {
@@ -438,10 +443,26 @@ class SafeStorageManager {
       if (preserveSettings) {
         this.setItem(STORAGE_KEYS.PREFERRED_AI_PROVIDER, aiProvider);
         this.setItem(STORAGE_KEYS.HIDE_PROCESSED, hideProcessed);
+        this.setItem(STORAGE_KEYS.THEME, theme);
       }
     } catch (e) {
       console.error('[SafeStorage] Error clearing storage:', e);
     }
+  }
+
+  /**
+   * Get user's preferred theme ('dark' | 'light')
+   */
+  getTheme(defaultTheme: 'dark' | 'light' = 'dark'): 'dark' | 'light' {
+    const val = this.getItem<'dark' | 'light'>(STORAGE_KEYS.THEME, defaultTheme);
+    return val === 'light' ? 'light' : 'dark';
+  }
+
+  /**
+   * Persist user's theme selection to memory/storage
+   */
+  setTheme(theme: 'dark' | 'light'): boolean {
+    return this.setItem(STORAGE_KEYS.THEME, theme === 'light' ? 'light' : 'dark');
   }
 
   /**

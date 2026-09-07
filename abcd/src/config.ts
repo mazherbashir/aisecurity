@@ -8,6 +8,7 @@ export interface AppConfig {
     checkmarxMitigation: string;
     aiAnalyze: string;
     heartbeat: string;
+    mitigationPresets: string;
   };
 }
 
@@ -19,8 +20,9 @@ let config: AppConfig = {
     getFinalReport: '/api/getfinalreport',
     veracodeMitigation: '/api/veracode/mitigation',
     checkmarxMitigation: '/api/checkmarx/mitigation',
-    aiAnalyze: '/api/ai',
-    heartbeat: '/api/heartbeat'
+    aiAnalyze: '/api/ai/analyze',
+    heartbeat: '/api/heartbeat',
+    mitigationPresets: '/api/mitigation-presets'
   }
 };
 

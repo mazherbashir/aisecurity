@@ -29,13 +29,33 @@ export async function getAIResponseForComment(
     if (flawId) bodyArgs.flawId = flawId;
     if (flawSummary) bodyArgs.flawSummary = flawSummary;
 
-    const response = await fetch(getEndpoint('aiAnalyze'), {
+    let endpoint = getEndpoint('aiAnalyze');
+    let response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(bodyArgs),
     });
+
+    // If configured endpoint returned 404, retry with alternative known path
+    if (response.status === 404) {
+      const fallbackEndpoint = endpoint.endsWith('/analyze') ? endpoint.replace(/\/analyze$/, '') : `${endpoint}/analyze`;
+      try {
+        const altResponse = await fetch(fallbackEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(bodyArgs),
+        });
+        if (altResponse.ok || altResponse.status !== 404) {
+          response = altResponse;
+        }
+      } catch (altErr) {
+        // preserve original response
+      }
+    }
 
     const text = await response.text();
     let data;
@@ -49,10 +69,11 @@ export async function getAIResponseForComment(
       throw new Error(`Invalid JSON response: ${text.substring(0, 100)}...`);
     }
 
-    if (!response.ok || data.status !== 'success' && data.status !== 'error') {
-      if (data.status === 'error') {
-         return { result: `AI Error: ${data.message || data.error || 'Unknown error'}` };
-      }
+    if (data.status === 'error') {
+      return { result: `AI Error: ${data.message || data.error || 'Unknown error'}` };
+    }
+
+    if (!response.ok || (data.status && data.status !== 'success')) {
       throw new Error(data.error || `HTTP error! status: ${response.status}`);
     }
 

@@ -52,6 +52,7 @@ export interface AggregatedGroup {
   aiMetrics?: AIMetrics;
   status?: 'approved' | 'rejected';
   isDevDependency?: boolean;
+  crsComments?: string;
 }
 
 export type ToolName = 'Veracode' | 'Checkmarx';

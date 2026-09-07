@@ -1,6 +1,11 @@
 
 import { describe, it, expect } from 'vitest';
-import { updateMitigationProposal, updateBackendSummary, calculateIsScanTooOld } from './state-update-utils';
+import { 
+  updateMitigationProposal, 
+  updateBackendSummary, 
+  calculateIsScanTooOld,
+  createMitigationPayload
+} from './state-update-utils';
 
 describe('state-update-utils', () => {
   describe('updateMitigationProposal', () => {
@@ -68,6 +73,118 @@ describe('state-update-utils', () => {
 
     it('should return false if no scan date provided', () => {
       expect(calculateIsScanTooOld(undefined, 5)).toBe(false);
+    });
+  });
+
+  describe('createMitigationPayload', () => {
+    it('should create Veracode payload without apiDebug when apiDebug is false or omitted', () => {
+      const payload = createMitigationPayload({
+        useCheckmarxApi: false,
+        appId: 'APP-101',
+        buildId: 'BUILD-202',
+        flawIdList: '1,2,3',
+        actionStr: 'accepted',
+        comment: 'Valid control in place',
+        type: 'SAST',
+        severity: 'High',
+        cveId: null,
+        apiDebug: false
+      });
+
+      expect(payload).toEqual({
+        buildId: 'BUILD-202',
+        appId: 'APP-101',
+        flawIdList: '1,2,3',
+        action: 'accepted',
+        comment: 'Valid control in place',
+        cveId: null,
+        type: 'SAST',
+        severity: 'High'
+      });
+      expect(payload.apiDebug).toBeUndefined();
+      expect(JSON.stringify(payload)).not.toContain('apiDebug');
+    });
+
+    it('should add "apiDebug": "debug" when apiDebug is true in Veracode flow', () => {
+      const payload = createMitigationPayload({
+        useCheckmarxApi: false,
+        appId: 'APP-101',
+        buildId: 'BUILD-202',
+        flawIdList: '1,2,3',
+        actionStr: 'accepted',
+        comment: 'Valid control in place',
+        type: 'SAST',
+        severity: 'High',
+        cveId: null,
+        apiDebug: true
+      });
+
+      expect(payload.apiDebug).toBe('debug');
+      expect(JSON.stringify(payload)).toContain('"apiDebug":"debug"');
+      expect(payload.action).toBe('accepted');
+    });
+
+    it('should add "apiDebug": "debug" when apiDebug is true for rejection in Veracode flow', () => {
+      const payload = createMitigationPayload({
+        useCheckmarxApi: false,
+        appId: 'APP-101',
+        buildId: 'BUILD-202',
+        flawIdList: '4,5',
+        actionStr: 'rejected',
+        comment: 'Insufficient evidence',
+        type: 'SCA',
+        severity: 'Critical',
+        cveId: 'CVE-2023-12345',
+        apiDebug: true
+      });
+
+      expect(payload.apiDebug).toBe('debug');
+      expect(payload.action).toBe('rejected');
+      expect(payload.cveId).toBe('CVE-2023-12345');
+      expect(JSON.stringify(payload)).toContain('"apiDebug":"debug"');
+    });
+
+    it('should create Checkmarx payload with "apiDebug": "debug" when apiDebug is true', () => {
+      const payload = createMitigationPayload({
+        useCheckmarxApi: true,
+        appId: 'APP-CX-1',
+        buildId: 'SCAN-CX-99',
+        flawIdList: '101,102',
+        actionStr: 'accepted',
+        comment: 'Sanitized input',
+        type: 'SAST',
+        severity: 'Medium',
+        apiDebug: true
+      });
+
+      expect(payload).toEqual({
+        appId: 'APP-CX-1',
+        scanId: 'SCAN-CX-99',
+        flawIdList: '101,102',
+        action: 'accepted',
+        comment: 'Sanitized input',
+        type: 'SAST',
+        severity: 'Medium',
+        apiDebug: 'debug'
+      });
+      expect(JSON.stringify(payload)).toContain('"apiDebug":"debug"');
+    });
+
+    it('should NOT include apiDebug in Checkmarx payload when apiDebug is false', () => {
+      const payload = createMitigationPayload({
+        useCheckmarxApi: true,
+        appId: 'APP-CX-1',
+        buildId: 'SCAN-CX-99',
+        flawIdList: '101,102',
+        actionStr: 'rejected',
+        comment: 'Issue still present',
+        type: 'SAST',
+        severity: 'Medium',
+        apiDebug: false
+      });
+
+      expect(payload.apiDebug).toBeUndefined();
+      expect(JSON.stringify(payload)).not.toContain('apiDebug');
     });
   });
 });

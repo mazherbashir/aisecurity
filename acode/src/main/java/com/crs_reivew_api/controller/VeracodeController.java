@@ -14,7 +14,7 @@ public class VeracodeController {
         this.veracodeService = veracodeService;
     }
 
-    @GetMapping("/getfinalreport")
+    @GetMapping({"/api/getfinalreport", "/getfinalreport"})
     public com.crs_reivew_api.dto.VeracodeReportDTO getFinalReport(
             @RequestParam(value = "application-name", required = false) String applicationName,
             @RequestParam(value = "app-id", required = false) String appId,
@@ -24,13 +24,13 @@ public class VeracodeController {
         return veracodeService.getFinalReport(applicationName, appId, buildId, includeBuildInfo);
     }
 
-    @GetMapping("/getbuildinfo")
+    @GetMapping({"/api/getbuildinfo", "/getbuildinfo"})
     public com.crs_reivew_api.model.veracode.BuildInfo getBuildInfo(@RequestParam("build-id") String buildId) {
         System.out.println("Fetching build info for ID: " + buildId);
         return veracodeService.getBuildInfo(buildId);
     }
 
-    @GetMapping(value = "/getsastresults", produces = "application/json")
+    @GetMapping(value = {"/api/getsastresults", "/getsastresults"}, produces = "application/json")
     public String getSastResult(@RequestParam("application-name") String applicationName) {
         System.out.println("Received request for application: " + applicationName);
         String result = veracodeService.getSastResult(applicationName);
@@ -38,13 +38,13 @@ public class VeracodeController {
         return result;
     }
 
-    @GetMapping(value = "/getbuildid", produces = "text/plain")
+    @GetMapping(value = {"/api/getbuildid", "/getbuildid"}, produces = "text/plain")
     public String getBuildId(@RequestParam("app-id") String appId) {
         System.out.println("Received build list request for App ID: " + appId);
         return veracodeService.getBuildId(appId);
     }
 
-    @GetMapping(value = "/getdetailedreport", produces = "application/xml")
+    @GetMapping(value = {"/api/getdetailedreport", "/getdetailedreport"}, produces = "application/xml")
     public String getDetailedReport(@RequestParam("build-id") String buildId) {
         System.out.println("Received detailed report request for Build ID: " + buildId);
         return veracodeService.getDetailedReport(buildId);

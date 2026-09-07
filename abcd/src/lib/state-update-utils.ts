@@ -126,3 +126,45 @@ export function calculateIsScanTooOld(scanDateStr: string | undefined, validityD
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   return diffDays > validityDays;
 }
+
+export interface CreateMitigationPayloadParams {
+  useCheckmarxApi: boolean;
+  appId: string;
+  buildId: string;
+  flawIdList: string;
+  actionStr: string;
+  comment: string;
+  type: string;
+  severity?: string;
+  cveId?: string | null;
+  apiDebug?: boolean;
+}
+
+export function createMitigationPayload(params: CreateMitigationPayloadParams): Record<string, any> {
+  const payload: Record<string, any> = params.useCheckmarxApi
+    ? {
+        appId: params.appId || "",
+        scanId: params.buildId,
+        flawIdList: params.flawIdList,
+        action: params.actionStr,
+        comment: params.comment,
+        type: "SAST",
+        severity: params.severity || "",
+      }
+    : {
+        buildId: params.buildId,
+        appId: params.appId || "",
+        flawIdList: params.flawIdList,
+        action: params.actionStr,
+        comment: params.comment,
+        cveId: params.cveId || null,
+        type: params.type,
+        severity: params.severity || "",
+      };
+
+  if (params.apiDebug) {
+    payload.apiDebug = "debug";
+  }
+
+  return payload;
+}

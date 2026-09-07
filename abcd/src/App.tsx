@@ -31,6 +31,10 @@ import {
   Edit2,
   HelpCircle,
   DollarSign,
+  Undo2,
+  User,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -56,10 +60,11 @@ import { SnowIntakeScreen } from "./components/SnowIntakeScreen";
 import { CWE_BASE_URL } from "./constants";
 import { getEndpoint } from "./config";
 import { extractCveCodes, getCveNvdUrl } from "./lib/cveUtils";
-import { calculateIsScanTooOld, updateBackendSummary, updateMitigationProposal } from "./lib/state-update-utils";
+import { calculateIsScanTooOld, updateBackendSummary, updateMitigationProposal, createMitigationPayload } from "./lib/state-update-utils";
 import { generateReviewSummary, isPackageMatchingFinding } from "./lib/summary-logic";
 import { StaticContent } from "./staticContent";
 import { safeStorage, PersistedCommentEntry } from "./lib/storage";
+import { formatPromptWithCrsComments } from "./lib/crsCommentUtils";
 
 // --- Error Boundary and Debug Logger Support ---
 interface ErrorBoundaryProps {
@@ -317,6 +322,7 @@ function restorePersistedComments(groups: AggregatedGroup[], profileName: string
           aiMetrics: saved.aiMetrics || g.aiMetrics,
           status: saved.status || g.status,
           isDevDependency: saved.isDevDependency || g.isDevDependency,
+          crsComments: saved.crsComments || g.crsComments,
         };
       }
       return g;
@@ -763,34 +769,36 @@ function ReviewTabContent({
       className={`p-4 ${isMaximized ? "fixed inset-0 z-50 bg-slate-950" : "flex-1 min-h-0 min-w-0"} flex flex-col gap-4`}
     >
       <div className="flex justify-between items-center">
-        <h2 className="text-sm font-black uppercase text-slate-400">
+        <h2 className="text-sm font-black uppercase text-slate-400 editor-title">
           Review Comments Editor
         </h2>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           {showSignOffButton ? (
             <button
+              id="btn-sign-off-trigger"
               type="button"
               onClick={() => setIsSignOffModalOpen(true)}
-              className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 transition-all bg-emerald-950/40 hover:bg-emerald-900/50 px-3 py-1.5 rounded-md border border-emerald-800/50"
+              className="flex items-center gap-2 text-white font-black bg-emerald-600 hover:bg-emerald-500 px-3.5 py-1.5 rounded-lg border border-emerald-500 shadow-md shadow-emerald-900/20 text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer signoff-btn"
               title="Sign-off scan"
             >
-              <Check size={14} />
-              <span className="text-[10px] font-bold uppercase">
+              <Check size={15} className="stroke-[2.5]" />
+              <span className="font-black text-xs uppercase tracking-wider">
                 Sign-off
               </span>
             </button>
           ) : (
             <button
+              id="btn-rp-sign-off-trigger"
               type="button"
               onClick={() => {
                 setRpError(null);
                 setIsRpSignOffModalOpen(true);
               }}
-              className="flex items-center gap-2 text-sky-400 hover:text-sky-300 transition-all bg-sky-950/40 hover:bg-sky-900/50 px-3 py-1.5 rounded-md border border-sky-800/50"
+              className="flex items-center gap-2 text-white font-black bg-sky-600 hover:bg-sky-500 px-3.5 py-1.5 rounded-lg border border-sky-500 shadow-md shadow-sky-900/20 text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer rp-signoff-btn"
               title="RP Sign-off scan"
             >
-              <CheckCircle2 size={14} />
-              <span className="text-[10px] font-bold uppercase">
+              <CheckCircle2 size={15} className="stroke-[2.5]" />
+              <span className="font-black text-xs uppercase tracking-wider">
                 RP Sign-off
               </span>
             </button>
@@ -798,35 +806,41 @@ function ReviewTabContent({
 
           {overrideHtml !== null && (
             <button
+              id="btn-reset-sign-off"
               type="button"
               onClick={() => setOverrideHtml(null)}
-              className="flex items-center gap-2 text-rose-400 hover:text-rose-300 transition-all bg-rose-950/40 hover:bg-rose-900/50 px-3 py-1.5 rounded-md border border-rose-800/50"
+              className="flex items-center gap-2 text-white font-black bg-rose-600 hover:bg-rose-500 px-3.5 py-1.5 rounded-lg border border-rose-500 shadow-md shadow-rose-900/20 text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer reset-signoff-btn"
               title="Reset Sign-off"
             >
-              <X size={14} />
-              <span className="text-[10px] font-bold uppercase">
+              <X size={15} className="stroke-[2.5]" />
+              <span className="font-black text-xs uppercase tracking-wider">
                 Reset
               </span>
             </button>
           )}
 
           <button
+            id="btn-copy-raw-html"
             onClick={handleCopy}
-            className="flex items-center gap-2 text-slate-500 hover:text-white transition-all bg-slate-800/50 hover:bg-slate-800 px-3 py-1.5 rounded-md border border-slate-700/50"
+            className={`flex items-center gap-2 font-bold px-3 py-1.5 rounded-lg border text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer copy-html-btn ${
+              copied
+                ? "bg-emerald-600 text-white border-emerald-500"
+                : "bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700/60"
+            }`}
             title="Copy Raw HTML"
           >
             {copied ? (
-              <Check size={14} className="text-emerald-500" />
+              <Check size={15} className="text-white stroke-[2.5]" />
             ) : (
-              <Copy size={14} />
+              <Copy size={15} />
             )}
-            <span className="text-[10px] font-bold uppercase">
+            <span className="text-xs font-bold uppercase tracking-wider">
               {copied ? "Copied!" : "Copy HTML"}
             </span>
           </button>
 
           {/* HTML Snippet Insertion Dropdown */}
-          <div className="flex items-center gap-1.5 bg-slate-900/60 pl-2.5 pr-1.5 py-1 rounded-md border border-slate-800">
+          <div className="flex items-center gap-1.5 bg-slate-900/60 pl-2.5 pr-1.5 py-1 rounded-md border border-slate-800 snippets-toolbar-box">
             <span className="text-[9px] font-black uppercase text-slate-500 whitespace-nowrap tracking-wider">
               Snippets:
             </span>
@@ -851,8 +865,9 @@ function ReviewTabContent({
           </div>
 
           <button
+            id="btn-toggle-maximize-editor"
             onClick={() => setIsMaximized(!isMaximized)}
-            className="text-slate-500 hover:text-white transition-all"
+            className="text-slate-400 hover:text-white transition-all p-1 rounded hover:bg-slate-800/60 editor-maximize-btn cursor-pointer"
             title={isMaximized ? "Minimize" : "Maximize"}
           >
             {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
@@ -874,7 +889,7 @@ function ReviewTabContent({
       {isEditMode ? (
         <textarea
           ref={textareaRef}
-          className="w-full flex-1 p-4 bg-slate-950 text-slate-200 font-mono text-[11px] rounded-lg border border-slate-800 resize-none font-mono"
+          className="review-raw-editor w-full flex-1 p-4 bg-slate-950 text-slate-200 font-mono text-[11px] rounded-xl border border-slate-800 resize-none font-mono shadow-sm"
           value={rawHtml}
           onChange={(e) => {
             setRawHtml(e.target.value);
@@ -885,7 +900,7 @@ function ReviewTabContent({
         />
       ) : (
         <div
-          className="w-full flex-1 p-4 bg-white text-black rounded-lg overflow-auto"
+          className="review-document-preview w-full flex-1 p-6 bg-white text-slate-900 rounded-xl overflow-auto border border-slate-200 shadow-sm leading-relaxed"
           dangerouslySetInnerHTML={{ __html: rawHtml }}
         />
       )}
@@ -905,7 +920,7 @@ function ReviewTabContent({
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="w-full max-w-lg bg-[#0a0c10] border border-emerald-500/30 rounded-xl flex flex-col shadow-2xl overflow-hidden relative z-10 pointer-events-auto"
+              className="w-full max-w-lg bg-slate-900 border border-emerald-500/30 rounded-xl flex flex-col shadow-2xl overflow-hidden relative z-10 pointer-events-auto signoff-modal-dialog"
             >
               <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
                 <div className="flex items-center gap-2 text-emerald-400">
@@ -1028,7 +1043,7 @@ Thank you!`;
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="w-full max-w-lg bg-[#0a0c10] border border-sky-500/30 rounded-xl flex flex-col shadow-2xl overflow-hidden relative z-10 pointer-events-auto"
+              className="w-full max-w-lg bg-slate-900 border border-sky-500/30 rounded-xl flex flex-col shadow-2xl overflow-hidden relative z-10 pointer-events-auto signoff-modal-dialog"
             >
               <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
                 <div className="flex items-center gap-2 text-sky-400">
@@ -1296,10 +1311,30 @@ ${scaSec}`;
 }
 
 export default function App() {
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => safeStorage.getTheme('dark'));
+
+  // Sync theme to DOM and memory storage
+  useEffect(() => {
+    safeStorage.setTheme(theme);
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', theme);
+      document.documentElement.classList.toggle('theme-light', theme === 'light');
+      document.documentElement.classList.toggle('theme-dark', theme === 'dark');
+      if (document.body) {
+        document.body.className = theme === 'light' ? 'theme-light bg-slate-100 text-slate-800' : 'theme-dark bg-slate-950 text-slate-200';
+      }
+    }
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
+
   const [selectedTools, setSelectedTools] = useState<ToolName[]>(["Veracode"]);
   const [appProfile, setAppProfile] = useState("");
   const [scanSourceType, setScanSourceType] = useState<'json' | 'live' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitDebugMode, setSubmitDebugMode] = useState(false);
   const [resultsLoaded, setResultsLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<"SAST" | "SCA" | "DevDeps" | "Review">("SAST");
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
@@ -1325,6 +1360,20 @@ export default function App() {
     isOpen: boolean;
     actionType: "approved" | "rejected";
     selectedItems: AggregatedGroup[];
+  } | null>(null);
+  const [batchToast, setBatchToast] = useState<{
+    id: string;
+    actionType: "approved" | "rejected";
+    count: number;
+    recordsCount: number;
+    apiDebug: boolean;
+    timestamp: number;
+    revertData: {
+      groupIds: string[];
+      prevSastProposal: any;
+      prevScaProposal: any;
+      prevStatuses: { groupId: string; status?: "approved" | "rejected" }[];
+    };
   } | null>(null);
   const [sastMitigationProposal, setSastMitigationProposal] = useState<any>(null);
   const [scaMitigationProposal, setScaMitigationProposal] = useState<any>(null);
@@ -1358,6 +1407,7 @@ export default function App() {
     null,
   );
 
+
   // Persist pulled AI recommendations and status to safeStorage so they are not lost on page reload/back navigation
   useEffect(() => {
     if (scanSourceType !== "json" && (!appProfile || appProfile.trim() === "")) {
@@ -1375,7 +1425,7 @@ export default function App() {
     if (aggregatedData.sast.length > 0 || aggregatedData.sca.length > 0) {
       const allFindings = [...aggregatedData.sast, ...aggregatedData.sca];
       const entriesToSave: PersistedCommentEntry[] = allFindings
-        .filter((g) => g && (g.aiComment || g.status || g.isDevDependency))
+        .filter((g) => g && (g.aiComment || g.status || g.isDevDependency || g.crsComments))
         .map((g) => ({
           groupId: g.groupId,
           type: g.type,
@@ -1386,6 +1436,7 @@ export default function App() {
           aiMetrics: g.aiMetrics,
           status: g.status,
           isDevDependency: g.isDevDependency,
+          crsComments: g.crsComments,
         }));
 
       if (entriesToSave.length > 0) {
@@ -1409,17 +1460,18 @@ export default function App() {
         status: undefined,
         aiComment: "",
         aiMetrics: undefined,
+        crsComments: undefined,
       })),
       sca: prev.sca.map((g) => ({
         ...g,
         status: undefined,
         aiComment: "",
         aiMetrics: undefined,
+        crsComments: undefined,
       })),
     }));
-
     setDetailedGroup((prev) =>
-      prev ? { ...prev, status: undefined, aiComment: "", aiMetrics: undefined } : null
+      prev ? { ...prev, status: undefined, aiComment: "", aiMetrics: undefined, crsComments: undefined } : null
     );
 
     setSuccessMessage(`Memory for profile "${targetProfile || appProfile}" has been refreshed successfully.`);
@@ -1877,6 +1929,7 @@ export default function App() {
         console.warn("Failed to fetch initial config info (using local default config info):", err.message || err);
       });
   }, []);
+
 
   const addScanToHistory = useCallback((
     data: any,
@@ -2863,11 +2916,14 @@ export default function App() {
   };
 
   const handlePullAIResponse = async (group: AggregatedGroup, forceBypass = false) => {
+    // Construct the combined prompt containing customer comments and CRS team comments
+    const combinedPrompt = formatPromptWithCrsComments(group.comments, group.crsComments);
+
     // Basic secret detection in comments before sending to AI
     const secretPattern = /\b(password|pwd|secret|token|api_key|apikey|user-name|username|credential|key)\b/i;
     
-    // Check if any comment contains sensitive info
-    const hasSensitiveInfo = secretPattern.test(group.comments);
+    // Check if combined prompt contains sensitive info
+    const hasSensitiveInfo = secretPattern.test(combinedPrompt);
 
     if (hasSensitiveInfo && !forceBypass) {
       setSensitiveGroupToBypass(group);
@@ -2889,16 +2945,16 @@ export default function App() {
         flawSummary = (group.records[0] as any)?.cve_summary;
       }
 
-      // Call API with engine name, user comments (group.comments), and finding type (SCA/SAST)
+      // Call API with engine name, combined prompt, and finding type (SCA/SAST)
       const response = await getAIResponseForComment(
-        group.comments,
+        combinedPrompt,
         group.type,
         aiProvider,
         flawId,
         flawSummary
       );
       
-      const estimatedInputTokens = Math.ceil((group.comments || "").length / 4) + 150; // Approximating ~150 prompt tokens
+      const estimatedInputTokens = Math.ceil((combinedPrompt || "").length / 4) + 150; // Approximating ~150 prompt tokens
       const estimatedOutputTokens = Math.ceil((response.result || "").length / 4);
 
       updateGroupAIComment(group.groupId, response.result, {
@@ -2914,6 +2970,20 @@ export default function App() {
         return next;
       });
     }
+  };
+
+  const updateGroupCRSComment = (groupId: string, newCrsComment: string) => {
+    setAggregatedData((prev) => ({
+      sast: prev.sast.map((g) =>
+        g.groupId === groupId ? { ...g, crsComments: newCrsComment } : g,
+      ),
+      sca: prev.sca.map((g) =>
+        g.groupId === groupId ? { ...g, crsComments: newCrsComment } : g,
+      ),
+    }));
+    setDetailedGroup((prev) =>
+      prev?.groupId === groupId ? { ...prev, crsComments: newCrsComment } : prev,
+    );
   };
 
   const updateGroupAIComment = (groupId: string, newComment: string, aiMetrics?: any) => {
@@ -2976,13 +3046,25 @@ export default function App() {
     });
   };
 
-  const handleBatchSubmit = async () => {
+  const handleBatchSubmit = async (apiDebug: boolean = false) => {
     if (!batchModalConfig) return;
     
     setIsSubmitting(true);
+    setSubmitDebugMode(apiDebug);
     const { actionType, selectedItems } = batchModalConfig;
     const actionStr = actionType === "approved" ? "accepted" : "rejected";
     const buildId = activeOverview.buildId || "";
+
+    const prevStatuses = selectedItems.map((item) => ({
+      groupId: item.groupId,
+      status: item.status,
+    }));
+    const prevSastProp = sastMitigationProposal
+      ? JSON.parse(JSON.stringify(sastMitigationProposal))
+      : null;
+    const prevScaProp = scaMitigationProposal
+      ? JSON.parse(JSON.stringify(scaMitigationProposal))
+      : null;
 
     let successCount = 0;
     let lastErrorMsg = "";
@@ -2994,24 +3076,18 @@ export default function App() {
       const isCheckmarxFlow = selectedTools.includes("Checkmarx") || activeOverview.scanType === "checkmarx";
       const useCheckmarxApi = isCheckmarxFlow && group.type === "SAST";
 
-      const payload = useCheckmarxApi ? {
+      const payload = createMitigationPayload({
+        useCheckmarxApi,
         appId: activeOverview.appId || "",
-        scanId: buildId,
-        flawIdList,
-        action: actionStr,
-        comment: group.aiComment,
-        type: "SAST",
-        severity: group.severity || ""
-      } : {
         buildId,
-        appId: activeOverview.appId || "",
         flawIdList,
-        action: actionStr,
+        actionStr,
         comment: group.aiComment,
-        cveId,
         type: group.type,
-        severity: group.severity || ""
-      };
+        severity: group.severity || "",
+        cveId,
+        apiDebug,
+      });
 
       try {
         const endpoint = useCheckmarxApi 
@@ -3068,12 +3144,31 @@ export default function App() {
     }
     
     setIsSubmitting(false);
+    setSubmitDebugMode(false);
     setBatchModalConfig(null);
     setSelectedGroups(new Set());
-    if (successCount === selectedItems.length) {
-      setSuccessMessage(`Successfully ${actionType} ${successCount}/${selectedItems.length} groups.`);
-    } else if (successCount > 0) {
-      setSuccessMessage(`Successfully ${actionType} ${successCount}/${selectedItems.length} groups. Some failed: ${lastErrorMsg}`);
+    if (successCount > 0) {
+      const totalRecords = selectedItems.reduce(
+        (acc, item) => acc + (item.records ? item.records.length : 1),
+        0
+      );
+      setBatchToast({
+        id: String(Date.now()),
+        actionType,
+        count: successCount,
+        recordsCount: totalRecords,
+        apiDebug,
+        timestamp: Date.now(),
+        revertData: {
+          groupIds: selectedItems.map((i) => i.groupId),
+          prevSastProposal: prevSastProp,
+          prevScaProposal: prevScaProp,
+          prevStatuses,
+        },
+      });
+      if (successCount < selectedItems.length) {
+        setBackendError(`Some submissions failed: ${lastErrorMsg}`);
+      }
     } else {
       let parsedErr: any = {};
       try {
@@ -3089,6 +3184,91 @@ export default function App() {
       setBackendError(errMsg || 'Unknown error');
     }
   };
+
+  // Auto-dismiss batch audit toast after 9 seconds
+  useEffect(() => {
+    if (!batchToast) return;
+    const timer = setTimeout(() => {
+      setBatchToast(null);
+    }, 9000);
+    return () => clearTimeout(timer);
+  }, [batchToast]);
+
+  // Handle Quick Undo for Batch Action
+  const handleUndoBatch = useCallback(() => {
+    if (!batchToast) return;
+    const { revertData } = batchToast;
+
+    setAggregatedData((prev) => ({
+      sast: prev.sast.map((g) => {
+        const matched = revertData.prevStatuses.find((p) => p.groupId === g.groupId);
+        return matched ? { ...g, status: matched.status } : g;
+      }),
+      sca: prev.sca.map((g) => {
+        const matched = revertData.prevStatuses.find((p) => p.groupId === g.groupId);
+        return matched ? { ...g, status: matched.status } : g;
+      }),
+    }));
+
+    if (revertData.prevSastProposal) {
+      setSastMitigationProposal(revertData.prevSastProposal);
+    }
+    if (revertData.prevScaProposal) {
+      setScaMitigationProposal(revertData.prevScaProposal);
+    }
+
+    setSelectedGroups(new Set(revertData.groupIds));
+    setBatchToast(null);
+  }, [batchToast]);
+
+  // Global Keyboard Shortcuts for Rapid Triage
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Batch Confirmation Modal shortcuts
+      if (batchModalConfig && !isSubmitting) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setBatchModalConfig(null);
+          setSubmitDebugMode(false);
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+          e.preventDefault();
+          if (e.shiftKey) {
+            handleBatchSubmit(true);
+          } else {
+            handleBatchSubmit(false);
+          }
+          return;
+        }
+      }
+
+      // 2. Detailed Group Analysis modal shortcuts
+      if (detailedGroup) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setDetailedGroup(null);
+          return;
+        }
+      }
+
+      // 3. Main triage view: Alt+A (Approve) / Alt+R (Reject) when items selected
+      const activeTag = (document.activeElement?.tagName || "").toLowerCase();
+      const isInputFocused = activeTag === "input" || activeTag === "textarea";
+      if (!isInputFocused && !batchModalConfig && !detailedGroup && selectedGroups.size > 0) {
+        if (e.altKey && (e.key === "a" || e.key === "A")) {
+          e.preventDefault();
+          handleBatchAction("approved");
+        } else if (e.altKey && (e.key === "r" || e.key === "R")) {
+          e.preventDefault();
+          handleBatchAction("rejected");
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [batchModalConfig, detailedGroup, isSubmitting, selectedGroups, handleBatchSubmit, handleBatchAction]);
 
   const handleApproveDevDeps = async (selectedPackageIds: string[]) => {
     if (selectedPackageIds.length === 0) {
@@ -3301,7 +3481,9 @@ export default function App() {
     <ErrorBoundary
       onError={(err) => setBackendError(`Render Crash: ${err.message}`)}
     >
-      <div className="h-screen overflow-hidden bg-slate-950 text-slate-200 font-sans p-4 selection:bg-blue-500/30">
+      <div className={`h-screen overflow-hidden font-sans p-4 selection:bg-blue-500/30 transition-colors duration-200 ${
+        theme === 'light' ? 'theme-light bg-slate-100 text-slate-800' : 'theme-dark bg-slate-950 text-slate-200'
+      }`}>
         <div className="max-w-[1450px] mx-auto grid grid-cols-12 grid-rows-[auto_minmax(0,1fr)] gap-4 h-full">
           {/* TOP BAR: Controls */}
           <div className="col-span-12 bento-card p-2.5 flex items-center justify-start gap-4 bg-slate-900 flex-shrink-0">
@@ -3473,10 +3655,28 @@ export default function App() {
               </form>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <button
+                type="button"
+                id="theme-toggle-btn"
+                onClick={toggleTheme}
+                className={`p-2.5 rounded-xl transition-all border flex items-center justify-center cursor-pointer ${
+                  theme === 'light'
+                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 shadow-sm'
+                    : 'hover:bg-slate-800 text-slate-400 hover:text-amber-300 border-slate-800'
+                }`}
+                title={theme === 'dark' ? "Switch to Light Theme" : "Switch to Dark Theme"}
+                aria-label="Toggle theme appearance"
+              >
+                {theme === 'dark' ? (
+                  <Sun size={19} className="text-amber-400" />
+                ) : (
+                  <Moon size={19} className="text-indigo-600" />
+                )}
+              </button>
               <button
                 onClick={toggleSettings}
-                className="p-2.5 hover:bg-slate-800 rounded-xl text-slate-500 hover:text-white transition-all ring-1 ring-slate-800 hover:shadow-lg"
+                className="p-2.5 hover:bg-slate-800 rounded-xl text-slate-500 hover:text-white transition-all ring-1 ring-slate-800 hover:shadow-lg cursor-pointer"
                 title="System Configuration"
               >
                 <Settings size={20} />
@@ -3570,7 +3770,9 @@ export default function App() {
                           return (
                             <div
                               key={sev}
-                              className="flex-1 min-w-[48px] p-2 rounded-lg border border-slate-800/50 flex flex-col items-center justify-center text-center bg-slate-800/10"
+                              data-severity={sev}
+                              data-count={count}
+                              className="sev-count-box flex-1 min-w-[48px] p-2 rounded-lg border border-slate-800/50 flex flex-col items-center justify-center text-center bg-slate-800/10"
                             >
                               <span className="text-[8px] text-slate-500 uppercase font-black tracking-tighter mb-0.5 select-none">
                                 {sev === "Very High" ? ((selectedTools.includes("Checkmarx") || (activeOverview as any)?.scanType === "checkmarx") ? "CRITICAL" : "V. HIGH") : sev === "Information" ? "INFO" : sev}
@@ -3625,24 +3827,26 @@ export default function App() {
                           return (
                             <div
                               key={sev}
-                              className="flex-1 min-w-[48px] p-2 rounded-lg border border-slate-800/50 flex flex-col items-center justify-center text-center bg-slate-800/10"
+                              data-severity={sev}
+                              data-count={count}
+                              className="sev-count-box flex-1 min-w-[48px] p-2 rounded-lg border border-slate-800/50 flex flex-col items-center justify-center text-center bg-slate-800/10"
                             >
                               <span className="text-[8px] text-slate-500 uppercase font-black tracking-tighter mb-0.5 select-none">
                                 {sev === "Very High" ? ((selectedTools.includes("Checkmarx") || (activeOverview as any)?.scanType === "checkmarx") ? "CRITICAL" : "V. HIGH") : sev === "Information" ? "INFO" : sev}
                               </span>
                               <span
-                                className={`text-[13px] font-mono font-black ${
+                                className={`sev-number text-[13px] font-mono font-black ${
                                   (count as number) > 0
                                     ? sev === "Very High"
-                                      ? "text-purple-400"
+                                      ? "text-purple-400 sev-number-active"
                                       : sev === "High"
-                                        ? "text-red-400"
+                                        ? "text-red-400 sev-number-active"
                                         : sev === "Medium"
-                                          ? "text-orange-400"
+                                          ? "text-orange-400 sev-number-active"
                                           : sev === "Low"
-                                            ? "text-blue-400"
-                                            : "text-slate-300"
-                                    : "text-slate-600"
+                                            ? "text-blue-400 sev-number-active"
+                                            : "text-slate-300 sev-number-active"
+                                    : "text-slate-600 sev-number-zero"
                                 }`}
                               >
                                 {count as number}
@@ -4281,22 +4485,24 @@ export default function App() {
                       <button
                         onClick={() => handleBatchAction("approved")}
                         disabled={selectedGroups.size === 0 || isSubmitting}
-                        className="py-2 bg-emerald-600/10 text-emerald-400 border border-emerald-500/20 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all disabled:opacity-20 flex items-center justify-center gap-1"
+                        title="Approve selected (Alt+A)"
+                        className="py-2 bg-emerald-600/10 text-emerald-400 border border-emerald-500/20 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all disabled:opacity-20 flex items-center justify-center gap-1 whitespace-nowrap cursor-pointer"
                       >
                         {isSubmitting && batchModalConfig?.actionType === "approved" && (
                           <RefreshCcw size={10} className="animate-spin" />
                         )}
-                        Approve
+                        Approve <span className="opacity-60 text-[7px] font-mono">(Alt+A)</span>
                       </button>
                       <button
                         onClick={() => handleBatchAction("rejected")}
                         disabled={selectedGroups.size === 0 || isSubmitting}
-                        className="py-2 bg-red-600/10 text-red-400 border border-red-500/20 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all disabled:opacity-20 flex items-center justify-center gap-1"
+                        title="Reject selected (Alt+R)"
+                        className="py-2 bg-red-600/10 text-red-400 border border-red-500/20 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all disabled:opacity-20 flex items-center justify-center gap-1 whitespace-nowrap cursor-pointer"
                       >
                         {isSubmitting && batchModalConfig?.actionType === "rejected" && (
                           <RefreshCcw size={10} className="animate-spin" />
                         )}
-                        Reject
+                        Reject <span className="opacity-60 text-[7px] font-mono">(Alt+R)</span>
                       </button>
                     </div>
                   </div>
@@ -4444,9 +4650,9 @@ export default function App() {
                       <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
-                        className={`grow px-6 py-3 text-[11px] font-black uppercase tracking-[0.1em] transition-all relative flex flex-col justify-center items-center gap-1 ${
+                        className={`tab-btn grow px-6 py-3 text-[11px] font-black uppercase tracking-[0.1em] transition-all relative flex flex-col justify-center items-center gap-1 ${
                           activeTab === tab
-                            ? "text-blue-400 bg-blue-500/5"
+                            ? "tab-btn-active text-blue-400 bg-blue-500/5"
                             : "text-slate-500 hover:text-slate-300"
                         }`}
                       >
@@ -4914,6 +5120,37 @@ export default function App() {
                     {/* System Tab */}
                     {settingsTab === "System" && fullConfig["System"] && (
                       <div className="space-y-8">
+                        <div className="flex items-center justify-between p-4 bg-slate-900 border border-slate-800 rounded-xl shadow-inner-sm">
+                          <div className="space-y-1">
+                            <h4 className="text-sm font-bold uppercase tracking-wider text-slate-200">Interface Theme</h4>
+                            <p className="text-[10px] text-slate-500 font-mono">Select workspace palette. Saved in memory and remembered on next load.</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setTheme('dark')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                                theme === 'dark'
+                                  ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-900/30'
+                                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              <Moon size={13} /> Dark
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setTheme('light')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                                theme === 'light'
+                                  ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-900/30'
+                                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              <Sun size={13} /> Light
+                            </button>
+                          </div>
+                        </div>
+
                         <div className="flex items-center justify-between p-4 bg-slate-900 border border-slate-800 rounded-xl shadow-inner-sm">
                           <div className="space-y-1">
                             <h4 className="text-sm font-bold uppercase tracking-wider text-slate-200">Hide Processed Mitigation</h4>
@@ -5398,7 +5635,7 @@ export default function App() {
                                                                                 newConfig["Compliance"].tierMappings[category][confidentiality] = e.target.value;
                                                                                 setFullConfig(newConfig);
                                                                             }}
-                                                                            className="bg-[#1a1c23] border border-slate-700/50 rounded-lg text-xs font-black text-blue-400 py-1.5 px-4 outline-none hover:border-blue-500/50 transition-all cursor-pointer min-w-[140px]"
+                                                                            className="bg-slate-900 border border-slate-700/50 rounded-lg text-xs font-black text-blue-400 py-1.5 px-4 outline-none hover:border-blue-500/50 transition-all cursor-pointer min-w-[140px]"
                                                                         >
                                                                             {fullConfig["Compliance"].tierDropDown.map((t: string) => (
                                                                                 <option key={t} value={t}>[ {t} ]</option>
@@ -5818,9 +6055,10 @@ export default function App() {
                     Cancel
                   </button>
                   <button
+                    id="btn-save-master-config"
                     onClick={savePrompts}
                     disabled={JSON.stringify(fullConfig) === JSON.stringify(initialFullConfig)}
-                    className="px-8 py-2 bg-white text-black text-sm font-black rounded-xl hover:bg-slate-200 transition-all active:scale-95 shadow-[0_0_15px_rgba(255,255,255,0.1)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-8 py-2 bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 text-sm font-black rounded-xl transition-all active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700/50 dark:border-white/20 modal-action-btn"
                   >
                     SAVE MASTER CONFIG
                   </button>
@@ -5968,43 +6206,100 @@ export default function App() {
                         <div className="absolute -top-3 -right-3 px-3 py-1 bg-slate-800 border border-slate-700 rounded-full text-[10px] font-bold text-slate-400">
                           INPUT
                         </div>
-                        <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">
-                          {detailedGroup.comments ||
-                            "-- No customer mitigation information provided --"}
-                        </div>
-                        <div className="mt-6 pt-6 border-t border-slate-800/50">
-                          <h4 className="text-[10px] font-bold uppercase text-slate-500 mb-2 tracking-widest">
-                            Original Description
-                          </h4>
-                          <div className="text-xs text-slate-400 leading-relaxed font-mono">
-                            {detailedGroup.description}
-                          </div>
-                        </div>
-                        {detailedGroup.type === 'SCA' && (() => {
-                          const cves = extractCveCodes(detailedGroup);
-                          if (cves.length === 0) return null;
-                          return (
-                            <div className="mt-4 pt-4 border-t border-slate-800/50">
-                              <h4 className="text-[10px] font-bold uppercase text-slate-500 mb-2 tracking-widest flex items-center gap-1.5">
-                                <Shield size={12} className="text-blue-400" /> CVE References (Click to view NVD Details)
+
+                        <div className="space-y-5">
+                          {/* Customer Mitigation Section */}
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="text-[11px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                                <User size={13} className="text-slate-400" /> Customer / Developer Mitigation
                               </h4>
-                              <div className="flex flex-wrap gap-2">
-                                {cves.map((cveCode) => (
-                                  <a
-                                    key={cveCode}
-                                    href={getCveNvdUrl(cveCode)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-950/60 hover:bg-blue-900/80 border border-blue-800/60 hover:border-blue-600 text-blue-300 hover:text-white rounded-lg text-xs font-mono font-bold transition-all shadow-sm"
-                                  >
-                                    <span>{cveCode}</span>
-                                    <ExternalLink size={12} className="text-blue-400 shrink-0" />
-                                  </a>
-                                ))}
+                              <span className="text-[9px] font-mono text-slate-500">Original Scan Input</span>
+                            </div>
+                            <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap bg-slate-950/70 p-3.5 rounded-xl border border-slate-800/80 max-h-36 overflow-y-auto font-sans">
+                              {detailedGroup.comments || (
+                                <span className="text-slate-500 italic">-- No customer mitigation information provided --</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* CRS Team Comments Section */}
+                          <div className="pt-4 border-t border-slate-800/70">
+                            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-[11px] font-black uppercase text-indigo-400 tracking-wider flex items-center gap-1.5">
+                                  <Code2 size={13} className="text-indigo-400" /> CRS Team Comments (Code & Analysis)
+                                </h4>
+                                <span className="text-[9px] font-mono font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-1.5 py-0.5 rounded">
+                                  Appended to AI
+                                </span>
+                              </div>
+                              {detailedGroup.crsComments && !detailedGroup.status && (
+                                <button
+                                  type="button"
+                                  onClick={() => updateGroupCRSComment(detailedGroup.groupId, "")}
+                                  className="text-[10px] font-mono text-slate-500 hover:text-red-400 transition-colors px-1.5 py-0.5 rounded cursor-pointer"
+                                  title="Clear CRS team comments"
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <textarea
+                                id="crs-team-comments-input"
+                                value={detailedGroup.crsComments || ""}
+                                onChange={(e) =>
+                                  updateGroupCRSComment(
+                                    detailedGroup.groupId,
+                                    e.target.value,
+                                  )
+                                }
+                                disabled={!!detailedGroup.status}
+                                placeholder="Enter Code Review Service team member analysis, code snippets, or verification notes...&#10;Example: Line 45 of AuthController.java uses parameterized statements: db.query(sql, [id]). Verified no untrusted concatenation."
+                                rows={6}
+                                className="w-full bg-slate-950/90 text-xs text-indigo-100 font-mono leading-relaxed p-3.5 rounded-xl border border-indigo-500/30 focus:border-indigo-500/70 focus:ring-1 focus:ring-indigo-500/30 outline-none transition-all resize-y disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-slate-600 placeholder:font-sans"
+                              />
+                              <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 px-1 pt-0.5">
+                                <span className="text-indigo-400/90 flex items-center gap-1">
+                                  <CheckCircle2 size={11} className="text-indigo-400 shrink-0" />
+                                  <span>
+                                    Appended to AI as: <code className="text-indigo-300 font-bold">CRS team comments: "comments"</code>
+                                  </span>
+                                </span>
+                                <span>{(detailedGroup.crsComments || "").length} chars</span>
                               </div>
                             </div>
-                          );
-                        })()}
+                          </div>
+
+                          {/* SCA CVE Codes */}
+                          {detailedGroup.type === 'SCA' && (() => {
+                            const cves = extractCveCodes(detailedGroup);
+                            if (cves.length === 0) return null;
+                            return (
+                              <div className="pt-3 border-t border-slate-800/50">
+                                <h4 className="text-[10px] font-bold uppercase text-slate-500 mb-2 tracking-widest flex items-center gap-1.5">
+                                  <Shield size={12} className="text-blue-400" /> CVE References (Click to view NVD Details)
+                                </h4>
+                                <div className="flex flex-wrap gap-2">
+                                  {cves.map((cveCode) => (
+                                    <a
+                                      key={cveCode}
+                                      href={getCveNvdUrl(cveCode)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-950/60 hover:bg-blue-900/80 border border-blue-800/60 hover:border-blue-600 text-blue-300 hover:text-white rounded-lg text-xs font-mono font-bold transition-all shadow-sm"
+                                    >
+                                      <span>{cveCode}</span>
+                                      <ExternalLink size={12} className="text-blue-400 shrink-0" />
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
                       </div>
                     </div>
 
@@ -6058,10 +6353,14 @@ export default function App() {
                           <button
                             onClick={() => handlePullAIResponse(detailedGroup)}
                             disabled={loadingAIGroups.has(detailedGroup.groupId) || !!detailedGroup.status}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white text-[11px] font-black uppercase tracking-[0.2em] rounded-xl hover:bg-blue-500 transition-all shadow-lg active:scale-95 disabled:opacity-50"
+                            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white text-[11px] font-black uppercase tracking-[0.2em] rounded-xl hover:bg-blue-500 transition-all shadow-lg active:scale-95 disabled:opacity-50 cursor-pointer"
                           >
                             <RefreshCcw size={14} className={loadingAIGroups.has(detailedGroup.groupId) ? "animate-spin" : ""} /> 
-                            {loadingAIGroups.has(detailedGroup.groupId) ? "ANALYZING..." : `Refresh AI Assessment (${aiProvider})`}
+                            {loadingAIGroups.has(detailedGroup.groupId)
+                              ? "ANALYZING..."
+                              : detailedGroup.crsComments?.trim()
+                                ? `Refresh AI Assessment (Includes CRS Notes)`
+                                : `Refresh AI Assessment (${aiProvider})`}
                           </button>
                         </div>
                       </div>
@@ -6104,12 +6403,18 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  <button
-                    onClick={() => setDetailedGroup(null)}
-                    className="px-8 py-3 bg-white text-black text-xs font-black uppercase tracking-widest rounded-xl hover:bg-slate-200 transition-all shadow-xl active:scale-95"
-                  >
-                    Close Analysis
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
+                      <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-400 font-bold">Esc</kbd> to close
+                    </span>
+                    <button
+                      id="btn-close-detailed-analysis"
+                      onClick={() => setDetailedGroup(null)}
+                      className="px-8 py-3 bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-xl active:scale-95 cursor-pointer border border-slate-700/50 dark:border-white/20 modal-action-btn"
+                    >
+                      Close Analysis
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             </div>
@@ -6131,7 +6436,7 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                className="w-full max-w-lg bg-[#0a0c10] border border-orange-500/30 rounded-xl flex flex-col shadow-2xl overflow-hidden relative z-10 pointer-events-auto"
+                className="w-full max-w-lg bg-slate-900 border border-orange-500/30 rounded-xl flex flex-col shadow-2xl overflow-hidden relative z-10 pointer-events-auto signoff-modal-dialog"
               >
                 <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-orange-500/10">
                   <h2 className="text-sm font-black flex items-center gap-2 uppercase tracking-widest text-orange-400">
@@ -6143,7 +6448,9 @@ export default function App() {
                     We detected potential sensitive information (e.g., username, password, key) in the finding's comments.
                   </p>
                   <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 mb-4">
-                    <p className="text-xs text-slate-400 font-mono whitespace-pre-wrap max-h-40 overflow-y-auto">{sensitiveGroupToBypass.comments}</p>
+                    <p className="text-xs text-slate-400 font-mono whitespace-pre-wrap max-h-40 overflow-y-auto">
+                      {formatPromptWithCrsComments(sensitiveGroupToBypass.comments, sensitiveGroupToBypass.crsComments)}
+                    </p>
                   </div>
                   <p className="text-xs text-orange-400/80 italic mb-6">
                     If this is a false positive and does not contain actual credentials, you can bypass this check to fetch the AI response.
@@ -6183,20 +6490,26 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="w-full max-w-xl bg-[#0a0c10] border border-blue-500/30 rounded-xl flex flex-col shadow-2xl overflow-hidden relative z-10 pointer-events-auto"
+              className="w-full max-w-[490px] bg-slate-900 border border-blue-500/30 rounded-xl flex flex-col shadow-2xl overflow-hidden relative z-10 pointer-events-auto signoff-modal-dialog"
             >
               <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
                 <h2 className="text-sm font-black uppercase tracking-widest text-blue-400">
                   Confirm {batchModalConfig.actionType === "approved" ? "Approval" : "Rejection"}
                 </h2>
               </div>
-              <div className="p-6">
+              <div className="p-5">
                 {isSubmitting ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-4">
                     <RefreshCcw size={40} className="animate-spin text-blue-500" />
                     <div className="text-center">
-                      <p className="text-sm font-black uppercase tracking-widest text-white mb-2">Processing mitigation proposals</p>
-                      <p className="text-xs text-slate-500 font-mono">Synchronizing with Veracode backend. This may take several moments...</p>
+                      <p className="text-sm font-black uppercase tracking-widest text-white mb-2">
+                        {submitDebugMode ? "Submitting review comment (Debug mode)" : "Processing mitigation proposals"}
+                      </p>
+                      <p className="text-xs text-slate-500 font-mono">
+                        {submitDebugMode
+                          ? 'Synchronizing with backend using "apiDebug": "debug"...'
+                          : "Synchronizing with backend. This may take several moments..."}
+                      </p>
                     </div>
                   </div>
                 ) : (
@@ -6204,7 +6517,7 @@ export default function App() {
                     <p className="text-sm text-slate-300 mb-4">
                       You are about to submit mitigation proposals for the following {batchModalConfig.selectedItems.reduce((acc, item) => acc + item.records.length, 0)} records:
                     </p>
-                    <div className="space-y-2 mb-6 max-h-[40vh] overflow-auto">
+                    <div className="space-y-2 mb-5 max-h-[40vh] overflow-auto">
                       {Object.values(
                         batchModalConfig.selectedItems.reduce((acc, item) => {
                           const displayKey = item.type === "SCA" && item.identifier
@@ -6241,27 +6554,144 @@ export default function App() {
                     </div>
                   </>
                 )}
-                <div className="flex justify-end gap-3 px-0 pb-0">
+                <div className="flex items-center justify-between gap-2 px-0 pb-0 flex-nowrap pt-1">
                   <button
-                    onClick={() => setBatchModalConfig(null)}
+                    id="btn-modal-cancel"
+                    type="button"
+                    onClick={() => {
+                      if (!isSubmitting) {
+                        setBatchModalConfig(null);
+                        setSubmitDebugMode(false);
+                      }
+                    }}
                     disabled={isSubmitting}
-                    className="px-6 py-2.5 bg-slate-800 text-slate-300 text-xs font-black uppercase tracking-widest rounded-lg hover:bg-slate-700 transition disabled:opacity-50"
+                    className="px-3.5 py-2.5 bg-slate-800 text-slate-300 text-xs font-black uppercase tracking-wider rounded-lg hover:bg-slate-700 transition disabled:opacity-50 cursor-pointer whitespace-nowrap shrink-0"
                   >
                     Cancel
                   </button>
                   <button
-                    onClick={handleBatchSubmit}
+                    id="btn-submit-review-comment"
+                    type="button"
+                    onClick={() => handleBatchSubmit(true)}
                     disabled={isSubmitting}
-                    className={`px-6 py-2.5 text-xs font-black uppercase tracking-widest rounded-lg transition ${batchModalConfig.actionType === "approved" ? "bg-emerald-600 hover:bg-emerald-500 text-white" : "bg-red-600 hover:bg-red-500 text-white"} disabled:opacity-50 flex items-center gap-2`}
+                    className="px-3.5 py-2.5 text-xs font-black uppercase tracking-wider rounded-lg transition bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-blue-900/30 whitespace-nowrap shrink-0"
+                    title='Submit Review Comment with "apiDebug": "debug"'
                   >
-                    {isSubmitting ? <RefreshCcw size={14} className="animate-spin" /> : null}
-                    {isSubmitting ? "Submitting..." : `Submit ${batchModalConfig.actionType === "approved" ? "Approval" : "Rejection"}`}
+                    {isSubmitting && submitDebugMode ? <RefreshCcw size={14} className="animate-spin" /> : null}
+                    {isSubmitting && submitDebugMode ? "Submitting..." : "Submit Review Comment"}
                   </button>
+                  <button
+                    id={`btn-submit-${batchModalConfig.actionType === "approved" ? "approval" : "rejection"}`}
+                    type="button"
+                    onClick={() => handleBatchSubmit(false)}
+                    disabled={isSubmitting}
+                    className={`px-3.5 py-2.5 text-xs font-black uppercase tracking-wider rounded-lg transition ${
+                      batchModalConfig.actionType === "approved" 
+                        ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30" 
+                        : "bg-red-600 hover:bg-red-500 text-white shadow-red-900/30"
+                    } disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer shadow-lg whitespace-nowrap shrink-0`}
+                  >
+                    {isSubmitting && !submitDebugMode ? <RefreshCcw size={14} className="animate-spin" /> : null}
+                    {isSubmitting && !submitDebugMode ? "Submitting..." : `Submit ${batchModalConfig.actionType === "approved" ? "Approval" : "Rejection"}`}
+                  </button>
+                </div>
+                {/* Keyboard Shortcuts Hint Bar */}
+                <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono pt-3 border-t border-slate-800/60 mt-3 px-0.5">
+                  <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-slate-900 border border-slate-700 rounded text-slate-400 font-bold">Esc</kbd> Cancel</span>
+                  <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-slate-900 border border-slate-700 rounded text-slate-400 font-bold">Ctrl+Enter</kbd> Submit</span>
+                  <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-slate-900 border border-slate-700 rounded text-slate-400 font-bold">Shift+Ctrl+Enter</kbd> Comment</span>
                 </div>
               </div>
             </motion.div>
           </div>
         )}
+        </AnimatePresence>
+
+        {/* Post-Submission Audit Toast & Quick Undo */}
+        <AnimatePresence>
+          {batchToast && (
+            <motion.div
+              key={batchToast.id}
+              initial={{ opacity: 0, y: 30, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="fixed bottom-6 right-6 z-[300] bg-slate-900 border border-blue-500/30 rounded-2xl shadow-2xl p-4 flex flex-col gap-3 min-w-[340px] max-w-md backdrop-blur-md overflow-hidden"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
+                      batchToast.actionType === "approved"
+                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                        : "bg-red-500/10 text-red-400 border-red-500/30"
+                    }`}
+                  >
+                    {batchToast.actionType === "approved" ? (
+                      <CheckCircle2 size={20} />
+                    ) : (
+                      <XCircle size={20} />
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-white">
+                        Batch {batchToast.actionType === "approved" ? "Approved" : "Rejected"}
+                      </h4>
+                      {batchToast.apiDebug && (
+                        <span className="text-[9px] font-mono font-bold bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded border border-blue-500/30">
+                          Review Comment
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Updated <span className="text-white font-bold">{batchToast.count}</span> groups (
+                      <span className="text-white font-bold">{batchToast.recordsCount}</span> records)
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBatchToast(null)}
+                  className="text-slate-500 hover:text-white transition p-1 rounded-md hover:bg-slate-800 cursor-pointer"
+                  title="Dismiss"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
+                <span className="text-[10px] text-slate-500 font-mono">
+                  Accidental submission?
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleUndoBatch}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-all shadow-md active:scale-95 cursor-pointer"
+                  >
+                    <Undo2 size={13} />
+                    Undo Action
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchToast(null)}
+                    className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+
+              {/* Progress Countdown Line */}
+              <motion.div
+                initial={{ width: "100%" }}
+                animate={{ width: "0%" }}
+                transition={{ duration: 9, ease: "linear" }}
+                className="h-1 bg-gradient-to-r from-blue-500 to-emerald-500 absolute bottom-0 left-0 right-0"
+              />
+            </motion.div>
+          )}
         </AnimatePresence>
 
         <AnimatePresence>
@@ -6278,7 +6708,7 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                className="w-full max-w-xl bg-[#0a0c10] border border-emerald-500/30 rounded-2xl flex flex-col shadow-2xl overflow-hidden p-8 relative z-10 pointer-events-auto"
+                className="w-full max-w-xl bg-slate-900 border border-emerald-500/30 rounded-2xl flex flex-col shadow-2xl overflow-hidden p-8 relative z-10 pointer-events-auto signoff-modal-dialog"
               >
                 <div className="text-center space-y-6">
                   <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto border border-emerald-500/30">
@@ -6293,8 +6723,9 @@ export default function App() {
                     </p>
                   </div>
                   <button
+                    id="btn-success-modal-okay"
                     onClick={() => setSuccessMessage(null)}
-                    className="px-8 py-3 bg-white hover:bg-slate-200 text-black font-black rounded-xl transition-all active:scale-95 shadow-xl shadow-white/10 text-xs tracking-widest uppercase w-full max-w-[200px] mx-auto block"
+                    className="px-8 py-3 bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 font-black rounded-xl transition-all active:scale-95 shadow-xl text-xs tracking-widest uppercase w-full max-w-[200px] mx-auto block cursor-pointer border border-slate-700/50 dark:border-white/20 modal-action-btn"
                   >
                     Okay
                   </button>
@@ -6322,17 +6753,17 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                className="w-full max-w-xl bg-[#0a0c10] border border-red-500/30 rounded-2xl flex flex-col shadow-2xl overflow-hidden p-8 relative z-10 pointer-events-auto"
+                className="w-full max-w-xl bg-slate-900 border border-red-500/30 rounded-2xl flex flex-col shadow-2xl overflow-hidden p-8 relative z-10 pointer-events-auto signoff-modal-dialog"
               >
                 <div className="text-center space-y-6">
                   <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto border border-red-500/30">
                     <XCircle className="text-red-500" size={32} />
                   </div>
                   <div className="space-y-2">
-                    <h2 className="text-xl font-black tracking-tight text-white uppercase leading-tight">
+                    <h2 className="text-xl font-black tracking-tight text-white uppercase leading-tight error-modal-title">
                       {(errorType || "Backend Service Failure").replace(/_/g, " ")}
                     </h2>
-                    <div className="p-4 bg-black/40 rounded-xl border border-red-500/10 font-mono text-xs text-red-400 leading-relaxed text-left overflow-auto max-h-48">
+                    <div className="p-4 bg-black/40 rounded-xl border border-red-500/10 font-mono text-xs text-red-400 leading-relaxed text-left overflow-auto max-h-48 error-modal-box">
                       {backendError}
                     </div>
                   </div>
@@ -6361,7 +6792,7 @@ export default function App() {
                     </div>
                   )}
 
-                  <p className="text-slate-400 text-sm leading-relaxed">
+                  <p className="text-slate-400 text-sm leading-relaxed error-modal-desc">
                     {errorType === "INVALID_APP" ? (
                       "The specified application profile could not be found. Please select from the suggestions above or check the profile name."
                     ) : errorType === "SYSTEM_ERROR" ? (
@@ -6374,12 +6805,13 @@ export default function App() {
                   </p>
                   
                   <button
+                    id="btn-error-modal-dismiss"
                     onClick={() => {
                       setBackendError(null);
                       setErrorType(null);
                       setSuggestedApps([]);
                     }}
-                    className="px-8 py-3 bg-white hover:bg-slate-200 text-black font-black rounded-xl transition-all active:scale-95 shadow-xl shadow-white/10 text-xs tracking-widest uppercase w-full max-w-[200px] mx-auto block"
+                    className="px-8 py-3 bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 font-black rounded-xl transition-all active:scale-95 shadow-xl text-xs tracking-widest uppercase w-full max-w-[200px] mx-auto block cursor-pointer border border-slate-700/50 dark:border-white/20 modal-action-btn error-modal-btn"
                   >
                     Dismiss
                   </button>
@@ -6413,7 +6845,7 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="w-full max-w-4xl max-h-[80vh] bento-card border-blue-500/30 bg-[#0a0c10] flex flex-col shadow-2xl relative z-10 pointer-events-auto"
+              className="w-full max-w-4xl max-h-[80vh] bento-card border-blue-500/30 bg-slate-900 flex flex-col shadow-2xl relative z-10 pointer-events-auto"
             >
               <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
                 <h2 className="text-sm font-black uppercase tracking-widest text-blue-400">

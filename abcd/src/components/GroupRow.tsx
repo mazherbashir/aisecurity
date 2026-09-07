@@ -8,6 +8,7 @@ import {
   RefreshCcw,
   ExternalLink,
   Code,
+  Code2,
   Database
 } from 'lucide-react';
 import { AggregatedGroup } from '../types';
@@ -186,53 +187,79 @@ export const GroupRow: React.FC<GroupRowProps> = ({
                 </button>
               </div>
             )}
+            {group.crsComments && group.crsComments.trim() !== '' && (
+              <div className="mt-1.5 flex items-center">
+                <button
+                  type="button"
+                  onClick={onViewFull}
+                  className="inline-flex items-center gap-1 text-[10px] font-mono text-indigo-300 bg-indigo-950/70 hover:bg-indigo-900/80 border border-indigo-800/60 px-2 py-0.5 rounded transition-colors text-left"
+                  title="CRS team comments provided. Click to open deep-dive analysis."
+                >
+                  <Code2 size={11} className="text-indigo-400 shrink-0" />
+                  <span className="truncate max-w-[200px]">CRS: "{group.crsComments.trim()}"</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {group.aiComment || isEditing ? (
-            <div className="relative group/ai">
-              <textarea
-                value={group.aiComment}
-                onChange={(e) => onUpdateAIComment(e.target.value)}
-                onDoubleClick={onViewFull}
-                title="Double click to view full screen"
-                className="w-full p-3 text-[11px] bg-blue-500/5 border border-blue-500/20 rounded-xl text-blue-100 focus:border-blue-500/50 outline-none transition-all min-h-[80px] resize-none leading-relaxed cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder="Enter your mitigation proposal or pull AI analysis..."
-                disabled={!!group.status}
-              />
-              <div className="absolute right-3 top-3 opacity-30 group-hover/ai:opacity-100 transition-opacity">
-                 <Sparkles className="text-blue-400" size={14} />
+            <>
+              <div className="relative group/ai">
+                <textarea
+                  value={group.aiComment}
+                  onChange={(e) => onUpdateAIComment(e.target.value)}
+                  onDoubleClick={onViewFull}
+                  title="Double click to view full screen"
+                  className="w-full p-3 text-[11px] bg-blue-500/5 border border-blue-500/20 rounded-xl text-blue-100 focus:border-blue-500/50 outline-none transition-all min-h-[80px] resize-none leading-relaxed cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  placeholder="Enter your mitigation proposal or pull AI analysis..."
+                  disabled={!!group.status}
+                />
+                <div className="absolute right-3 top-3 opacity-30 group-hover/ai:opacity-100 transition-opacity">
+                   <Sparkles className="text-blue-400" size={14} />
+                </div>
+                <div className="absolute right-2 bottom-2 flex gap-1">
+                  <button 
+                    onClick={onViewFull}
+                    className="p-1.5 bg-slate-900 border border-slate-700 rounded-lg hover:border-blue-500 text-slate-500 hover:text-white transition-all shadow-xl"
+                    title="Full screen view"
+                  >
+                    <ExternalLink size={12} />
+                  </button>
+                  <button 
+                    onClick={handlePullAI} 
+                    className="p-1.5 bg-slate-900 border border-slate-700 rounded-lg hover:border-blue-500 text-blue-400 transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Regenerate"
+                    disabled={!!group.status || isPulling}
+                  >
+                    <RefreshCcw size={12} className={isPulling ? 'animate-spin' : ''} />
+                  </button>
+                </div>
               </div>
-              <div className="absolute right-2 bottom-2 flex gap-1">
-                <button 
-                  onClick={onViewFull}
-                  className="p-1.5 bg-slate-900 border border-slate-700 rounded-lg hover:border-blue-500 text-slate-500 hover:text-white transition-all shadow-xl"
-                  title="Full screen view"
-                >
-                  <ExternalLink size={12} />
-                </button>
-                <button 
-                  onClick={handlePullAI} 
-                  className="p-1.5 bg-slate-900 border border-slate-700 rounded-lg hover:border-blue-500 text-blue-400 transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Regenerate"
-                  disabled={!!group.status || isPulling}
-                >
-                  <RefreshCcw size={12} className={isPulling ? 'animate-spin' : ''} />
-                </button>
-              </div>
-            </div>
+              {/* AI Quality Badges */}
+              {group.aiMetrics?.totalTokens ? (
+                <div className="flex items-center gap-2 text-[9px] font-mono text-slate-400 pt-1">
+                  <span className="flex items-center gap-1 text-blue-400 font-semibold"><Sparkles size={10} /> AI Analyzed</span>
+                  <span>•</span>
+                  <span className="text-emerald-400 font-bold">{group.aiMetrics.totalTokens} tokens</span>
+                  {group.aiMetrics.inputTokens && group.aiMetrics.outputTokens && (
+                    <span className="text-slate-500 font-normal">({group.aiMetrics.inputTokens} in / {group.aiMetrics.outputTokens} out)</span>
+                  )}
+                </div>
+              ) : null}
+            </>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-nowrap shrink-0">
               <button
                 onClick={handlePullAI}
                 disabled={isPulling || !!group.status}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shrink-0"
               >
                 {isPulling ? <RefreshCcw size={14} className="animate-spin" /> : <Sparkles size={14} />}
                 Pull AI Recommendation
               </button>
               <button
                 onClick={() => setIsEditing(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 border border-slate-700 text-slate-400 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-700 hover:text-white transition-all"
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 border border-slate-700 text-slate-400 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-700 hover:text-white transition-all whitespace-nowrap shrink-0"
               >
                 Mitigation Proposal
               </button>
