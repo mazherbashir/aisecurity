@@ -31,7 +31,6 @@ import {
   Edit2,
   HelpCircle,
   DollarSign,
-  Undo2,
   User,
   Sun,
   Moon,
@@ -1360,20 +1359,6 @@ export default function App() {
     isOpen: boolean;
     actionType: "approved" | "rejected";
     selectedItems: AggregatedGroup[];
-  } | null>(null);
-  const [batchToast, setBatchToast] = useState<{
-    id: string;
-    actionType: "approved" | "rejected";
-    count: number;
-    recordsCount: number;
-    apiDebug: boolean;
-    timestamp: number;
-    revertData: {
-      groupIds: string[];
-      prevSastProposal: any;
-      prevScaProposal: any;
-      prevStatuses: { groupId: string; status?: "approved" | "rejected" }[];
-    };
   } | null>(null);
   const [sastMitigationProposal, setSastMitigationProposal] = useState<any>(null);
   const [scaMitigationProposal, setScaMitigationProposal] = useState<any>(null);
@@ -3055,17 +3040,6 @@ export default function App() {
     const actionStr = actionType === "approved" ? "accepted" : "rejected";
     const buildId = activeOverview.buildId || "";
 
-    const prevStatuses = selectedItems.map((item) => ({
-      groupId: item.groupId,
-      status: item.status,
-    }));
-    const prevSastProp = sastMitigationProposal
-      ? JSON.parse(JSON.stringify(sastMitigationProposal))
-      : null;
-    const prevScaProp = scaMitigationProposal
-      ? JSON.parse(JSON.stringify(scaMitigationProposal))
-      : null;
-
     let successCount = 0;
     let lastErrorMsg = "";
     for (const group of selectedItems) {
@@ -3148,24 +3122,6 @@ export default function App() {
     setBatchModalConfig(null);
     setSelectedGroups(new Set());
     if (successCount > 0) {
-      const totalRecords = selectedItems.reduce(
-        (acc, item) => acc + (item.records ? item.records.length : 1),
-        0
-      );
-      setBatchToast({
-        id: String(Date.now()),
-        actionType,
-        count: successCount,
-        recordsCount: totalRecords,
-        apiDebug,
-        timestamp: Date.now(),
-        revertData: {
-          groupIds: selectedItems.map((i) => i.groupId),
-          prevSastProposal: prevSastProp,
-          prevScaProposal: prevScaProp,
-          prevStatuses,
-        },
-      });
       if (successCount < selectedItems.length) {
         setBackendError(`Some submissions failed: ${lastErrorMsg}`);
       }
@@ -3184,42 +3140,6 @@ export default function App() {
       setBackendError(errMsg || 'Unknown error');
     }
   };
-
-  // Auto-dismiss batch audit toast after 9 seconds
-  useEffect(() => {
-    if (!batchToast) return;
-    const timer = setTimeout(() => {
-      setBatchToast(null);
-    }, 9000);
-    return () => clearTimeout(timer);
-  }, [batchToast]);
-
-  // Handle Quick Undo for Batch Action
-  const handleUndoBatch = useCallback(() => {
-    if (!batchToast) return;
-    const { revertData } = batchToast;
-
-    setAggregatedData((prev) => ({
-      sast: prev.sast.map((g) => {
-        const matched = revertData.prevStatuses.find((p) => p.groupId === g.groupId);
-        return matched ? { ...g, status: matched.status } : g;
-      }),
-      sca: prev.sca.map((g) => {
-        const matched = revertData.prevStatuses.find((p) => p.groupId === g.groupId);
-        return matched ? { ...g, status: matched.status } : g;
-      }),
-    }));
-
-    if (revertData.prevSastProposal) {
-      setSastMitigationProposal(revertData.prevSastProposal);
-    }
-    if (revertData.prevScaProposal) {
-      setScaMitigationProposal(revertData.prevScaProposal);
-    }
-
-    setSelectedGroups(new Set(revertData.groupIds));
-    setBatchToast(null);
-  }, [batchToast]);
 
   // Global Keyboard Shortcuts for Rapid Triage
   useEffect(() => {
@@ -6605,93 +6525,6 @@ export default function App() {
             </motion.div>
           </div>
         )}
-        </AnimatePresence>
-
-        {/* Post-Submission Audit Toast & Quick Undo */}
-        <AnimatePresence>
-          {batchToast && (
-            <motion.div
-              key={batchToast.id}
-              initial={{ opacity: 0, y: 30, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-              className="fixed bottom-6 right-6 z-[300] bg-slate-900 border border-blue-500/30 rounded-2xl shadow-2xl p-4 flex flex-col gap-3 min-w-[340px] max-w-md backdrop-blur-md overflow-hidden"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
-                      batchToast.actionType === "approved"
-                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                        : "bg-red-500/10 text-red-400 border-red-500/30"
-                    }`}
-                  >
-                    {batchToast.actionType === "approved" ? (
-                      <CheckCircle2 size={20} />
-                    ) : (
-                      <XCircle size={20} />
-                    )}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-black uppercase tracking-wider text-white">
-                        Batch {batchToast.actionType === "approved" ? "Approved" : "Rejected"}
-                      </h4>
-                      {batchToast.apiDebug && (
-                        <span className="text-[9px] font-mono font-bold bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded border border-blue-500/30">
-                          Review Comment
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Updated <span className="text-white font-bold">{batchToast.count}</span> groups (
-                      <span className="text-white font-bold">{batchToast.recordsCount}</span> records)
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setBatchToast(null)}
-                  className="text-slate-500 hover:text-white transition p-1 rounded-md hover:bg-slate-800 cursor-pointer"
-                  title="Dismiss"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
-                <span className="text-[10px] text-slate-500 font-mono">
-                  Accidental submission?
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleUndoBatch}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-black uppercase tracking-wider rounded-lg transition-all shadow-md active:scale-95 cursor-pointer"
-                  >
-                    <Undo2 size={13} />
-                    Undo Action
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBatchToast(null)}
-                    className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-
-              {/* Progress Countdown Line */}
-              <motion.div
-                initial={{ width: "100%" }}
-                animate={{ width: "0%" }}
-                transition={{ duration: 9, ease: "linear" }}
-                className="h-1 bg-gradient-to-r from-blue-500 to-emerald-500 absolute bottom-0 left-0 right-0"
-              />
-            </motion.div>
-          )}
         </AnimatePresence>
 
         <AnimatePresence>
