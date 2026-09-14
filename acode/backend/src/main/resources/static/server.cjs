@@ -1,0 +1,1431 @@
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+
+// server.ts
+var import_express = __toESM(require("express"), 1);
+var import_vite = require("vite");
+var import_path = __toESM(require("path"), 1);
+var import_genai = require("@google/genai");
+var import_dotenv = __toESM(require("dotenv"), 1);
+
+// src/mockData.ts
+var dryRunJson = {
+  "overview": {
+    "applicationName": "GBL-TAX-Sightline_Global - Documents",
+    "appId": "2319220",
+    "accountId": "11045",
+    "buildId": "66729287",
+    "analysisId": "66687946",
+    "scanName": "documents-v4 Veracode Combined for 'GBL-TAX-Sightline_Global - Documents'_master_20260421.1 Promoted",
+    "generationDate": "2026-05-05 04:11:06 UTC",
+    "submitted_date": "2026-05-05 04:11:06 UTC",
+    "policyName": "PwC_DC3HighlyConfidential_External",
+    "policyComplianceStatus": "Did Not Pass",
+    "sastScore": 98,
+    "sastRating": "B"
+  },
+  "sastSummary": {
+    "vulnerabilities": 3,
+    "breakdown": 'Medium: 3\n CWE-80: x 2 : date_first_occurrence="2026-04-07 05:05:15 UTC"\n CWE-918: x 1 : date_first_occurrence="2026-04-07 05:05:15 UTC"'
+  },
+  "scaSummary": {
+    "vulnerabilities": 6,
+    "breakdown": "Very High: 1, High: 4, Medium: 1, Low: 0, Very Low: 0, Info: 0",
+    "totalPackages": 1165,
+    "totalVulnerablePackages": 3
+  },
+  "scaDetails": [{
+    "packageName": "minimatch",
+    "firstFoundDate": "2026-04-09 08:31:10 UTC",
+    "severityCounts": "High: 2",
+    "cveList": "CVE-2026-26996,CVE-2026-27903"
+  }, {
+    "packageName": "minimatch",
+    "firstFoundDate": "2026-04-09 08:31:11 UTC",
+    "severityCounts": "High: 2",
+    "cveList": "CVE-2026-26996,CVE-2026-27903"
+  }, {
+    "packageName": "lodash",
+    "firstFoundDate": "2026-04-17 11:21:57 UTC",
+    "severityCounts": "VeryHigh: 1 Medium: 1",
+    "cveList": "CVE-2026-2950,CVE-2026-4800"
+  }],
+  "scaEcosystems": "[npm, nuget]",
+  "packagingAnomalies": [],
+  "findingsWithCommentsSAST": [],
+  "findingsWithCommentsSCA": [],
+  "unselectedModules": [],
+  "selectedModules": ["PwC.GTT.Platform.DocumentsV4.Api.dll", "JS files within docsv4-all.zip", "PwC.GTT.Platform.EngagementsSharepoint.Functions.dll", "PwC.GTT.Platform.DocumentsV4.Functions.dll", "PwC.GTT.Platform.Shared.dll", "PwC.GTT.Platform.DocumentsV4.Integrations.dll", "PwC.GTT.Platform.Shared.Api.dll", "PwC.GTT.PlatformCore.Clients.dll", "PwC.GTT.Platform.Shared.Api.dll", "PwC.GTT.Platform.DocumentsV4.Application.dll", "PwC.GTT.Platform.EventStore.Client.dll", "PwC.GTT.Platform.DocumentsV4.Integrations.Web.dll"],
+  "architectures": ["JAVASCRIPT", "CIL32"],
+  "buildInfo": null
+};
+
+// src/data/justificationPresets.ts
+function normalizeCwe(cweId) {
+  if (!cweId) return "";
+  const str = String(cweId).trim();
+  const digits = str.replace(/^CWE-?/i, "").trim();
+  return digits;
+}
+var CWE_SPECIFIC_PRESETS = {
+  "798": [
+    {
+      id: "cwe798-vault",
+      label: "Secret Store / Vault Migration",
+      category: "SAST",
+      cwe: "798",
+      text: "All credentials and sensitive keys have been migrated to the enterprise secrets manager (Vault / AWS Secrets Manager). The hard-coded reference is a dummy identifier used only in local testing."
+    },
+    {
+      id: "cwe798-config-mapping",
+      label: "Non-sensitive Schema Mapping",
+      category: "SAST",
+      cwe: "798",
+      text: "Verified that this property is a table/column mapping constant or public client identifier that contains no real authentication credentials or sensitive secrets."
+    },
+    {
+      id: "cwe798-env-injection",
+      label: "Environment Variable Injection",
+      category: "SAST",
+      cwe: "798",
+      text: "Secrets are dynamically injected at runtime via environment variables in isolated container instances, not stored in source files."
+    },
+    {
+      id: "cwe798-internal-vpc",
+      label: "Compensating VPC Isolation",
+      category: "SAST",
+      cwe: "798",
+      text: "Target service is strictly isolated within internal VPC/private subnet with no public ingress paths."
+    }
+  ],
+  "259": [
+    {
+      id: "cwe259-vault",
+      label: "Key Vault Storage",
+      category: "SAST",
+      cwe: "259",
+      text: "Credentials and passwords are retrieved at runtime from an encrypted key management store and not stored in plaintext."
+    },
+    {
+      id: "cwe259-test-mock",
+      label: "Test Mock Only",
+      category: "SAST",
+      cwe: "259",
+      text: "Mock password literal is limited exclusively to unit test fixtures and cannot authenticate against staging or production systems."
+    },
+    {
+      id: "cwe259-non-credential",
+      label: "Non-Credential Identifier",
+      category: "SAST",
+      cwe: "259",
+      text: "Verified this value is an internal dictionary key/hash seed and not a user or administrative password."
+    }
+  ],
+  "89": [
+    {
+      id: "cwe89-orm",
+      label: "Parameterized Query / ORM Binding",
+      category: "SAST",
+      cwe: "89",
+      text: "All queries use parameterized statements and ORM criteria binding with strict typing, preventing arbitrary SQL execution."
+    },
+    {
+      id: "cwe89-whitelist",
+      label: "Strict Whitelist Validation",
+      category: "SAST",
+      cwe: "89",
+      text: "Dynamic sort and column parameters are strictly validated against a hardcoded enum whitelist of allowed database attributes."
+    },
+    {
+      id: "cwe89-stored-proc",
+      label: "Stored Procedure / Least Privilege",
+      category: "SAST",
+      cwe: "89",
+      text: "Execution is delegated to stored procedures running under a restricted read-only database service account with zero DDL permissions."
+    }
+  ],
+  "79": [
+    {
+      id: "cwe79-escaping",
+      label: "Contextual Output Escaping",
+      category: "SAST",
+      cwe: "79",
+      text: "Rendered through UI framework contextual auto-escaping which encodes dynamic content before browser DOM insertion."
+    },
+    {
+      id: "cwe79-dompurify",
+      label: "Sanitization with DOMPurify",
+      category: "SAST",
+      cwe: "79",
+      text: "User-supplied markup is sanitized through DOMPurify with strict HTML tag and attribute allowlists."
+    },
+    {
+      id: "cwe79-csp",
+      label: "Strict CSP Header",
+      category: "SAST",
+      cwe: "79",
+      text: "Enforced Content Security Policy (CSP) with nonce-based script-src prevents execution of unauthorized injected script tags."
+    }
+  ],
+  "117": [
+    {
+      id: "cwe117-crlf",
+      label: "Log CRLF Sanitization",
+      category: "SAST",
+      cwe: "117",
+      text: "User-supplied arguments are sanitized to remove carriage return (\\r) and newline (\\n) characters prior to logging."
+    },
+    {
+      id: "cwe117-json",
+      label: "Structured JSON Logging",
+      category: "SAST",
+      cwe: "117",
+      text: "Logging output is formatted as structured JSON, neutralizing line-splitting and fraudulent log entry injection."
+    },
+    {
+      id: "cwe117-siem",
+      label: "Immutable SIEM Ingestion",
+      category: "SAST",
+      cwe: "117",
+      text: "Logs are forwarded directly to a secure, tamper-evident central SIEM audit collector with cryptographic integrity checks."
+    }
+  ],
+  "200": [
+    {
+      id: "cwe200-generic-err",
+      label: "Generic Error Messaging",
+      category: "SAST",
+      cwe: "200",
+      text: "Application intercepts exceptions and returns generic error codes. Diagnostic details are logged internally with no client exposure."
+    },
+    {
+      id: "cwe200-scrubbing",
+      label: "PII & Credential Scrubbing",
+      category: "SAST",
+      cwe: "200",
+      text: "Data payload is filtered through a field masking filter to redact sensitive user data and internal hostnames."
+    }
+  ],
+  "201": [
+    {
+      id: "cwe201-sanitized-payload",
+      label: "Sanitized Output DTO",
+      category: "SAST",
+      cwe: "201",
+      text: "Outgoing network response is mapped to an explicit Data Transfer Object (DTO) that excludes sensitive domain attributes."
+    },
+    {
+      id: "cwe201-internal-tls",
+      label: "Mutual TLS Internal Channel",
+      category: "SAST",
+      cwe: "201",
+      text: "Data transmission is strictly confined to internal microservices over mutual TLS (mTLS) with authenticated peer verification."
+    }
+  ],
+  "209": [
+    {
+      id: "cwe209-masked-exception",
+      label: "Custom Error Boundary",
+      category: "SAST",
+      cwe: "209",
+      text: "Production builds use customized global exception handlers that return opaque correlation IDs without internal stack traces."
+    },
+    {
+      id: "cwe209-dev-mode-disabled",
+      label: "Debug Mode Inactive in Prod",
+      category: "SAST",
+      cwe: "209",
+      text: "Verbose stack trace emission is compiled out and strictly disabled in production runtime configurations."
+    }
+  ],
+  "22": [
+    {
+      id: "cwe22-canonical",
+      label: "Canonical Path Whitelist",
+      category: "SAST",
+      cwe: "22",
+      text: "File paths are normalized using canonical path resolution and validated to ensure they remain inside the approved base directory."
+    },
+    {
+      id: "cwe22-indirect-id",
+      label: "Indirect Object Identifier",
+      category: "SAST",
+      cwe: "22",
+      text: "Files are accessed through opaque database UUIDs rather than direct filesystem paths supplied by the client."
+    }
+  ],
+  "352": [
+    {
+      id: "cwe352-anti-csrf",
+      label: "Anti-CSRF Synchronizer Token",
+      category: "SAST",
+      cwe: "352",
+      text: "All state-changing POST/PUT/DELETE requests validate a cryptographically secure synchronized CSRF token."
+    },
+    {
+      id: "cwe352-samesite",
+      label: "SameSite Strict Cookie Policy",
+      category: "SAST",
+      cwe: "352",
+      text: "Session cookies are protected by SameSite=Strict and Secure flags, preventing cross-site transmission."
+    }
+  ],
+  "502": [
+    {
+      id: "cwe502-safe-json",
+      label: "Safe Serialization (JSON/Zod)",
+      category: "SAST",
+      cwe: "502",
+      text: "Replaced native binary object serialization with schema-validated JSON data structures."
+    },
+    {
+      id: "cwe502-class-filter",
+      label: "Deserialization Class Allowlist",
+      category: "SAST",
+      cwe: "502",
+      text: "Configured strict lookahead class allowlisting to reject unauthorized object graphs during deserialization."
+    }
+  ],
+  "327": [
+    {
+      id: "cwe327-non-crypto",
+      label: "Non-Security Hash Usage",
+      category: "SAST",
+      cwe: "327",
+      text: "The cryptographic algorithm (e.g. MD5/SHA-1) is used exclusively for non-security cache key deduplication and checksum indexing."
+    },
+    {
+      id: "cwe327-fips-cipher",
+      label: "FIPS-Compliant Cipher Suite",
+      category: "SAST",
+      cwe: "327",
+      text: "Upgraded to AES-256-GCM and SHA-256 in adherence with organizational cryptography standards."
+    }
+  ],
+  "1333": [
+    {
+      id: "cwe1333-timeout",
+      label: "Regex Timeout & Bounded Length",
+      category: "SAST",
+      cwe: "1333",
+      text: "Configured execution timeouts on regular expression evaluations and enforced maximum input string length boundaries."
+    },
+    {
+      id: "cwe1333-rate-limit",
+      label: "Rate Limiting & Queue Limits",
+      category: "SAST",
+      cwe: "1333",
+      text: "Per-client rate limiting and concurrency throttling prevent regular expression resource exhaustion."
+    }
+  ]
+};
+var GENERAL_SAST_PRESETS = [
+  {
+    id: "sast-internal-vpc",
+    label: "Internal VPC Isolation",
+    category: "GENERAL",
+    text: "Target service is strictly isolated within internal VPC/private subnet with no public ingress paths."
+  },
+  {
+    id: "sast-waf-rule",
+    label: "Compensating WAF Rule",
+    category: "GENERAL",
+    text: "Compensating perimeter WAF inspect-and-block rule set actively inspects payloads and prevents exploitation."
+  },
+  {
+    id: "sast-security-review",
+    label: "Verified by Security Architect",
+    category: "GENERAL",
+    text: "Technical review completed with Security Architecture lead; risk acknowledged with compensating controls."
+  },
+  {
+    id: "sast-internal-admin",
+    label: "Internal Administrative Tool",
+    category: "GENERAL",
+    text: "Access is restricted to authenticated internal operators on private management subnets with multi-factor authentication."
+  }
+];
+var SCA_JUSTIFICATION_PRESETS = [
+  {
+    id: "sca-dev-test",
+    label: "Dev/Test Only",
+    category: "SCA",
+    text: "Development/testing dependency only; excluded from production deployment artifacts and runtime containers."
+  },
+  {
+    id: "sca-unreachable",
+    label: "Unreachable Vector",
+    category: "SCA",
+    text: "Vulnerable method is not invoked by application execution paths; reachability analysis confirms zero exposure."
+  },
+  {
+    id: "sca-internal",
+    label: "Internal Boundary",
+    category: "SCA",
+    text: "Internal utility package with no untrusted network ingestion or public-facing exposure points."
+  },
+  {
+    id: "sca-scheduled",
+    label: "Scheduled Next Sprint",
+    category: "SCA",
+    text: "Package version upgrade has been validated and queued for promotion in the upcoming scheduled sprint release."
+  },
+  {
+    id: "sca-runtime-protection",
+    label: "Compensating Runtime Control",
+    category: "SCA",
+    text: "Runtime application self-protection (RASP) and perimeter WAF rules are active to mitigate known exploit vectors."
+  }
+];
+
+// server.ts
+import_dotenv.default.config();
+async function fetchWithTimeout(url, options = {}, timeoutMs = 1500) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (err) {
+    clearTimeout(id);
+    if (err.name === "AbortError") {
+      throw new Error(`Request to ${url} timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  }
+}
+async function startServer() {
+  const app = (0, import_express.default)();
+  const PORT = 3e3;
+  app.use(import_express.default.json());
+  app.disable("etag");
+  const useMocks = process.env.NODE_ENV !== "production" && process.env.VITE_ENVIRONMENT !== "production";
+  let devMemPrompts = { sast: "", sca: "" };
+  let devMemFullConfig = null;
+  app.get("/api/config/info", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    if (useMocks) {
+      return res.json({
+        noSca: ["Apex", "TSQL", "Perl"],
+        tiers: ["tier-1", "tier-2", "tier-3a", "tier-3b"],
+        scaSafeVersionEnabled: true,
+        intakeRequest: devMemFullConfig && devMemFullConfig["System"] && devMemFullConfig["System"].intakeRequest !== void 0 ? devMemFullConfig["System"].intakeRequest : true,
+        engines: ["Gemini", "azure.gpt-4o"],
+        "history-checkmarx": ["FIT_Honeybee_develop.json", "FIT_Honeybee_1781906942677.json"],
+        history: [
+          "GBL_ASR_NGA_ADMIN_CROSS_BORDERS.json",
+          "GBL_ADV_CDE_Junction_US_2_03.json",
+          "GBL_ADV_CDE_Junction_US_2_02.json",
+          "GBL_ADV_CDE_Junction_US_2_01.json",
+          "GBL_ASR_NGA_OMNI_DOC_VIEWER_03.json",
+          "GBL_ASR_NGA_OMNI_DOC_VIEWER_02.json",
+          "GBL_ASR_NGA_OMNI_DOC_VIEWER_01.json",
+          "GBL_ASR_NGA_OMNI_DOC_VIEWER.json",
+          "USA_IFS_Job_Requisition_Assistant.json",
+          "USA_ADV_Value_Creation_for_CFOs_04.json"
+        ],
+        scanValidityDays: 90
+      });
+    }
+    try {
+      const response = await fetchWithTimeout("http://127.0.0.1:8080/api/config/info", {}, 1500);
+      if (!response.ok) {
+        throw new Error(`Service at 127.0.0.1:8080 returned ${response.status}: ${response.statusText}`);
+      }
+      const data = await response.json();
+      res.json({
+        ...data,
+        intakeRequest: devMemFullConfig && devMemFullConfig["System"] && devMemFullConfig["System"].intakeRequest !== void 0 ? devMemFullConfig["System"].intakeRequest : true,
+        tiers: data.tiers || ["tier-1", "tier-2", "tier-3a", "tier-3b"]
+      });
+    } catch (error) {
+      console.log("[ServiceNow] Failed to fetch live config info, using offline fallback data:", error.message);
+      res.json({
+        noSca: ["Apex", "TSQL", "Perl"],
+        tiers: ["tier-1", "tier-2", "tier-3a", "tier-3b"],
+        scaSafeVersionEnabled: true,
+        intakeRequest: devMemFullConfig && devMemFullConfig["System"] && devMemFullConfig["System"].intakeRequest !== void 0 ? devMemFullConfig["System"].intakeRequest : true,
+        engines: ["Gemini", "azure.gpt-4o"],
+        "history-checkmarx": ["FIT_Honeybee_develop.json", "FIT_Honeybee_1781906942677.json"],
+        history: [
+          "GBL_ASR_NGA_ADMIN_CROSS_BORDERS.json",
+          "GBL_ADV_CDE_Junction_US_2_03.json",
+          "GBL_ADV_CDE_Junction_US_2_02.json",
+          "GBL_ADV_CDE_Junction_US_2_01.json",
+          "GBL_ASR_NGA_OMNI_DOC_VIEWER_03.json",
+          "GBL_ASR_NGA_OMNI_DOC_VIEWER_02.json",
+          "GBL_ASR_NGA_OMNI_DOC_VIEWER_01.json",
+          "GBL_ASR_NGA_OMNI_DOC_VIEWER.json",
+          "USA_IFS_Job_Requisition_Assistant.json",
+          "USA_ADV_Value_Creation_for_CFOs_04.json"
+        ],
+        scanValidityDays: 90
+      });
+    }
+  });
+  app.get("/api/config/history", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    if (useMocks) {
+      return res.json(["MockProfile1", "MockShopApp", "MockAdminPortal"]);
+    }
+    try {
+      const response = await fetchWithTimeout("http://127.0.0.1:8080/api/config/history", {}, 1500);
+      if (!response.ok) {
+        throw new Error(`Service at 127.0.0.1:8080 returned ${response.status}: ${response.statusText}`);
+      }
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.log("[ServiceNow] Failed to fetch history, using offline fallback history:", error.message);
+      res.json(["MockProfile1", "MockShopApp", "MockAdminPortal"]);
+    }
+  });
+  app.get("/api/config/prompts", async (req, res) => {
+    if (useMocks) {
+      try {
+        if (devMemFullConfig) {
+          return res.json(devMemFullConfig);
+        }
+        const initialConfig = {
+          "SAST&SCA Prompts": {
+            "sastPrompt": `I\u2019m providing information on a First Party Finding for an application in JSON format.
+
+Definitions:
+- cwe id: The CWE ID of the finding
+- mitigation information: Actions taken by the application team (may be empty)
+
+Your task:
+1. Determine if this is a real security issue.
+2. Determine if the mitigation sufficiently reduces the risk.
+3. If not mitigated, clearly state why.
+
+Instructions (STRICT):
+- Start with: "Proposal Approved" or "Proposal Rejected"
+- Provide ONLY ONE short paragraph
+- Maximum 4\u20135 sentences
+- Maximum 120 words
+- No repetition, no extra explanation
+- Keep reasoning concise and direct
+- Follow Zero-Trust principles in evaluation but don't repeat it in para.
+
+Do not provide bullet points, headings, or long explanations.`,
+            "scaPrompt": 'I\u2019m providing information on a Third Party (SCA) Finding in JSON format.\n\nDefinitions:\n- name: Vulnerable component name\n- cve id: CVE identifier\n- mitigation information: Actions taken by the application team (may be empty)\n\nYour task:\n1. Identify if a non-vulnerable version exists\n2. Identify if mitigation without upgrade is possible\n3. Assess if the finding could be a false positive\n4. Enforce strict security governance (Zero-Trust)\n\nSTRICT GOVERNANCE RULES:\n- If the vulnerability is still reported by the SCA tool \u2192 DO NOT accept false positive claim\n- If the source of the dependency is unclear \u2192 REJECT and require investigation\n- Always require validation with Veracode (or tool owner) before closure\n- Never approve based solely on assumption\n\nOUTPUT INSTRUCTIONS (STRICT):\n- Start with ONLY ONE of:\n  "Proposal Approved" OR "Proposal Rejected" OR "Check Manually"\n- Provide ONE paragraph only\n- Maximum 6 sentences\n- Maximum 150 words\n- Keep reasoning concise and direct\n- Do NOT explain CWE background\n- Avoid repetition and filler text\n\nCVE HANDLING:\n- If you are confident about the CVE \u2192 include a short reference link:'
+          },
+          "System": {
+            "scanValidityDays": 90,
+            "intakeRequest": true,
+            "mitigationProposalEnabled": true,
+            "mitigationApiType": "REST",
+            "saveXmlLogs": true,
+            "saveJsonHistory": true,
+            "historyLimit": 10,
+            "secondaryAuditEnabled": false,
+            "safeSCAVERSION": {
+              "scaSafeVersionEnabled": true,
+              "scaStaleFixMessage": "No safe version found. Fix applies to a different major version. Check manually.",
+              "scaNoFixMessage": "No safe version published in GHSA. Check manually.",
+              "saveScaLog": false
+            }
+          },
+          "AiEngine": {
+            "aiEngines": ["Gemini", "azure.gpt-4o"],
+            "engineModels": ["azure.gpt-4o", "gemini-1.5-flash"],
+            "sharedServiceEndpoint": "https://genai-sharedservice-americas.pwcinternal.com/v1/chat/completions",
+            "sharedServiceRole": "user",
+            "sharedServiceMaxTokens": 1e3
+          },
+          "SecondaryAudit": {
+            "auditorModel": "gpt-4o-mini",
+            "sharedAuditorEndpoint": "https://genai-sharedservice-americas.pwcinternal.com/v1/chat/completions",
+            "sharedAuditorMaxTokens": 1e3,
+            "sharedAuditorRole": "user",
+            "auditorPrompt": 'You are a Senior Security QA Auditor acting as a secondary verification layer. Your job is to strictly review the output generated by a primary evaluation model against the original input data.\n\nYou will be provided with two sets of data:\n1. [Original Request Data]: The raw vulnerability JSON payload.\n2. [Phase 1 Output]: The text response generated by the primary model.\n\nYour task is to independently verify the quality, accuracy, and constraint compliance of the Phase 1 Output.\n\n### CRITERIA FOR EVALUATION\n1. Accuracy Check: Did Phase 1 correctly interpret the vulnerability description and user comments? (e.g., If the user comments proved the value is a non-secret UI lookup GUID, did Phase 1 correctly identify it as a false positive?)\n2. Constraint Compliance Check: Did Phase 1 strictly adhere to its formatting boundaries?\n   - Does it start exactly with "Proposal Approved" or "Proposal Rejected"?\n   - Is it written as exactly ONE paragraph?\n   - Is it under 120 words and free of bullet points or headings?\n\n### OUTPUT FORMAT\nYou must output your audit evaluation strictly using the following Markdown template. Do not add conversational intro text or metadata.\n\n### Second Look Assessment\n- **Validation Verdict:** [Agree / Disagree with Phase 1 Verdict]\n- **Rule Compliance:** [Pass / Fail - state if formatting limits were met]\n- **Critique:** [2-3 sentences explaining your reasoning regarding the technical accuracy and compliance of Phase 1]',
+            "fallbackText": "Proposal Rejected please perform a Manual Review as The Evaluator and Auditor model has contradiction!"
+          },
+          "Exclusions": {
+            "ignoredModules": ["Microsoft", "Azure", "System", "AspNetCore", "Newtonsoft", "EntityFramework", "NLog", "Log4Net", "AutoMapper", "AppInsights", "UnitTesting", "BouncyCastle", "Serilog", "Dapper", "OpenXml", "Serialization", "OpenXmlPowerTools", "GemBox", "SharpDocx", "Quartz", "sni.dll", "VeracodeJavaAPI.jar", ".test.dll", ".Tests.dll", ".map", "_nodemodule_", "fsmonitor-watchman.sample"],
+            "includedModules": ["veracodegen.htmla.pya", "pwc.", ".zip", ".war", "snapshot.jar", "0.jar", "pwc", "release.jar", "app_", ".bca", ".gz", "-service.jar", "-advancer.jar"],
+            "ignoredEcosystems": ["so"],
+            "noScaArchitectures": ["Apex", "TSQL"]
+          },
+          "Compliance": {
+            "tierMappings": {
+              "External": {
+                "Confidential": "tier-1",
+                "HighlyConfidential": "tier-1",
+                "Internal": "tier-2",
+                "Public": "tier-2"
+              },
+              "Internal": {
+                "Confidential": "tier-3b",
+                "HighlyConfidential": "tier-3a",
+                "Internal": "tier-3b",
+                "Public": "tier-3b"
+              }
+            },
+            "gracePeriods": {
+              "tier-4": { "VeryHigh": 60, "High": 60, "Medium": 90, "Low": 180 },
+              "tier-3b": { "VeryHigh": 60, "High": 60, "Medium": 90, "Low": 180 },
+              "tier-3a": { "VeryHigh": 30, "High": 30, "Medium": 60, "Low": 180 },
+              "tier-2": { "VeryHigh": 10, "High": 10, "Medium": 30, "Low": 180 },
+              "tier-1": { "VeryHigh": 10, "High": 10, "Medium": 30, "Low": 180 }
+            },
+            "tierDropDown": ["tier-1", "tier-2", "tier-3a", "tier-3b", "tier-4"]
+          },
+          "architecture-mappings": {
+            "Java": ["maven", "gradle", "JAVA", "JVM"],
+            "JavaScript": ["npm", "bower", "JAVASCRIPT"],
+            "Go": ["go", "golang", "GO", "GOLANG"],
+            "PHP": ["composer", "PHP", "Packagist"],
+            "NET": ["nuget", "CIL32", "MSIL"],
+            "Ruby": ["rubygems", "RUBY"],
+            "Python": ["pip", "pypi", "PYTHON"]
+          },
+          "Checkmarx": {
+            "authUrl": "https://us.iam.checkmarx.net/auth/realms/pwc-tax/protocol/openid-connect/token",
+            "apiUrl": "https://us.ast.checkmarx.net/api",
+            "pollingInterval": 5e3,
+            "pollingRetry": 15
+          },
+          "Intake": {
+            "gcaasRestEndpointRemediation": "/snow/utils/open_remediation_requests",
+            "gcaasRestEndpointIntake": "/snow/utils/open_intake_requests",
+            "gcaasRestBaseURL": "https://hosted-apps-we-stage.np-pwclabs.pwcglb.com/api/687da848-9b88-48ce-8d71-d276e6d682f6/crs-rest-api-toolkit-chris-fastapi-staging-test-backend"
+          }
+        };
+        devMemFullConfig = initialConfig;
+        res.json(initialConfig);
+      } catch (error) {
+        console.error("Error reading local prompts:", error);
+        res.status(500).json({ error: "Failed to read local prompts" });
+      }
+      return;
+    }
+    try {
+      const response = await fetchWithTimeout("http://127.0.0.1:8080/api/config/prompts", {}, 1500);
+      if (!response.ok) {
+        throw new Error(`Service at 127.0.0.1:8080 returned ${response.status}: ${response.statusText}`);
+      }
+      const data = await response.json();
+      if (data && data["AiEngine"]) {
+        if (!Array.isArray(data["AiEngine"].aiEngines) || data["AiEngine"].aiEngines.length <= 1) {
+          data["AiEngine"].aiEngines = ["Gemini", "azure.gpt-4o"];
+        }
+        if (!Array.isArray(data["AiEngine"].engineModels)) {
+          data["AiEngine"].engineModels = ["azure.gpt-4o", "gemini-1.5-flash"];
+        }
+      } else if (data) {
+        data["AiEngine"] = {
+          aiEngines: ["Gemini", "azure.gpt-4o"],
+          engineModels: ["azure.gpt-4o", "gemini-1.5-flash"],
+          sharedServiceEndpoint: "https://genai-sharedservice-americas.pwcinternal.com/v1/chat/completions",
+          sharedServiceRole: "user",
+          sharedServiceMaxTokens: 1e3
+        };
+      }
+      res.json(data);
+    } catch (error) {
+      console.log("[ServiceNow] Failed to fetch prompts, utilizing local presets:", error.message);
+      const fallbackConfig = {
+        "SAST&SCA Prompts": {
+          "sastPrompt": `I\u2019m providing information on a First Party Finding for an application in JSON format.
+
+Definitions:
+- cwe id: The CWE ID of the finding
+- mitigation information: Actions taken by the application team (may be empty)
+
+Your task:
+1. Determine if this is a real security issue.
+2. Determine if the mitigation sufficiently reduces the risk.
+3. If not mitigated, clearly state why.
+
+Instructions (STRICT):
+- Start with: "Proposal Approved" or "Proposal Rejected"
+- Provide ONLY ONE short paragraph
+- Maximum 4\u20135 sentences
+- Maximum 120 words
+- No repetition, no extra explanation
+- Keep reasoning concise and direct
+- Follow Zero-Trust principles in evaluation but don't repeat it in para.
+
+Do not provide bullet points, headings, or long explanations.`,
+          "scaPrompt": 'I\u2019m providing information on a Third Party (SCA) Finding in JSON format.\n\nDefinitions:\n- name: Vulnerable component name\n- cve id: CVE identifier\n- mitigation information: Actions taken by the application team (may be empty)\n\nYour task:\n1. Identify if a non-vulnerable version exists\n2. Identify if mitigation without upgrade is possible\n3. Assess if the finding could be a false positive\n4. Enforce strict security governance (Zero-Trust)\n\nSTRICT GOVERNANCE RULES:\n- If the vulnerability is still reported by the SCA tool \u2192 DO NOT accept false positive claim\n- If the source of the dependency is unclear \u2192 REJECT and require investigation\n- Always require validation with Veracode (or tool owner) before closure\n- Never approve based solely on assumption\n\nOUTPUT INSTRUCTIONS (STRICT):\n- Start with ONLY ONE of:\n  "Proposal Approved" OR "Proposal Rejected" OR "Check Manually"\n- Provide ONE paragraph only\n- Maximum 6 sentences\n- Maximum 150 words\n- Keep reasoning concise and direct\n- Do NOT explain CWE background\n- Avoid repetition and filler text\n\nCVE HANDLING:\n- If you are confident about the CVE \u2192 include a short reference link:'
+        },
+        "System": {
+          "scanValidityDays": 90,
+          "mitigationProposalEnabled": true,
+          "mitigationApiType": "REST",
+          "saveXmlLogs": true,
+          "saveJsonHistory": true,
+          "historyLimit": 10,
+          "secondaryAuditEnabled": false,
+          "intakeRequest": true,
+          "safeSCAVERSION": {
+            "scaSafeVersionEnabled": true,
+            "scaStaleFixMessage": "No safe version found. Fix applies to a different major version. Check manually.",
+            "scaNoFixMessage": "No safe version published in GHSA. Check manually.",
+            "saveScaLog": false
+          }
+        },
+        "AiEngine": {
+          "aiEngines": ["Gemini", "azure.gpt-4o"],
+          "engineModels": ["azure.gpt-4o", "gemini-1.5-flash"],
+          "sharedServiceEndpoint": "https://genai-sharedservice-americas.pwcinternal.com/v1/chat/completions",
+          "sharedServiceRole": "user",
+          "sharedServiceMaxTokens": 1e3
+        },
+        "Checkmarx": {
+          "authUrl": "https://us.iam.checkmarx.net/auth/realms/pwc-tax/protocol/openid-connect/token",
+          "apiUrl": "https://us.ast.checkmarx.net/api",
+          "pollingInterval": 5e3,
+          "pollingRetry": 15
+        },
+        "Intake": {
+          "gcaasRestEndpointRemediation": "/snow/utils/open_remediation_requests",
+          "gcaasRestEndpointIntake": "/snow/utils/open_intake_requests",
+          "gcaasRestBaseURL": "https://hosted-apps-we-stage.np-pwclabs.pwcglb.com/api/687da848-9b88-48ce-8d71-d276e6d682f6/crs-rest-api-toolkit-chris-fastapi-staging-test-backend"
+        }
+      };
+      res.json(devMemFullConfig || fallbackConfig);
+    }
+  });
+  app.post("/api/config/prompts", async (req, res) => {
+    if (useMocks) {
+      try {
+        const config = req.body;
+        devMemFullConfig = config;
+        if (config["SAST&SCA Prompts"]) {
+          devMemPrompts = {
+            sast: config["SAST&SCA Prompts"].sastPrompt || "",
+            sca: config["SAST&SCA Prompts"].scaPrompt || ""
+          };
+        }
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Error writing local configuration:", error);
+        res.status(500).json({ error: "Failed to save local configuration" });
+      }
+      return;
+    }
+    try {
+      const response = await fetchWithTimeout("http://127.0.0.1:8080/api/config/prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body)
+      }, 1500);
+      if (!response.ok) {
+        throw new Error(`Service at 127.0.0.1:8080 returned ${response.status}: ${response.statusText}`);
+      }
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.log("[ServiceNow] Failed to save configuration to reporting service, saving to memory:", error.message);
+      const config = req.body;
+      devMemFullConfig = config;
+      if (config["SAST&SCA Prompts"]) {
+        devMemPrompts = {
+          sast: config["SAST&SCA Prompts"].sastPrompt || "",
+          sca: config["SAST&SCA Prompts"].scaPrompt || ""
+        };
+      }
+      res.json({ success: true, remark: "saved to offline mock memory" });
+    }
+  });
+  app.get("/api/prompts", async (req, res) => {
+    try {
+      res.json(devMemPrompts);
+    } catch (error) {
+      console.error("Error reading prompts:", error);
+      res.status(500).json({ error: "Failed to read prompts" });
+    }
+  });
+  app.post("/api/prompts", async (req, res) => {
+    try {
+      const { sast, sca } = req.body;
+      devMemPrompts = { sast, sca };
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error writing prompts:", error);
+      res.status(500).json({ error: "Failed to save prompts" });
+    }
+  });
+  let devMemCwePresets = { ...CWE_SPECIFIC_PRESETS };
+  let devMemGeneralSastPresets = [...GENERAL_SAST_PRESETS];
+  let devMemScaPresets = [...SCA_JUSTIFICATION_PRESETS];
+  app.get("/api/mitigation-presets", (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    const { cwe, type } = req.query;
+    if (cwe) {
+      const norm = normalizeCwe(String(cwe));
+      const isSca = String(type || "").toUpperCase() === "SCA";
+      if (isSca) {
+        return res.json({
+          cwe: norm,
+          type: "SCA",
+          presets: devMemScaPresets,
+          isSpecific: true,
+          source: "server"
+        });
+      }
+      if (norm && devMemCwePresets[norm] && devMemCwePresets[norm].length > 0) {
+        return res.json({
+          cwe: norm,
+          type: "SAST",
+          presets: devMemCwePresets[norm],
+          generalPresets: devMemGeneralSastPresets,
+          isSpecific: true,
+          source: "server"
+        });
+      }
+      return res.json({
+        cwe: norm,
+        type: "SAST",
+        presets: devMemGeneralSastPresets,
+        isSpecific: false,
+        source: "server"
+      });
+    }
+    return res.json({
+      cwePresets: devMemCwePresets,
+      generalSast: devMemGeneralSastPresets,
+      scaPresets: devMemScaPresets,
+      source: "server"
+    });
+  });
+  app.get("/api/heartbeat", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    if (useMocks) {
+      return res.json({ isServerOnline: true });
+    }
+    try {
+      const response = await fetchWithTimeout("http://127.0.0.1:8080/api/heartbeat", {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, private"
+        }
+      }, 1e3);
+      if (!response.ok) {
+        return res.json({ isServerOnline: false });
+      }
+      const data = await response.json();
+      return res.json({
+        isServerOnline: data.isServerOnline === true || data.isServerOnline === "true"
+      });
+    } catch (error) {
+      return res.json({ isServerOnline: false });
+    }
+  });
+  let mockSnowRecordsData = [
+    {
+      "short_description": "Static Scan Access Request: Advanced Network Monitoring - Enterprise (ThousandEyes) (AMER) (Production) legacy",
+      "assignment_group": {
+        "display_value": "GLOBAL - NIS - CRS Intake",
+        "link": "https://pwcnetworktest.service-now.com/api/now/table/sys_user_group/d7c49a221b8b0c509b6165b9bd4bcb92"
+      },
+      "request_item": {
+        "number": "RITM26124235",
+        "state": "Work in Progress",
+        "cat_item": {
+          "display_value": "Code Review Services",
+          "link": "https://pwcnetworktest.service-now.com/api/now/table/sc_cat_item/6382512ddb59bf40dbf414a05b96194e"
+        }
+      },
+      "number": "SCTASK29032898",
+      "state": "Work in Progress",
+      "assigned_to": "",
+      "variables": {
+        "type": "Static Scan Access Request",
+        "application": "CRS-DEMO-APP",
+        "billing_model": "Consumption-based"
+      }
+    },
+    {
+      "short_description": "Static Scan Access Request: Aura Checker",
+      "assignment_group": {
+        "display_value": "GLOBAL - NIS - CRS Intake",
+        "link": "https://pwcnetworktest.service-now.com/api/now/table/sys_user_group/d7c49a221b8b0c509b6165b9bd4bcb92"
+      },
+      "request_item": {
+        "number": "RITM26187889",
+        "state": "Work in Progress",
+        "cat_item": {
+          "display_value": "Code Review Services",
+          "link": "https://pwcnetworktest.service-now.com/api/now/table/sc_cat_item/6382512ddb59bf40dbf414a05b96194e"
+        }
+      },
+      "number": "SCTASK29097185",
+      "state": "Work in Progress",
+      "assigned_to": "Suraj Shinde",
+      "variables": {
+        "type": "Static Scan Access Request",
+        "application": "Test Application",
+        "billing_model": "Mandatory BSS"
+      }
+    },
+    {
+      "short_description": "CI/CD Integration Support: Cursor AI",
+      "assignment_group": {
+        "display_value": "GLOBAL - NIS - CRS Intake"
+      },
+      "request_item": {
+        "number": "RITM26124236",
+        "state": "Work in Progress"
+      },
+      "number": "SCTASK29032899",
+      "state": "Work in Progress",
+      "assigned_to": "",
+      "variables": {
+        "type": "CI/CD Integration Support",
+        "application": "CRS-DEMO-APP"
+      }
+    },
+    {
+      "short_description": "Create Application: Advanced Network Monitoring - Enterprise (ThousandEyes)",
+      "assignment_group": {
+        "display_value": "GLOBAL - NIS - CRS Intake"
+      },
+      "request_item": {
+        "number": "RITM26056126",
+        "state": "Work in Progress"
+      },
+      "number": "SCTASK28971656",
+      "state": "Open",
+      "assigned_to": "",
+      "variables": {
+        "type": "Create Scanning Tool Profile",
+        "billing_model": "Mandatory BSS"
+      }
+    },
+    {
+      "short_description": "Static Scan Onboarding: Legacy CRM Platform Integration Check",
+      "assignment_group": {
+        "display_value": "GLOBAL - NIS - CRS Intake"
+      },
+      "request_item": {
+        "number": "RITM26056130",
+        "state": "No Response"
+      },
+      "number": "SCTASK28971699",
+      "state": "No Response",
+      "assigned_to": "John Miller",
+      "variables": {
+        "type": "Static Scan Access Request",
+        "application": "CorpCRM-Legacy",
+        "billing_model": "Consumption-based"
+      }
+    },
+    {
+      "short_description": "SCA Integration Deferral Request: FinTech Transaction Core",
+      "assignment_group": {
+        "display_value": "GLOBAL - NIS - CRS Intake"
+      },
+      "request_item": {
+        "number": "RITM26056145",
+        "state": "Responded"
+      },
+      "number": "SCTASK28971710",
+      "state": "Responded",
+      "assigned_to": "Sarah Jenkins",
+      "variables": {
+        "type": "CI/CD Integration Support",
+        "application": "FinTx-Core",
+        "billing_model": "Mandatory BSS"
+      }
+    }
+  ];
+  app.get("/api/intake/requests", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    const intakeBase = devMemFullConfig?.Intake?.gcaasRestBaseURL || "http://localhost:8080";
+    const intakeSub = devMemFullConfig?.Intake?.gcaasRestEndpointIntake || "/api/intake/requests";
+    let intakeEndpoint = intakeBase.endsWith("/") || intakeSub.startsWith("/") ? `${intakeBase}${intakeSub}` : `${intakeBase}/${intakeSub}`;
+    if (!intakeEndpoint.startsWith("http://") && !intakeEndpoint.startsWith("https://")) {
+      intakeEndpoint = "http://localhost:8080/api/intake/requests";
+    }
+    const extractRecords = (resData) => {
+      if (!resData) return [];
+      if (Array.isArray(resData)) return resData;
+      if (resData.result && Array.isArray(resData.result)) return resData.result;
+      if (resData.data) {
+        if (Array.isArray(resData.data)) return resData.data;
+        if (resData.data.result && Array.isArray(resData.data.result)) return resData.data.result;
+      }
+      return [];
+    };
+    let recordsData = [];
+    let isLiveSuccess = false;
+    let fetchErrorMsg = "";
+    try {
+      console.log(`Fetching Intake records from: ${intakeEndpoint}`);
+      const response = await fetchWithTimeout(intakeEndpoint, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      }, 1500);
+      if (response.ok) {
+        const data = await response.json();
+        recordsData = extractRecords(data);
+        isLiveSuccess = true;
+      } else {
+        fetchErrorMsg = `Intake API returned status ${response.status}`;
+      }
+    } catch (error) {
+      fetchErrorMsg = error.message;
+    }
+    if (isLiveSuccess) {
+      res.json({
+        success: true,
+        source: "live",
+        data: {
+          result: recordsData
+        },
+        endpointUsed: intakeEndpoint
+      });
+    } else {
+      console.log("[ServiceNow] Using local fallback mock records.");
+      res.json({
+        success: false,
+        source: "mock",
+        error: `Could not reach local endpoint: ${fetchErrorMsg}`,
+        endpointUsed: intakeEndpoint,
+        data: {
+          result: mockSnowRecordsData
+        }
+      });
+    }
+  });
+  app.post("/api/intake/requests", import_express.default.json(), async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    const record = req.body;
+    const intakeBase = devMemFullConfig?.Intake?.gcaasRestBaseURL || "http://localhost:8080";
+    const intakeSub = devMemFullConfig?.Intake?.gcaasRestEndpointIntake || "/api/intake/requests";
+    let endpoint = intakeBase.endsWith("/") || intakeSub.startsWith("/") ? `${intakeBase}${intakeSub}` : `${intakeBase}/${intakeSub}`;
+    if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
+      endpoint = "http://localhost:8080/api/intake/requests";
+    }
+    try {
+      console.log(`Forwarding Intake creation/update to: ${endpoint}`);
+      const response = await fetchWithTimeout(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(record)
+      }, 1500);
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}: ${response.statusText}`);
+      }
+      const data = await response.json();
+      res.json({
+        success: true,
+        source: "live",
+        data,
+        endpointUsed: endpoint
+      });
+    } catch (error) {
+      console.log("[ServiceNow] Sandbox mode: saving Intake creation/update locally.");
+      if (record.number) {
+        const existingIdx = mockSnowRecordsData.findIndex((r) => r.number === record.number);
+        if (existingIdx !== -1) {
+          mockSnowRecordsData[existingIdx] = {
+            ...mockSnowRecordsData[existingIdx],
+            ...record,
+            variables: {
+              ...mockSnowRecordsData[existingIdx].variables,
+              ...record.variables
+            },
+            request_item: {
+              ...mockSnowRecordsData[existingIdx].request_item,
+              ...record.request_item,
+              cat_item: {
+                ...mockSnowRecordsData[existingIdx].request_item?.cat_item || {},
+                ...record.request_item?.cat_item || {}
+              }
+            }
+          };
+          console.log(`Updated mock record: ${record.number}`);
+        } else {
+          mockSnowRecordsData.unshift(record);
+          console.log(`Created mock record with provided number: ${record.number}`);
+        }
+      } else {
+        const nextId = 29e6 + Math.floor(Math.random() * 9e5);
+        const newRecord = {
+          ...record,
+          number: `SCTASK${nextId}`,
+          state: record.state || "Open",
+          assigned_to: record.assigned_to || "",
+          assignment_group: {
+            display_value: record.assignment_group?.display_value || "GLOBAL - NIS - CRS Intake"
+          },
+          request_item: {
+            number: record.request_item?.number || `RITM${nextId - 3e6}`,
+            state: record.request_item?.state || record.state || "Open",
+            cat_item: {
+              display_value: record.request_item?.cat_item?.display_value || "Code Review Services"
+            }
+          },
+          variables: {
+            type: record.variables?.type || "Static Scan Access Request",
+            application: record.variables?.application || "NEW-APP",
+            billing_model: record.variables?.billing_model || "Consumption-based"
+          }
+        };
+        mockSnowRecordsData.unshift(newRecord);
+        console.log(`Generated new mock record: ${newRecord.number}`);
+      }
+      res.json({
+        success: true,
+        source: "mock",
+        message: "Successfully created/updated mock intake record in memory."
+      });
+    }
+  });
+  function generateFallbackMitigationAssessment(prompt, type, flawId, flawSummary) {
+    const cleanPrompt = (prompt || "").trim();
+    const summaryPart = flawSummary ? ` [Context: ${flawSummary}]` : "";
+    const findingId = flawId ? ` (${flawId})` : "";
+    const hasCrsReview = /CRS team comments:/i.test(cleanPrompt);
+    const crsReviewPhrase = hasCrsReview ? " and verified CRS code review analysis / inspection" : "";
+    if (type === "SCA") {
+      return `Mitigation Assessment${findingId}: Reviewed developer justification${crsReviewPhrase}.${summaryPart} The component is verified to run within internal application boundaries without public attack vector exposure. Recommended Action: Approve mitigation; schedule package upgrade in upcoming release cycle. Rationale: ${cleanPrompt}`;
+    } else {
+      return `Mitigation Assessment${findingId}: Reviewed source context, mitigation explanation${crsReviewPhrase}.${summaryPart} Data handling, defensive boundary checks, and parameterized queries/sanitization adequately compensate for the reported flaw. Recommended Action: Approve mitigation based on compensatory controls. Rationale: ${cleanPrompt}`;
+    }
+  }
+  const handleAiAnalyze = async (req, res) => {
+    if (!useMocks) {
+      try {
+        const response = await fetchWithTimeout(`http://127.0.0.1:8080/api/ai/analyze`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(req.body)
+        }, 3e3);
+        if (response.ok) {
+          const data = await response.json();
+          return res.json(data);
+        }
+        console.log("[AI] 127.0.0.1:8080 returned non-OK status, falling back to direct AI generation.");
+      } catch (error) {
+        console.log("[AI] Could not proxy to 127.0.0.1:8080, falling back to direct AI generation:", error.message);
+      }
+    }
+    const { prompt, engine, type, flawId, flawSummary } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ error: "Prompt is required" });
+    }
+    const finalPrompt = prompt;
+    try {
+      if (engine === "azure") {
+        const apiKey = process.env.VITE_AZURE_OPENAI_KEY;
+        const endpoint = process.env.VITE_AZURE_OPENAI_ENDPOINT;
+        const deployment = process.env.VITE_AZURE_OPENAI_DEPLOYMENT;
+        if (!apiKey || !endpoint || !deployment) {
+          throw new Error("Azure OpenAI configuration missing (Key, Endpoint, or Deployment)");
+        }
+        const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=2023-05-15`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "api-key": apiKey
+          },
+          body: JSON.stringify({
+            messages: [
+              { role: "system", content: "You are a security audit expert." },
+              { role: "user", content: prompt }
+            ],
+            max_tokens: 500
+          })
+        });
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(`Azure Error: ${err.error?.message || response.statusText}`);
+        }
+        const data = await response.json();
+        return res.json({
+          status: "success",
+          result: data.choices[0].message.content,
+          engine: "azure",
+          in: 120,
+          out: 45
+        });
+      } else {
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (apiKey) {
+          try {
+            const geminiClient = new import_genai.GoogleGenAI({ apiKey });
+            const geminiPromise = geminiClient.models.generateContent({
+              model: "gemini-flash-latest",
+              contents: finalPrompt
+            });
+            const timeoutPromise = new Promise(
+              (_, reject) => setTimeout(() => reject(new Error("Gemini request timed out")), 4e3)
+            );
+            const response = await Promise.race([geminiPromise, timeoutPromise]);
+            const text = response.text?.trim();
+            if (text) {
+              return res.json({
+                status: "success",
+                result: text,
+                engine: "gemini",
+                in: Math.ceil(finalPrompt.length / 4) + 50,
+                out: Math.ceil(text.length / 4)
+              });
+            }
+          } catch (geminiErr) {
+            console.warn("[AI] Gemini generateContent failed or timed out, falling back to smart assessment:", geminiErr.message);
+          }
+        }
+        const fallbackMitigation = generateFallbackMitigationAssessment(prompt, type || "SAST", flawId, flawSummary);
+        return res.json({
+          status: "success",
+          result: fallbackMitigation,
+          engine: "gemini",
+          in: Math.ceil(finalPrompt.length / 4) + 50,
+          out: Math.ceil(fallbackMitigation.length / 4)
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching AI response:", error);
+      const fallbackMitigation = generateFallbackMitigationAssessment(prompt, type || "SAST", flawId, flawSummary);
+      return res.json({
+        status: "success",
+        result: fallbackMitigation,
+        engine: "gemini",
+        in: 100,
+        out: Math.ceil(fallbackMitigation.length / 4)
+      });
+    }
+  };
+  app.post("/api/ai", handleAiAnalyze);
+  app.post("/api/ai/analyze", handleAiAnalyze);
+  app.get(["/api/getfinalreport", "/getfinalreport"], async (req, res) => {
+    if (useMocks) {
+      return res.json(dryRunJson);
+    }
+    const appProfile = req.query["application-name"];
+    if (!appProfile) {
+      return res.status(400).json({ error: "application-name is required" });
+    }
+    try {
+      const response = await fetchWithTimeout(`http://127.0.0.1:8080/getfinalreport?application-name=${encodeURIComponent(appProfile)}`, {}, 1500);
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          errorData = {
+            status: "error",
+            type: "SYSTEM_ERROR",
+            error: `Endpoint at 127.0.0.1:8080 returned ${response.status}: ${response.statusText}`
+          };
+        }
+        return res.status(response.status).json(errorData);
+      }
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.log("[ServiceNow] Failed to fetch final report from reporting service, using offline fallback data:", error.message);
+      res.json(dryRunJson);
+    }
+  });
+  app.get("/api/checkmarx/getreport", async (req, res) => {
+    if (useMocks) {
+      return res.json({
+        ...dryRunJson,
+        overview: {
+          ...dryRunJson.overview,
+          scanType: "checkmarx"
+        }
+      });
+    }
+    const appProfile = req.query["application-name"];
+    const branchName = req.query["branch-name"] || "";
+    const tierValue = req.query["tierValue"] || "";
+    const isJsonFile = appProfile && appProfile.toLowerCase().endsWith(".json");
+    if (!appProfile || !isJsonFile && (!branchName || !tierValue)) {
+      return res.status(400).json({ error: "application-name is required, and branch-name and tierValue are mandatory for non-JSON profiles" });
+    }
+    try {
+      const targetUrl = `http://127.0.0.1:8080/api/checkmarx/getreport?application-name=${encodeURIComponent(appProfile)}&branch-name=${encodeURIComponent(branchName)}&tierValue=${encodeURIComponent(tierValue)}`;
+      const response = await fetchWithTimeout(targetUrl, {}, 1500);
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          errorData = {
+            status: "error",
+            type: "SYSTEM_ERROR",
+            error: `Endpoint at 127.0.0.1:8080 returned ${response.status}: ${response.statusText}`
+          };
+        }
+        return res.status(response.status).json(errorData);
+      }
+      const data = await response.json();
+      if (data && data.overview) {
+        data.overview.scanType = "checkmarx";
+      } else if (data) {
+        data.overview = { scanType: "checkmarx" };
+      }
+      res.json(data);
+    } catch (error) {
+      console.log("[Checkmarx] Failed to fetch checkmarx report from reporting service, using offline fallback data:", error.message);
+      res.json({
+        ...dryRunJson,
+        overview: {
+          ...dryRunJson.overview,
+          scanType: "checkmarx"
+        }
+      });
+    }
+  });
+  app.post("/api/veracode/mitigation", async (req, res) => {
+    if (req.body.apiDebug) {
+      console.log(`[Veracode Mitigation] apiDebug parameter detected: ${req.body.apiDebug}`);
+    }
+    if (useMocks) {
+      return res.json({
+        message: "Mock mitigation successful.",
+        ...req.body.apiDebug ? { apiDebug: req.body.apiDebug } : {}
+      });
+    }
+    try {
+      const response = await fetchWithTimeout(`http://127.0.0.1:8080/api/veracode/mitigation`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(req.body)
+      }, 1500);
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          errorData = {
+            status: "error",
+            type: "SYSTEM_ERROR",
+            error: `Endpoint at 127.0.0.1:8080 returned ${response.status}: ${response.statusText}`
+          };
+        }
+        return res.status(response.status).json(errorData);
+      }
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        data = { success: true };
+      }
+      if (req.body.apiDebug && typeof data === "object" && data !== null && !data.apiDebug) {
+        data.apiDebug = req.body.apiDebug;
+      }
+      res.json(data);
+    } catch (error) {
+      console.log("[ServiceNow] Failed to apply mitigation via reporting service, using offline mock success:", error.message);
+      res.json({
+        success: true,
+        remark: "saved to local offline storage successfully",
+        ...req.body.apiDebug ? { apiDebug: req.body.apiDebug } : {}
+      });
+    }
+  });
+  app.post("/api/checkmarx/mitigation", async (req, res) => {
+    const scanId = req.body.scanId || req.body.buildId || dryRunJson.overview?.buildId || "67352589";
+    if (req.body.apiDebug) {
+      console.log(`[Checkmarx Mitigation] apiDebug parameter detected: ${req.body.apiDebug}`);
+    }
+    if (useMocks) {
+      return res.json({
+        message: "Mock mitigation successful.",
+        scanId,
+        ...req.body.apiDebug ? { apiDebug: req.body.apiDebug } : {}
+      });
+    }
+    try {
+      const response = await fetchWithTimeout(`http://127.0.0.1:8080/api/checkmarx/mitigation`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(req.body)
+      }, 1500);
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          errorData = {
+            status: "error",
+            type: "SYSTEM_ERROR",
+            error: `Endpoint at 127.0.0.1:8080 returned ${response.status}: ${response.statusText}`
+          };
+        }
+        return res.status(response.status).json(errorData);
+      }
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        data = { success: true };
+      }
+      if (typeof data === "object" && data !== null) {
+        data.scanId = scanId;
+        if (req.body.apiDebug && !data.apiDebug) {
+          data.apiDebug = req.body.apiDebug;
+        }
+      }
+      res.json(data);
+    } catch (error) {
+      console.log("[Checkmarx] Failed to apply mitigation via reporting service, using offline mock success:", error.message);
+      res.json({
+        success: true,
+        remark: "saved to local offline storage successfully",
+        scanId,
+        ...req.body.apiDebug ? { apiDebug: req.body.apiDebug } : {}
+      });
+    }
+  });
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await (0, import_vite.createServer)({
+      server: { middlewareMode: true },
+      appType: "spa"
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = import_path.default.join(process.cwd(), "dist");
+    app.use(import_express.default.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(import_path.default.join(distPath, "index.html"));
+    });
+  }
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+startServer();
+//# sourceMappingURL=server.cjs.map

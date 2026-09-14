@@ -1,0 +1,70 @@
+{
+  "overview" : {
+    "applicationName" : "TaxDocs.UI",
+    "appId" : "345982b3-fbcd-4273-a160-efd81664e13f",
+    "accountId" : "345982b3-fbcd-4273-a160-efd81664e13f",
+    "buildId" : "5fddc301-ebf7-4a62-a3bb-ceca9e85a42c",
+    "analysisId" : "b86407fc-8f5e-4ca1-ac09-36702e3cb1b4",
+    "scanName" : "master",
+    "scanType" : "checkmarx",
+    "generationDate" : "2026-08-11T00:06:13.971773Z",
+    "policyName" : null,
+    "policyComplianceStatus" : "Passed",
+    "sastScore" : 100,
+    "sastRating" : null,
+    "staticAnalysisUnitId" : null,
+    "sandboxId" : "https://us.ast.checkmarx.net/sast-results/345982b3-fbcd-4273-a160-efd81664e13f/5fddc301-ebf7-4a62-a3bb-ceca9e85a42c",
+    "tier" : "tier-1",
+    "gracePeriod" : null,
+    "submitted_date" : null
+  },
+  "sastSummary" : {
+    "vulnerabilities" : 19,
+    "breakdown" : {
+      "Low" : {
+        "total" : 19,
+        "findings" : [ {
+          "cwe" : "CWE-338",
+          "categoryname" : "Use_of_Insufficiently_Random_Values",
+          "count" : 19,
+          "date_first_occurrence" : "2026-08-10T05:24:26Z",
+          "remediation_due_date" : "2027-02-06"
+        } ]
+      }
+    }
+  },
+  "scaSummary" : {
+    "vulnerabilities" : 0,
+    "breakdown" : { },
+    "totalPackages" : 2096,
+    "totalVulnerablePackages" : 0
+  },
+  "scaDetails" : [ ],
+  "findingsWithCommentsSAST" : [ ],
+  "findingsWithCommentsSCA" : [ ],
+  "unselectedModules" : [ ],
+  "selectedModules" : [ ],
+  "architectures" : [ "javascript" ],
+  "noPrecompile" : [ ],
+  "minifedFiles" : [ ],
+  "scaEcosystems" : "javascript",
+  "scaSafeVersionEnabled" : true,
+  "packagingAnomalies" : [ ],
+  "sastMitigationProposal" : {
+    "Total" : 0,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "scaMitigationProposal" : {
+    "Total" : 0,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "missingSCAForSelectedModules" : [ ]
+}

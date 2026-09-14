@@ -1,0 +1,607 @@
+{
+ "reportCreationDate": "2026-09-03T21:14:42.300053781Z",
+ "reportType": "Vulnerability Type",
+ "reportHeader": {
+  "projectName": "pwc-us-tax-fsportfolio/FundOps",
+  "projectCreationDate": "2026-06-24T20:15:06.269593Z",
+  "tenantId": "b86407fc-8f5e-4ca1-ac09-36702e3cb1b4",
+  "scanDate": "2026-09-03T19:26:01.717482Z",
+  "severityDistribution": [
+   {
+    "level": "Critical",
+    "value": 0
+   },
+   {
+    "level": "High",
+    "value": 3
+   },
+   {
+    "level": "Medium",
+    "value": 1
+   },
+   {
+    "level": "Low",
+    "value": 0
+   },
+   {
+    "level": "Information",
+    "value": 0
+   }
+  ],
+  "scannedBranchName": "main",
+  "scanners": [
+   "SAST",
+   "SCA",
+   "API Security"
+  ],
+  "mainBranch": "main",
+  "timezone": "UTC"
+ },
+ "reportFilters": {
+  "filters": [
+   {
+    "filterName": "Severity",
+    "included": [
+     "Critical",
+     "High",
+     "Medium",
+     "Low",
+     "Information"
+    ],
+    "excluded": []
+   },
+   {
+    "filterName": "Result State",
+    "included": [
+     "To Verify",
+     "Proposed Not Exploitable"
+    ],
+    "excluded": [
+     "Not Exploitable",
+     "Confirmed",
+     "Urgent"
+    ]
+   },
+   {
+    "filterName": "Status",
+    "included": [
+     "New",
+     "Recurrent"
+    ],
+    "excluded": []
+   },
+   {
+    "filterName": "Scanners",
+    "included": [
+     "SAST",
+     "SCA"
+    ],
+    "excluded": [
+     "API Security"
+    ]
+   }
+  ],
+  "resultsLimit": "10000"
+ },
+ "scanInformation": {
+  "projectName": "pwc-us-tax-fsportfolio/FundOps",
+  "scanId": "4c6ee762-484b-4df8-951a-2ee4122616f9",
+  "scanInitiator": "gwen-ou_pwcit",
+  "scanDuration": 319029668000,
+  "preset": "PWCTaxDivision",
+  "totalScannedLoc": 137764,
+  "scannedLoc": 137764,
+  "iacScannedLoc": 0,
+  "totalScannedFiles": 1343,
+  "scannedFiles": 1343,
+  "iacScannedFiles": 0,
+  "viewerLink": "https://us.ast.checkmarx.net/sast-results/39bf37f6-f364-4c5f-b9e2-c8e6610d3589/4c6ee762-484b-4df8-951a-2ee4122616f9",
+  "sourceOrigin": "github",
+  "scanType": "Incremental",
+  "branch": "main",
+  "totalDensity": 0,
+  "density": 0,
+  "iacDensity": 0,
+  "groups": [
+   "Tax/FundOps"
+  ],
+  "scanners": [
+   "SAST",
+   "SCA",
+   "API Security"
+  ],
+  "scannerStatus": [
+   {
+    "name": "API Security",
+    "status": "Completed"
+   },
+   {
+    "name": "SAST",
+    "status": "Completed"
+   },
+   {
+    "name": "SCA",
+    "status": "Completed"
+   }
+  ]
+ },
+ "projectAndScanTags": {
+  "scanTags": null,
+  "projectTags": null
+ },
+ "densityGrade": {
+  "totalResults": 0,
+  "loc": 137764,
+  "density": 0
+ },
+ "scannerOverview": {
+  "totalResults": 4,
+  "sastResults": {
+   "engine": "SAST",
+   "value": 0,
+   "percentage": 0
+  },
+  "iacResults": null,
+  "scaResults": {
+   "engine": "SCA",
+   "value": 4,
+   "percentage": 100
+  },
+  "containersResults": null,
+  "scsResults": null
+ },
+ "statusOverview": {
+  "totalResults": 4,
+  "newResultsOverview": {
+   "numberOfResults": 0,
+   "percentage": 0
+  },
+  "recurrentResultsOverview": {
+   "numberOfResults": 4,
+   "percentage": 100
+  }
+ },
+ "stateOverview": {
+  "totalResults": 4,
+  "stateDistribution": [
+   {
+    "state": "To Verify",
+    "numberOfResults": 4,
+    "percentage": 100,
+    "density": {
+     "value": 0
+    }
+   },
+   {
+    "state": "Proposed Not Exploitable",
+    "numberOfResults": 0,
+    "percentage": 0,
+    "density": {
+     "value": 0
+    }
+   }
+  ]
+ },
+ "languageOverview": [],
+ "technologyOverview": null,
+ "packageOverview": [
+  {
+   "packageName": "Npm-image-size-0.5.5",
+   "totalResults": 2,
+   "severityBreakdown": [
+    {
+     "level": "Critical",
+     "value": 0
+    },
+    {
+     "level": "High",
+     "value": 2
+    },
+    {
+     "level": "Medium",
+     "value": 0
+    },
+    {
+     "level": "Low",
+     "value": 0
+    },
+    {
+     "level": "Information",
+     "value": 0
+    }
+   ]
+  },
+  {
+   "packageName": "Npm-inflight-1.0.6",
+   "totalResults": 1,
+   "severityBreakdown": [
+    {
+     "level": "Critical",
+     "value": 0
+    },
+    {
+     "level": "High",
+     "value": 1
+    },
+    {
+     "level": "Medium",
+     "value": 0
+    },
+    {
+     "level": "Low",
+     "value": 0
+    },
+    {
+     "level": "Information",
+     "value": 0
+    }
+   ]
+  },
+  {
+   "packageName": "Npm-pdfjs-dist-4.10.38",
+   "totalResults": 1,
+   "severityBreakdown": [
+    {
+     "level": "Critical",
+     "value": 0
+    },
+    {
+     "level": "High",
+     "value": 0
+    },
+    {
+     "level": "Medium",
+     "value": 1
+    },
+    {
+     "level": "Low",
+     "value": 0
+    },
+    {
+     "level": "Information",
+     "value": 0
+    }
+   ]
+  }
+ ],
+ "severityOverview": {
+  "totalResults": 4,
+  "severitiesBreakdown": [
+   {
+    "level": "Critical",
+    "value": 0,
+    "percentage": 0,
+    "density": {
+     "value": 0
+    }
+   },
+   {
+    "level": "High",
+    "value": 3,
+    "percentage": 75,
+    "density": {
+     "value": 0
+    }
+   },
+   {
+    "level": "Medium",
+    "value": 1,
+    "percentage": 25,
+    "density": {
+     "value": 0
+    }
+   },
+   {
+    "level": "Low",
+    "value": 0,
+    "percentage": 0,
+    "density": {
+     "value": 0
+    }
+   },
+   {
+    "level": "Information",
+    "value": 0,
+    "percentage": 0,
+    "density": {
+     "value": 0
+    }
+   }
+  ]
+ },
+ "containersOverview": null,
+ "vulnerabilitiesTable": {
+  "totals": {
+   "detectedFiles": 0,
+   "resultsDistribution": [
+    {
+     "level": "Critical",
+     "value": 0
+    },
+    {
+     "level": "High",
+     "value": 0
+    },
+    {
+     "level": "Medium",
+     "value": 0
+    },
+    {
+     "level": "Low",
+     "value": 0
+    },
+    {
+     "level": "Information",
+     "value": 0
+    }
+   ]
+  },
+  "vulnerabilityTypes": []
+ },
+ "topTenVulnerabilities": {
+  "vulnerableFiles": 0,
+  "totalVulnerabilities": 0,
+  "vulnerabilitiesList": []
+ },
+ "topTenVulnerableFiles": {
+  "vulnerableFiles": 0,
+  "totalFiles": 1343,
+  "vulnerableFilesList": []
+ },
+ "topFiveOldestBySeverity": [],
+ "scanResults": {
+  "totalResults": 0,
+  "severitiesBreakdown": [],
+  "resultsList": []
+ },
+ "iacScanResults": null,
+ "scaScanResults": {
+  "totalResults": 4,
+  "severitiesBreakdown": [
+   {
+    "level": "Critical",
+    "value": 0
+   },
+   {
+    "level": "High",
+    "value": 3
+   },
+   {
+    "level": "Medium",
+    "value": 1
+   },
+   {
+    "level": "Low",
+    "value": 0
+   },
+   {
+    "level": "Information",
+    "value": 0
+   }
+  ],
+  "packages": [
+   {
+    "packageName": "image-size",
+    "packageId": "Npm-image-size-0.5.5",
+    "packageVersion": "0.5.5",
+    "totalResults": 2,
+    "packageCategory": [
+     {
+      "categoryName": "CWE-835",
+      "totalResults": 2,
+      "categoryResults": [
+       {
+        "resultId": "/a/Gi+p0QKbVLaUFEZD+u7fmYw+gDmb4NIckrHkZSEs=",
+        "severity": "High",
+        "status": "Recurrent",
+        "state": "To Verify",
+        "firstDetectionDate": "2026-08-10T13:55:18Z",
+        "lastDetectionDate": "2026-08-10T13:55:18Z",
+        "meta": {
+         "warnings": [
+          "Field `lastDetectionDate` is deprecated"
+         ]
+        },
+        "firstScanId": "fc79ce69-3625-4ae1-a691-64c994ad6763",
+        "outdated": true,
+        "cve": "CVE-2025-71329",
+        "description": "image-size contains a denial of service vulnerability that allows remote attackers to permanently block the Node.js event loop by supplying a specially crafted image buffer with a zero-valued size field in a recognized box-type. Attackers can trigger an infinite loop in the JXL or HEIF image parsers by providing a crafted image containing a box with a size of zero, causing the offset to never advance and permanently hanging the application.",
+        "references": [
+         {
+          "url": "https://github.com/advisories/GHSA-5p2g-fcmc-qvqq",
+          "type": "Advisory"
+         }
+        ]
+       },
+       {
+        "resultId": "ydA6SxJwt91c2dsLo5WiSXbDNMt45dOfqTIuxoOq4b0=",
+        "severity": "High",
+        "status": "Recurrent",
+        "state": "To Verify",
+        "firstDetectionDate": "2026-08-10T13:55:18Z",
+        "lastDetectionDate": "2026-08-10T13:55:18Z",
+        "meta": {
+         "warnings": [
+          "Field `lastDetectionDate` is deprecated"
+         ]
+        },
+        "firstScanId": "fc79ce69-3625-4ae1-a691-64c994ad6763",
+        "outdated": true,
+        "cve": "CVE-2025-71330",
+        "description": "image-size contains a denial of service vulnerability that allows remote attackers to permanently block the Node.js event loop by supplying a specially crafted ICNS image buffer. Attackers can craft an ICNS buffer containing valid magic bytes and a zero-valued entry length field to trigger an infinite loop in the ICNS parser, as the offset is never incremented when the entry length field is 0, causing the while loop condition to remain true indefinitely.",
+        "references": [
+         {
+          "url": "https://github.com/advisories/GHSA-w3rx-r6r6-pgpr",
+          "type": "Advisory"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "packageName": "inflight",
+    "packageId": "Npm-inflight-1.0.6",
+    "packageVersion": "1.0.6",
+    "totalResults": 1,
+    "packageCategory": [
+     {
+      "categoryName": "CWE-772",
+      "totalResults": 1,
+      "categoryResults": [
+       {
+        "resultId": "zJkXuTydUx1K3p1FjLXoFONggcZ5q4BUgunshWrcgr4=",
+        "severity": "High",
+        "status": "Recurrent",
+        "state": "To Verify",
+        "firstDetectionDate": "2026-06-24T20:15:13Z",
+        "lastDetectionDate": "2026-06-24T20:15:13Z",
+        "meta": {
+         "warnings": [
+          "Field `lastDetectionDate` is deprecated"
+         ]
+        },
+        "firstScanId": "021f935a-2c7a-4b58-bdf0-a566c3f697f3",
+        "outdated": false,
+        "cve": "Cxdca8e59f-8bfe",
+        "description": "In NPM `inflight` there is a Memory Leak because some resources are not freed correctly after being used. It appears to affect all versions, as the issue was not addressed and no fix is found. NOTE: In the meantime, `logdna-agent`, a package that depends on `inflight`, has merged a commit to address this solely in their package (so it should be fixed in `logdna-agent` in versions 1.6.5 and later). `Node-glob`, a package that also depends on `inflight`, was also planning to address this by not using `inflight` after version 8 is released, but it is still being used.",
+        "references": [
+         {
+          "url": "https://github.com/npm/inflight/issues/5",
+          "type": "Issue"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "packageName": "pdfjs-dist",
+    "packageId": "Npm-pdfjs-dist-4.10.38",
+    "packageVersion": "4.10.38",
+    "totalResults": 1,
+    "packageCategory": [
+     {
+      "categoryName": "CWE-400",
+      "totalResults": 1,
+      "categoryResults": [
+       {
+        "resultId": "WnGRbxoJDBtjgH7vpTcLbsjhhTTeV7fjRUu7kiHh39I=",
+        "severity": "Medium",
+        "status": "Recurrent",
+        "state": "To Verify",
+        "firstDetectionDate": "2026-09-01T21:22:08Z",
+        "lastDetectionDate": "2026-09-01T21:22:08Z",
+        "meta": {
+         "warnings": [
+          "Field `lastDetectionDate` is deprecated"
+         ]
+        },
+        "firstScanId": "98f40041-98b5-458b-a3b1-652004f9a818",
+        "outdated": true,
+        "cve": "CVE-2026-84138",
+        "description": "Denial-of-service in the PDF Viewer component. This vulnerability was fixed in Firefox 155.",
+        "references": []
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "containerScanResults": null,
+ "categories": [],
+ "resolvedVulnerabilities": {
+  "resolvedTotal": 7,
+  "resolvedVulnerabilities": [
+   {
+    "vulnerabilityName": "Missing Function Level Authorization",
+    "resultsTotal": 2,
+    "queryPath": "CSharp\\CSharp_Medium_Threat\\Missing_Function_Level_Authorization",
+    "resolvedResults": [
+     {
+      "severity": "Medium",
+      "detectionDate": "2026-09-02T20:39:43.152Z",
+      "resolutionDate": "2026-09-03T19:26:01.717Z",
+      "resolutionTimeDays": 0,
+      "resolutionUser": "gwen-ou_pwcit",
+      "similarityId": "-1304883403",
+      "vulnerabilityLink": "https://us.ast.checkmarx.net/sast-results/ea9fec77-1115-477d-add7-0d0aeb2c43c0/39bf37f6-f364-4c5f-b9e2-c8e6610d3589?resultId=J1i3hKgDzyNJku4ju%2FhRaTNTpmQ%3D"
+     },
+     {
+      "severity": "Medium",
+      "detectionDate": "2026-09-02T20:39:43.152Z",
+      "resolutionDate": "2026-09-03T19:26:01.717Z",
+      "resolutionTimeDays": 0,
+      "resolutionUser": "gwen-ou_pwcit",
+      "similarityId": "1825070389",
+      "vulnerabilityLink": "https://us.ast.checkmarx.net/sast-results/ea9fec77-1115-477d-add7-0d0aeb2c43c0/39bf37f6-f364-4c5f-b9e2-c8e6610d3589?resultId=llWOrxDMe7XICTY34X4tg7y2F0c%3D"
+     }
+    ]
+   },
+   {
+    "vulnerabilityName": "Missing Object Level Authorization",
+    "resultsTotal": 4,
+    "queryPath": "CSharp\\CSharp_Medium_Threat\\Missing_Object_Level_Authorization",
+    "resolvedResults": [
+     {
+      "severity": "Medium",
+      "detectionDate": "2026-09-02T20:39:43.152Z",
+      "resolutionDate": "2026-09-03T19:26:01.717Z",
+      "resolutionTimeDays": 0,
+      "resolutionUser": "gwen-ou_pwcit",
+      "similarityId": "-757517067",
+      "vulnerabilityLink": "https://us.ast.checkmarx.net/sast-results/ea9fec77-1115-477d-add7-0d0aeb2c43c0/39bf37f6-f364-4c5f-b9e2-c8e6610d3589?resultId=ImKLZ%2BhbE3Sa9hgk1plKpVtOmUA%3D"
+     },
+     {
+      "severity": "Medium",
+      "detectionDate": "2026-09-02T20:39:43.152Z",
+      "resolutionDate": "2026-09-03T19:26:01.717Z",
+      "resolutionTimeDays": 0,
+      "resolutionUser": "gwen-ou_pwcit",
+      "similarityId": "-757517067",
+      "vulnerabilityLink": "https://us.ast.checkmarx.net/sast-results/ea9fec77-1115-477d-add7-0d0aeb2c43c0/39bf37f6-f364-4c5f-b9e2-c8e6610d3589?resultId=ui8OAXObhLNl0gygxFbhU8MRzmU%3D"
+     },
+     {
+      "severity": "Medium",
+      "detectionDate": "2026-09-02T20:39:43.152Z",
+      "resolutionDate": "2026-09-03T19:26:01.717Z",
+      "resolutionTimeDays": 0,
+      "resolutionUser": "gwen-ou_pwcit",
+      "similarityId": "168073399",
+      "vulnerabilityLink": "https://us.ast.checkmarx.net/sast-results/ea9fec77-1115-477d-add7-0d0aeb2c43c0/39bf37f6-f364-4c5f-b9e2-c8e6610d3589?resultId=GO2m84rOauVF8I%2BdKWevfjmL00M%3D"
+     },
+     {
+      "severity": "Medium",
+      "detectionDate": "2026-09-02T20:39:43.152Z",
+      "resolutionDate": "2026-09-03T19:26:01.717Z",
+      "resolutionTimeDays": 0,
+      "resolutionUser": "gwen-ou_pwcit",
+      "similarityId": "168073399",
+      "vulnerabilityLink": "https://us.ast.checkmarx.net/sast-results/ea9fec77-1115-477d-add7-0d0aeb2c43c0/39bf37f6-f364-4c5f-b9e2-c8e6610d3589?resultId=pqoZg0P4OGPGN1kPA%2F5ogjJRQ%2Bo%3D"
+     }
+    ]
+   },
+   {
+    "vulnerabilityName": "Excessive Data Exposure",
+    "resultsTotal": 1,
+    "queryPath": "CSharp\\CSharp_Medium_Threat\\Excessive_Data_Exposure",
+    "resolvedResults": [
+     {
+      "severity": "Medium",
+      "detectionDate": "2026-09-02T20:39:43.152Z",
+      "resolutionDate": "2026-09-03T19:26:01.717Z",
+      "resolutionTimeDays": 0,
+      "resolutionUser": "gwen-ou_pwcit",
+      "similarityId": "-402968223",
+      "vulnerabilityLink": "https://us.ast.checkmarx.net/sast-results/ea9fec77-1115-477d-add7-0d0aeb2c43c0/39bf37f6-f364-4c5f-b9e2-c8e6610d3589?resultId=bor8%2FDJg24MrM1Xs0zrYJKrLWCc%3D"
+     }
+    ]
+   }
+  ]
+ },
+ "vulnerabilityDetails": [],
+ "scsSummaryResults": null
+}

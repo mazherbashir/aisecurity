@@ -1,0 +1,235 @@
+{
+  "overview" : {
+    "applicationName" : "TaxDocs.UI",
+    "appId" : "345982b3-fbcd-4273-a160-efd81664e13f",
+    "accountId" : "345982b3-fbcd-4273-a160-efd81664e13f",
+    "buildId" : "d48f7dc0-7a7d-4ae1-ab50-d6c20a05e972",
+    "analysisId" : "b86407fc-8f5e-4ca1-ac09-36702e3cb1b4",
+    "scanName" : "master",
+    "scanType" : "checkmarx",
+    "generationDate" : "2026-06-25T17:45:25.277191Z",
+    "policyName" : null,
+    "policyComplianceStatus" : "Failed",
+    "sastScore" : 20,
+    "sastRating" : null,
+    "staticAnalysisUnitId" : null,
+    "sandboxId" : "https://us.ast.checkmarx.net/sast-results/345982b3-fbcd-4273-a160-efd81664e13f/d48f7dc0-7a7d-4ae1-ab50-d6c20a05e972",
+    "tier" : "tier-1",
+    "gracePeriod" : null,
+    "submitted_date" : null
+  },
+  "sastSummary" : {
+    "vulnerabilities" : 6,
+    "breakdown" : {
+      "Low" : {
+        "total" : 6,
+        "findings" : [ {
+          "cwe" : "CWE-1022",
+          "count" : 3,
+          "date_first_occurrence" : "2026-06-23T14:58:06Z",
+          "remediation_due_date" : "2026-12-20"
+        }, {
+          "cwe" : "CWE-477",
+          "count" : 3,
+          "date_first_occurrence" : "2026-06-18T13:33:01Z",
+          "remediation_due_date" : "2026-12-15"
+        } ]
+      }
+    }
+  },
+  "scaSummary" : {
+    "vulnerabilities" : 23,
+    "breakdown" : {
+      "High" : {
+        "total" : 7,
+        "findings" : [ ]
+      },
+      "Medium" : {
+        "total" : 12,
+        "findings" : [ ]
+      },
+      "Low" : {
+        "total" : 4,
+        "findings" : [ ]
+      }
+    },
+    "totalPackages" : 17,
+    "totalVulnerablePackages" : 17
+  },
+  "scaDetails" : [ {
+    "packageName" : "inflight",
+    "version" : "1.0.6",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2025-01-27T22:34:27Z",
+    "remediation_due_date" : "2025-02-06",
+    "severityCounts" : "High: 1",
+    "cveList" : "Cxdca8e59f-8bfe"
+  }, {
+    "packageName" : "postcss",
+    "version" : "6.0.1",
+    "safeVersion" : "8.5.10",
+    "firstFoundDate" : "2026-06-24T17:46:31Z",
+    "remediation_due_date" : "2026-07-04",
+    "severityCounts" : "High: 1 Medium: 2",
+    "cveList" : "CVE-2021-23382,CVE-2021-23368,CVE-2023-44270"
+  }, {
+    "packageName" : "serialize-javascript",
+    "version" : "6.0.0",
+    "safeVersion" : "7.0.5",
+    "firstFoundDate" : "2026-06-24T17:46:31Z",
+    "remediation_due_date" : "2026-07-04",
+    "severityCounts" : "High: 2 Medium: 1",
+    "cveList" : "CVE-2026-34043,Cxf5fb15b0-6576,CVE-2024-11831"
+  }, {
+    "packageName" : "postcss",
+    "version" : "8.1.14",
+    "safeVersion" : "8.5.10",
+    "firstFoundDate" : "2026-06-24T17:46:31Z",
+    "remediation_due_date" : "2026-07-04",
+    "severityCounts" : "High: 1 Medium: 2",
+    "cveList" : "CVE-2021-23382,CVE-2021-23368,CVE-2023-44270"
+  }, {
+    "packageName" : "html-minifier",
+    "version" : "4.0.0",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-03-27T16:46:24Z",
+    "remediation_due_date" : "2026-04-06",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2022-37620"
+  }, {
+    "packageName" : "ws",
+    "version" : "7.5.10",
+    "safeVersion" : "8.21.0",
+    "firstFoundDate" : "2026-06-17T09:36:15Z",
+    "remediation_due_date" : "2026-06-27",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2026-48779"
+  }, {
+    "packageName" : "js-yaml",
+    "version" : "3.14.2",
+    "safeVersion" : "4.2.0",
+    "firstFoundDate" : "2026-06-23T21:37:32Z",
+    "remediation_due_date" : "2026-07-23",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2026-53550"
+  }, {
+    "packageName" : "elliptic",
+    "version" : "6.6.1",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-06-24T17:46:31Z",
+    "remediation_due_date" : "2026-07-24",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2025-14505"
+  }, {
+    "packageName" : "postcss",
+    "version" : "7.0.38",
+    "safeVersion" : "8.5.10",
+    "firstFoundDate" : "2026-06-24T17:46:31Z",
+    "remediation_due_date" : "2026-07-24",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2023-44270"
+  }, {
+    "packageName" : "postcss",
+    "version" : "7.0.39",
+    "safeVersion" : "8.5.10",
+    "firstFoundDate" : "2026-06-24T17:46:31Z",
+    "remediation_due_date" : "2026-07-24",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2023-44270"
+  }, {
+    "packageName" : "tar",
+    "version" : "7.5.12",
+    "safeVersion" : "7.5.16",
+    "firstFoundDate" : "2026-06-24T17:46:31Z",
+    "remediation_due_date" : "2026-07-24",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2026-53655"
+  }, {
+    "packageName" : "webpack-dev-server",
+    "version" : "5.2.1",
+    "safeVersion" : "5.2.5",
+    "firstFoundDate" : "2026-06-24T17:46:31Z",
+    "remediation_due_date" : "2026-07-24",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2026-9595"
+  }, {
+    "packageName" : "request",
+    "version" : "2.88.2",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2025-01-27T22:34:27Z",
+    "remediation_due_date" : "2025-02-26",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2023-28155"
+  }, {
+    "packageName" : "uuid",
+    "version" : "3.1.0",
+    "safeVersion" : "11.1.1",
+    "firstFoundDate" : "2026-06-24T17:46:31Z",
+    "remediation_due_date" : "2026-12-21",
+    "severityCounts" : "Low: 1",
+    "cveList" : "CVE-2026-41988"
+  }, {
+    "packageName" : "bluebird",
+    "version" : "3.7.2",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-06-24T17:46:31Z",
+    "remediation_due_date" : "2026-12-21",
+    "severityCounts" : "Low: 1",
+    "cveList" : "Cxda14f253-4e52"
+  }, {
+    "packageName" : "uuid",
+    "version" : "8.3.2",
+    "safeVersion" : "11.1.1",
+    "firstFoundDate" : "2026-05-14T12:28:30Z",
+    "remediation_due_date" : "2026-11-10",
+    "severityCounts" : "Low: 1",
+    "cveList" : "CVE-2026-41988"
+  }, {
+    "packageName" : "uuid",
+    "version" : "3.4.0",
+    "safeVersion" : "11.1.1",
+    "firstFoundDate" : "2026-05-14T12:28:30Z",
+    "remediation_due_date" : "2026-11-10",
+    "severityCounts" : "Low: 1",
+    "cveList" : "CVE-2026-41988"
+  } ],
+  "findingsWithCommentsSAST" : [ {
+    "type" : "SAST",
+    "id" : "1841052095",
+    "cweid" : "477",
+    "title" : "React_Deprecated",
+    "severity" : "Low",
+    "location" : "/TaxDocs-UI/src/webparts/accessManagement/AccessManagementWebPart.ts",
+    "fileName" : "/TaxDocs-UI/src/webparts/accessManagement/AccessManagementWebPart.ts",
+    "userComments" : [ "This is not valid as it just loads the component into DOM based on the elements we pass to it. It is a React inbuilt method to render a React app to the web page. The react version we are using is React-17.0.1. and in this version this is not deprecated." ],
+    "remediation_due_date" : "2026-11-02",
+    "state" : "Proposed Not Exploitable",
+    "firstFoundDate" : "2026-05-06T12:20:02Z"
+  } ],
+  "findingsWithCommentsSCA" : [ ],
+  "unselectedModules" : [ ],
+  "selectedModules" : [ ],
+  "architectures" : [ "javascript" ],
+  "noPrecompile" : [ ],
+  "minifedFiles" : [ ],
+  "scaEcosystems" : "javascript",
+  "scaSafeVersionEnabled" : false,
+  "packagingAnomalies" : [ ],
+  "sastMitigationProposal" : {
+    "Total" : 1,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 1,
+    "Information" : 0
+  },
+  "scaMitigationProposal" : {
+    "Total" : 0,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "missingSCAForSelectedModules" : [ ]
+}

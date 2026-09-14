@@ -1,0 +1,132 @@
+# Multiple apps and images are supported, each will have its own independent knativeService and virtualService
+apps:
+# Default Build image case
+- name: backend  # Changing this name will break the url definition on the code, check `fullstack-appkit-app/src/frontend/README.md` before updating
+  ingress: enabled
+  image:
+    build: true  # If false image will not be built (it would require a public image)
+    name: crs-review-api
+    path: ./src/backend
+    port: 8080
+    repository: default  # DOCKER_DEV: w00043-pwc-us-aaas-docker-local.artifacts-west.pwc.com
+    tag: default  # if 'default': commit hash is used
+    experimentalBuild: true
+    compressedCache: true  # Custom build option, more information on https://hosted-apps-us.pwclabs.pwcglb.com/docs/developerguide/images/#default-settings
+    useNewRun: true  # Custom build option
+    snapshotMode: redo  # Custom build option
+    languages:
+    - java
+    build_args:
+      ARTIFACTORY_SERVER: artifacts-west.pwc.com
+      ARTIFACTORY_PIP_REPO: g00005-pwc-gx-pwclabs-sdk-pypi
+      ARTIFACTORY_USERNAME: wrappingReplaced
+      ARTIFACTORY_PAT_TOKEN: wrappingReplaced
+  volumes: true
+  volumesList:
+  - name: tmp
+    size: 500Mi
+    type: emptyDir
+    mountPath: "/tmp/files/"
+
+  # Stateful deployment configuration, if enabled it will ensure your deployment always have the minimun specified number of replicas
+  # Beware this requires a valid ApptioId in your workbench workspace
+  # stateful:
+  #   replicas: 2
+  rewrite:
+    uri: /  # This is the default behavior. Do not change this unless you know what to expect
+  resources:
+    requests:
+      cpu: 250m
+      memory: 250M
+    limits:
+      cpu: 500m
+      memory: 500M
+- name: frontend  # Changing this name will break the url definition on the code, check `fullstack-appkit-app/src/frontend/README.md` before updating
+  ingress: enabled
+  image:
+    build: true  # If false image will not be built (it would require a public image)
+    name: appkit
+    path: ./src/frontend
+    port: 3000
+    repository: default  # DOCKER_DEV: w00043-pwc-us-aaas-docker-local.artifacts-west.pwc.com
+    tag: default
+    experimentalBuild: true
+    compressedCache: true  # Custom build option, more information on https://hosted-apps-us.pwclabs.pwcglb.com/docs/developerguide/images/#default-settings
+    useNewRun: true  # Custom build option
+    snapshotMode: redo  # Custom build option
+    languages:
+    - javascript
+
+  # List of build arguments to be used in the /{src_path}/Dockerfile
+    build_args:
+      ARTIFACTORY_SERVER: artifacts-west.pwc.com
+      ARTIFACTORY_NPM_REPO: g00005-pwc-gx-pwclabs-sdk-npm
+      ARTIFACTORY_MAIL: wrappingReplaced
+      ARTIFACTORY_USERNAME: wrappingReplaced
+      ARTIFACTORY_PAT_TOKEN: wrappingReplaced
+  volumes: true
+  volumesList:
+  - name: npmcache
+    size: 100Mi
+    type: emptyDir
+    mountPath: "/root/.npm"
+
+  # Stateful deployment configuration, if enabled it will ensure your deployment always have the minimun specified number of replicas
+  # Beware this requires a valid ApptioId in your workbench workspace
+  # stateful:
+  #   replicas: 1
+  rewrite:
+    uri: /  # This is the default behavior. Do not change this unless you know what to expect
+  resources:
+    requests:
+      cpu: 250m
+      memory: 250M
+    limits:
+      cpu: 500m
+      memory: 2G
+
+# URI entry point to be used for launching the application, do not include hostname. Max length is 63 character after rendering
+entrypoint: "https://{{ .Values.metadata.hostName }}/{{ .Values.metadata.engagementId }}/{{ $.Release.Name }}-frontend/"
+
+# Secrets keys must match the ones in your Hashicorp Vault and wrappingReplaced will be replaced in runtime
+secrets:
+  SAS_TOKEN: wrappingReplaced
+  STORAGE_ACCOUNT_NAME: wrappingReplaced
+  VERACODE_API_KEY_ID: wrappingReplaced
+  VERACODE_API_KEY_SECRET: wrappingReplaced
+  SHARED_SERVICE_API_KEY: wrappingReplaced
+  CRS_CHECKMARX_API_KEY: wrappingReplaced
+  GITHUB_TOKEN: wrappingReplaced
+  GCAAS_SECRET_KEY: wrappingReplaced
+
+# These secrets will be injected into your enabled dependencies from your helm charts under the deployment/charts folder.
+# Dependencies secrets will be injected in runtime
+dependencySecrets: []
+
+# runtimeReplaced values will be replaced in runtime, and only will be available on deployment from the system.
+metadata:
+  engagementId: runtimeReplaced
+  entraHostName: runtimeReplaced
+  hostName: runtimeReplaced
+  commitHash: runtimeReplaced
+
+# These will be automatically injected in your knative service with the specified value here
+configMap:
+  - key: BACKEND_ROOT_URL
+    value: "https://{{ .Values.metadata.hostName }}/{{ .Values.metadata.engagementId }}/{{ $.Release.Name }}-{{ (index .Values.apps 0).name }}"
+  - key: ENGAGEMENT_ID
+    value: "{{ .Values.metadata.engagementId }}"
+
+# To enable persistent logging in Datadog. Note this will be charged-back to your ApptioId
+persistentLogging:
+  enabled: true
+
+# EntraID auth setup
+authentication:
+  entra: true
+
+pipelineSettings:
+- branch: main
+  ciNumber: CI68813978
+  veracode:
+    enabled: true

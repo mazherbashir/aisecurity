@@ -1,0 +1,281 @@
+{
+  "overview" : {
+    "applicationName" : "TRACK",
+    "appId" : "d0a7db51-0571-4f85-ac58-957485b1cc3d",
+    "accountId" : "d0a7db51-0571-4f85-ac58-957485b1cc3d",
+    "buildId" : "f88ecd2c-6614-479a-8584-88f97e9d3f52",
+    "analysisId" : "b86407fc-8f5e-4ca1-ac09-36702e3cb1b4",
+    "scanName" : "feature/2448023-remediate-package-vulnerabilities",
+    "scanType" : "checkmarx",
+    "generationDate" : "2026-08-02T01:01:30.661117Z",
+    "policyName" : null,
+    "policyComplianceStatus" : "Failed",
+    "sastScore" : 29,
+    "sastRating" : null,
+    "staticAnalysisUnitId" : null,
+    "sandboxId" : "https://us.ast.checkmarx.net/sast-results/d0a7db51-0571-4f85-ac58-957485b1cc3d/f88ecd2c-6614-479a-8584-88f97e9d3f52",
+    "tier" : "tier-1",
+    "gracePeriod" : null,
+    "submitted_date" : null
+  },
+  "sastSummary" : {
+    "vulnerabilities" : 8,
+    "breakdown" : {
+      "Information" : {
+        "total" : 8,
+        "findings" : [ {
+          "cwe" : "CWE-209",
+          "categoryname" : "Information_Exposure_Through_an_Error_Message_PWC",
+          "count" : 1,
+          "date_first_occurrence" : "2026-06-07T05:24:33Z",
+          "remediation_due_date" : null
+        }, {
+          "cwe" : "CWE-426",
+          "categoryname" : "Hardcoded_Absolute_Path",
+          "count" : 7,
+          "date_first_occurrence" : "2026-06-11T11:54:03Z",
+          "remediation_due_date" : null
+        } ]
+      }
+    }
+  },
+  "scaSummary" : {
+    "vulnerabilities" : 19,
+    "breakdown" : {
+      "High" : {
+        "total" : 1,
+        "findings" : [ ]
+      },
+      "Medium" : {
+        "total" : 15,
+        "findings" : [ ]
+      },
+      "Low" : {
+        "total" : 3,
+        "findings" : [ ]
+      }
+    },
+    "totalPackages" : 2388,
+    "totalVulnerablePackages" : 10
+  },
+  "scaDetails" : [ {
+    "packageName" : "Microsoft.AspNetCore.OData",
+    "version" : "7.8.0",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-08-01T03:47:05Z",
+    "remediation_due_date" : "2026-08-11",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2026-45646"
+  }, {
+    "packageName" : "bootstrap",
+    "version" : "3.3.7",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-07-28T06:01:18Z",
+    "remediation_due_date" : "2026-08-27",
+    "severityCounts" : "Medium: 7",
+    "cveList" : "CVE-2018-14040,CVE-2018-14042,CVE-2018-20676,CVE-2018-20677,CVE-2016-10735,CVE-2019-8331,CVE-2024-6485"
+  }, {
+    "packageName" : "video.js",
+    "version" : "4.5.1",
+    "safeVersion" : "7.14.3",
+    "firstFoundDate" : "2026-07-28T06:01:18Z",
+    "remediation_due_date" : "2026-08-27",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2021-23414"
+  }, {
+    "packageName" : "bootstrap",
+    "version" : "4.0.0",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-07-28T06:01:18Z",
+    "remediation_due_date" : "2026-08-27",
+    "severityCounts" : "Medium: 4",
+    "cveList" : "CVE-2018-14042,CVE-2019-8331,CVE-2018-14040,CVE-2018-14041"
+  }, {
+    "packageName" : "codemirror",
+    "version" : "5.65.15",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-07-28T06:01:18Z",
+    "remediation_due_date" : "2026-08-27",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2025-6493"
+  }, {
+    "packageName" : "Microsoft.IdentityModel.Tokens",
+    "version" : "6.8.0",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-07-28T06:01:18Z",
+    "remediation_due_date" : "2026-08-27",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2024-21319"
+  }, {
+    "packageName" : "System.IdentityModel.Tokens.Jwt",
+    "version" : "6.8.0",
+    "safeVersion" : "7.1.2",
+    "firstFoundDate" : "2026-07-28T06:01:18Z",
+    "remediation_due_date" : "2026-08-27",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2024-21319"
+  }, {
+    "packageName" : "unzipper",
+    "version" : "0.10.14",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-07-27T14:37:03Z",
+    "remediation_due_date" : "2027-01-23",
+    "severityCounts" : "Low: 1",
+    "cveList" : "CVE-2026-17514"
+  }, {
+    "packageName" : "debug",
+    "version" : "2.6.9",
+    "safeVersion" : "4.4.3",
+    "firstFoundDate" : "2026-07-30T12:48:00Z",
+    "remediation_due_date" : "2027-01-26",
+    "severityCounts" : "Low: 1",
+    "cveList" : "Cx8bc4df28-fcf5"
+  }, {
+    "packageName" : "bluebird",
+    "version" : "3.7.2",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2025-09-23T05:08:25Z",
+    "remediation_due_date" : "2026-03-22",
+    "severityCounts" : "Low: 1",
+    "cveList" : "Cxda14f253-4e52"
+  } ],
+  "findingsWithCommentsSAST" : [ {
+    "type" : "SAST",
+    "id" : "-497011354",
+    "cweid" : "209",
+    "title" : "Information_Exposure_Through_an_Error_Message_PWC",
+    "severity" : "Information",
+    "location" : "/Src/PwC.US.AM.BusinessServices/Services/TaxEntityManager/SingleEntityTemService.cs",
+    "fileName" : "/Src/PwC.US.AM.BusinessServices/Services/TaxEntityManager/SingleEntityTemService.cs",
+    "userComments" : [ "[Confidence: HIGH 92%] Information_Exposure_Through_an_Error_Message: TemMismatchErrors is built from ValidationProblemDetails.Errors (Tax-Entity-Manager business/validation messages + field names) for the user-facing Save-Blocked modal, JSON-escaped; it is not raw exception text or stack traces." ],
+    "state" : "Proposed Not Exploitable",
+    "firstFoundDate" : "2026-06-07T05:24:33Z"
+  }, {
+    "type" : "SAST",
+    "id" : "1137202030",
+    "cweid" : "426",
+    "title" : "Hardcoded_Absolute_Path",
+    "severity" : "Information",
+    "location" : "/Src/PwC.TrackDATA/src/PwC.TrackDATA.Core/Services/BulkCopy/BcpToolLocator.cs",
+    "fileName" : "/Src/PwC.TrackDATA/src/PwC.TrackDATA.Core/Services/BulkCopy/BcpToolLocator.cs",
+    "userComments" : [ "[Confidence: HIGH 92%] Hardcoded_Absolute_Path: References well-known SQL Server tool locations (SqlPackage.exe, ODBC Client SDK) resolved from candidate lists with fallbacks. Paths are not user-controllable and pose no injection risk." ],
+    "state" : "Proposed Not Exploitable",
+    "firstFoundDate" : "2026-06-11T11:54:03Z"
+  }, {
+    "type" : "SAST",
+    "id" : "-1945566812",
+    "cweid" : "426",
+    "title" : "Hardcoded_Absolute_Path",
+    "severity" : "Information",
+    "location" : "/Src/PwC.TrackDATA/src/PwC.TrackDATA.Core/Services/BulkCopy/BcpToolLocator.cs",
+    "fileName" : "/Src/PwC.TrackDATA/src/PwC.TrackDATA.Core/Services/BulkCopy/BcpToolLocator.cs",
+    "userComments" : [ "[Confidence: HIGH 92%] Hardcoded_Absolute_Path: References well-known SQL Server tool locations (SqlPackage.exe, ODBC Client SDK) resolved from candidate lists with fallbacks. Paths are not user-controllable and pose no injection risk." ],
+    "state" : "Proposed Not Exploitable",
+    "firstFoundDate" : "2026-06-11T11:54:03Z"
+  }, {
+    "type" : "SAST",
+    "id" : "2525870",
+    "cweid" : "426",
+    "title" : "Hardcoded_Absolute_Path",
+    "severity" : "Information",
+    "location" : "/Src/PwC.TrackDATA/src/PwC.TrackDATA.Core/Services/Training/TrainingDbCreateService.cs",
+    "fileName" : "/Src/PwC.TrackDATA/src/PwC.TrackDATA.Core/Services/Training/TrainingDbCreateService.cs",
+    "userComments" : [ "[Confidence: HIGH 92%] Hardcoded_Absolute_Path: References well-known SQL Server tool locations (SqlPackage.exe, ODBC Client SDK) resolved from candidate lists with fallbacks. Paths are not user-controllable and pose no injection risk." ],
+    "state" : "Proposed Not Exploitable",
+    "firstFoundDate" : "2026-06-11T11:54:03Z"
+  }, {
+    "type" : "SAST",
+    "id" : "2117843086",
+    "cweid" : "426",
+    "title" : "Hardcoded_Absolute_Path",
+    "severity" : "Information",
+    "location" : "/Src/PwC.TrackDATA/src/PwC.TrackDATA.Core/Services/Training/TrainingDbCreateService.cs",
+    "fileName" : "/Src/PwC.TrackDATA/src/PwC.TrackDATA.Core/Services/Training/TrainingDbCreateService.cs",
+    "userComments" : [ "[Confidence: HIGH 92%] Hardcoded_Absolute_Path: References well-known SQL Server tool locations (SqlPackage.exe, ODBC Client SDK) resolved from candidate lists with fallbacks. Paths are not user-controllable and pose no injection risk." ],
+    "state" : "Proposed Not Exploitable",
+    "firstFoundDate" : "2026-06-11T11:54:03Z"
+  }, {
+    "type" : "SAST",
+    "id" : "-1536167538",
+    "cweid" : "426",
+    "title" : "Hardcoded_Absolute_Path",
+    "severity" : "Information",
+    "location" : "/Src/PwC.TrackDATA/src/PwC.TrackDATA.Core/Services/BulkCopy/BcpToolLocator.cs",
+    "fileName" : "/Src/PwC.TrackDATA/src/PwC.TrackDATA.Core/Services/BulkCopy/BcpToolLocator.cs",
+    "userComments" : [ "[Confidence: HIGH 92%] Hardcoded_Absolute_Path: References well-known SQL Server tool locations (SqlPackage.exe, ODBC Client SDK) resolved from candidate lists with fallbacks. Paths are not user-controllable and pose no injection risk." ],
+    "state" : "Proposed Not Exploitable",
+    "firstFoundDate" : "2026-06-11T11:54:03Z"
+  }, {
+    "type" : "SAST",
+    "id" : "-1139539954",
+    "cweid" : "426",
+    "title" : "Hardcoded_Absolute_Path",
+    "severity" : "Information",
+    "location" : "/Src/PwC.TrackDATA/src/PwC.TrackDATA.Core/Services/Training/TrainingDbCreateService.cs",
+    "fileName" : "/Src/PwC.TrackDATA/src/PwC.TrackDATA.Core/Services/Training/TrainingDbCreateService.cs",
+    "userComments" : [ "[Confidence: HIGH 92%] Hardcoded_Absolute_Path: References well-known SQL Server tool locations (SqlPackage.exe, ODBC Client SDK) resolved from candidate lists with fallbacks. Paths are not user-controllable and pose no injection risk." ],
+    "state" : "Proposed Not Exploitable",
+    "firstFoundDate" : "2026-06-11T11:54:03Z"
+  }, {
+    "type" : "SAST",
+    "id" : "-61806994",
+    "cweid" : "426",
+    "title" : "Hardcoded_Absolute_Path",
+    "severity" : "Information",
+    "location" : "/Src/PwC.TrackDATA/src/PwC.TrackDATA.Core/Services/Training/TrainingDbCreateService.cs",
+    "fileName" : "/Src/PwC.TrackDATA/src/PwC.TrackDATA.Core/Services/Training/TrainingDbCreateService.cs",
+    "userComments" : [ "[Confidence: HIGH 92%] Hardcoded_Absolute_Path: References well-known SQL Server tool locations (SqlPackage.exe, ODBC Client SDK) resolved from candidate lists with fallbacks. Paths are not user-controllable and pose no injection risk." ],
+    "state" : "Proposed Not Exploitable",
+    "firstFoundDate" : "2026-06-11T11:54:03Z"
+  } ],
+  "findingsWithCommentsSCA" : [ {
+    "type" : "SCA",
+    "id" : "8bLhTVKOnkgYyPHjTuji8Xw/6ij9A7+BBs96HkyIIX0=",
+    "title" : "CVE-2026-45646",
+    "severity" : "High",
+    "location" : "Nuget-Microsoft.AspNetCore.OData-7.8.0",
+    "fileName" : "Nuget-Microsoft.AspNetCore.OData-7.8.0",
+    "cve_summary" : "Allocation of resources without limits or throttling in ASP.NET Core allows an unauthorized attacker to deny service over a network.",
+    "userComments" : [ ],
+    "remediation_due_date" : "2026-08-11",
+    "state" : "Proposed Not Exploitable",
+    "firstFoundDate" : "2026-08-01T03:47:05Z"
+  }, {
+    "type" : "SCA",
+    "id" : "AO61tGc4niW43U4I5a3duZ1Zf9rHgvMVYq30LM81X0E=",
+    "title" : "Cxda14f253-4e52",
+    "severity" : "Low",
+    "location" : "Npm-bluebird-3.7.2",
+    "fileName" : "Npm-bluebird-3.7.2",
+    "cve_summary" : "The package `bluebird` is vulnerable to memory leak, when running the function longStackTraces() with the flag `--expose_gc`. This causes a significant increase in the memory usage, affecting the server's availability.",
+    "userComments" : [ ],
+    "remediation_due_date" : "2026-03-22",
+    "state" : "Proposed Not Exploitable",
+    "firstFoundDate" : "2025-09-23T05:08:25Z"
+  } ],
+  "unselectedModules" : [ ],
+  "selectedModules" : [ ],
+  "architectures" : [ "csharp" ],
+  "noPrecompile" : [ ],
+  "minifedFiles" : [ ],
+  "scaEcosystems" : "csharp",
+  "scaSafeVersionEnabled" : true,
+  "packagingAnomalies" : [ ],
+  "sastMitigationProposal" : {
+    "Total" : 8,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 0,
+    "Information" : 8
+  },
+  "scaMitigationProposal" : {
+    "Total" : 2,
+    "Critical" : 0,
+    "High" : 1,
+    "Medium" : 0,
+    "Low" : 1,
+    "Information" : 0
+  },
+  "missingSCAForSelectedModules" : [ ]
+}

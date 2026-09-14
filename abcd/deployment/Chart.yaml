@@ -1,0 +1,17 @@
+description: Knative app running on Kubernetes
+apiVersion: v2
+name: knative-app
+version: 0.0.2
+appVersion: 1.4.0
+home: https://github.com/pwc-gx-xlos-caas/fullstack-appkit-app
+maintainers:
+  - name: Luciano Alvrez
+    email: luciano.alvarez@pwc.com
+sources:
+  - https://github.com/pwc-gx-xlos-caas/fullstack-appkit-app
+keywords:
+  - fullstack
+  - appkit
+  - serverless
+  - knative
+  - flask

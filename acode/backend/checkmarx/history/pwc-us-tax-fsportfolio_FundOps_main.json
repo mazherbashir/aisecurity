@@ -1,0 +1,92 @@
+{
+  "overview" : {
+    "applicationName" : "pwc-us-tax-fsportfolio/FundOps",
+    "appId" : "39bf37f6-f364-4c5f-b9e2-c8e6610d3589",
+    "accountId" : "39bf37f6-f364-4c5f-b9e2-c8e6610d3589",
+    "buildId" : "4c6ee762-484b-4df8-951a-2ee4122616f9",
+    "analysisId" : "b86407fc-8f5e-4ca1-ac09-36702e3cb1b4",
+    "scanName" : "main",
+    "scanType" : "checkmarx",
+    "generationDate" : "2026-09-03T19:26:01.717482Z",
+    "policyName" : null,
+    "policyComplianceStatus" : "Failed",
+    "sastScore" : 100,
+    "sastRating" : null,
+    "staticAnalysisUnitId" : null,
+    "sandboxId" : "https://us.ast.checkmarx.net/sast-results/39bf37f6-f364-4c5f-b9e2-c8e6610d3589/4c6ee762-484b-4df8-951a-2ee4122616f9",
+    "tier" : "tier-2",
+    "gracePeriod" : null,
+    "submitted_date" : null
+  },
+  "sastSummary" : {
+    "vulnerabilities" : 0,
+    "breakdown" : { }
+  },
+  "scaSummary" : {
+    "vulnerabilities" : 4,
+    "breakdown" : {
+      "High" : {
+        "total" : 3,
+        "findings" : [ ]
+      },
+      "Medium" : {
+        "total" : 1,
+        "findings" : [ ]
+      }
+    },
+    "totalPackages" : 1284,
+    "totalVulnerablePackages" : 3
+  },
+  "scaDetails" : [ {
+    "packageName" : "image-size",
+    "version" : "0.5.5",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-08-10T13:55:18Z",
+    "remediation_due_date" : "2026-08-20",
+    "severityCounts" : "High: 2",
+    "cveList" : "CVE-2025-71329,CVE-2025-71330"
+  }, {
+    "packageName" : "inflight",
+    "version" : "1.0.6",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-06-24T20:15:13Z",
+    "remediation_due_date" : "2026-07-04",
+    "severityCounts" : "High: 1",
+    "cveList" : "Cxdca8e59f-8bfe"
+  }, {
+    "packageName" : "pdfjs-dist",
+    "version" : "4.10.38",
+    "safeVersion" : "6.2.108",
+    "firstFoundDate" : "2026-09-01T21:22:08Z",
+    "remediation_due_date" : "2026-10-01",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2026-84138"
+  } ],
+  "findingsWithCommentsSAST" : [ ],
+  "findingsWithCommentsSCA" : [ ],
+  "unselectedModules" : [ ],
+  "selectedModules" : [ ],
+  "architectures" : [ ],
+  "noPrecompile" : [ ],
+  "minifedFiles" : [ ],
+  "scaEcosystems" : "",
+  "scaSafeVersionEnabled" : true,
+  "packagingAnomalies" : [ ],
+  "sastMitigationProposal" : {
+    "Total" : 0,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "scaMitigationProposal" : {
+    "Total" : 0,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "missingSCAForSelectedModules" : [ ]
+}

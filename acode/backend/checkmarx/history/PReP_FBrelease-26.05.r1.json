@@ -1,0 +1,269 @@
+{
+  "overview" : {
+    "applicationName" : "PReP",
+    "appId" : "550c48bf-b177-49a6-bf83-b483fe195bed",
+    "accountId" : "550c48bf-b177-49a6-bf83-b483fe195bed",
+    "buildId" : "8efd5d98-7f7f-4b89-bb93-c542b83826fd",
+    "analysisId" : "b86407fc-8f5e-4ca1-ac09-36702e3cb1b4",
+    "scanName" : "FBrelease-26.05.r1",
+    "scanType" : "checkmarx",
+    "generationDate" : "2026-07-08T06:45:18.341992Z",
+    "policyName" : null,
+    "policyComplianceStatus" : "Failed",
+    "sastScore" : 87,
+    "sastRating" : null,
+    "staticAnalysisUnitId" : null,
+    "sandboxId" : "https://us.ast.checkmarx.net/sast-results/550c48bf-b177-49a6-bf83-b483fe195bed/8efd5d98-7f7f-4b89-bb93-c542b83826fd",
+    "tier" : "tier-1",
+    "gracePeriod" : null,
+    "submitted_date" : null
+  },
+  "sastSummary" : {
+    "vulnerabilities" : 233,
+    "breakdown" : {
+      "Information" : {
+        "total" : 233,
+        "findings" : [ {
+          "cwe" : "CWE-209",
+          "categoryname" : "Information_Exposure_Through_an_Error_Message_PWC",
+          "count" : 213,
+          "date_first_occurrence" : "2026-06-11T08:05:50Z",
+          "remediation_due_date" : null
+        }, {
+          "cwe" : "CWE-426",
+          "categoryname" : "Hardcoded_Absolute_Path",
+          "count" : 20,
+          "date_first_occurrence" : "2025-06-09T06:55:48Z",
+          "remediation_due_date" : null
+        } ]
+      }
+    }
+  },
+  "scaSummary" : {
+    "vulnerabilities" : 34,
+    "breakdown" : {
+      "Critical" : {
+        "total" : 1,
+        "findings" : [ ]
+      },
+      "High" : {
+        "total" : 7,
+        "findings" : [ ]
+      },
+      "Medium" : {
+        "total" : 21,
+        "findings" : [ ]
+      },
+      "Low" : {
+        "total" : 5,
+        "findings" : [ ]
+      }
+    },
+    "totalPackages" : 819,
+    "totalVulnerablePackages" : 22
+  },
+  "scaDetails" : [ {
+    "packageName" : "System.Text.Json",
+    "version" : "6.0.5",
+    "safeVersion" : "6.0.10",
+    "firstFoundDate" : "2026-06-25T10:12:49Z",
+    "remediation_due_date" : "2026-07-05",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2024-43485"
+  }, {
+    "packageName" : "semver",
+    "version" : "7.3.7",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-05-24",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2022-25883"
+  }, {
+    "packageName" : "serialize-javascript",
+    "version" : "6.0.0",
+    "safeVersion" : "7.0.5",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-05-24",
+    "severityCounts" : "High: 2 Medium: 1",
+    "cveList" : "CVE-2026-34043,Cxf5fb15b0-6576,CVE-2024-11831"
+  }, {
+    "packageName" : "cross-spawn",
+    "version" : "7.0.3",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-05-24",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2024-21538"
+  }, {
+    "packageName" : "picomatch",
+    "version" : "2.3.1",
+    "safeVersion" : "2.3.2",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-05-24",
+    "severityCounts" : "High: 1 Medium: 1",
+    "cveList" : "CVE-2026-33671,CVE-2026-33672"
+  }, {
+    "packageName" : "braces",
+    "version" : "3.0.2",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-05-24",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2024-4068"
+  }, {
+    "packageName" : "Microsoft.IdentityModel.JsonWebTokens",
+    "version" : "5.4.0",
+    "safeVersion" : "7.1.2",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-06-13",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2024-21319"
+  }, {
+    "packageName" : "Microsoft.IdentityModel.JsonWebTokens",
+    "version" : "6.22.0",
+    "safeVersion" : "7.1.2",
+    "firstFoundDate" : "2026-06-25T10:12:49Z",
+    "remediation_due_date" : "2026-07-25",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2024-21319"
+  }, {
+    "packageName" : "Microsoft.IdentityModel.Tokens",
+    "version" : "6.22.0",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-06-25T10:12:49Z",
+    "remediation_due_date" : "2026-07-25",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2024-21319"
+  }, {
+    "packageName" : "Microsoft.Rest.ClientRuntime",
+    "version" : "2.3.20",
+    "safeVersion" : "2.3.24",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-06-13",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2022-26907"
+  }, {
+    "packageName" : "Microsoft.Rest.ClientRuntime",
+    "version" : "2.3.21",
+    "safeVersion" : "2.3.24",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-06-13",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2022-26907"
+  }, {
+    "packageName" : "System.IdentityModel.Tokens.Jwt",
+    "version" : "4.0.3.308261200",
+    "safeVersion" : "7.1.2",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-06-13",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2024-21319"
+  }, {
+    "packageName" : "System.IdentityModel.Tokens.Jwt",
+    "version" : "5.4.0",
+    "safeVersion" : "7.1.2",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-06-13",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2024-21319"
+  }, {
+    "packageName" : "System.IdentityModel.Tokens.Jwt",
+    "version" : "6.22.0",
+    "safeVersion" : "7.1.2",
+    "firstFoundDate" : "2026-06-25T10:12:49Z",
+    "remediation_due_date" : "2026-07-25",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2024-21319"
+  }, {
+    "packageName" : "bootstrap",
+    "version" : "3.3.7",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-06-13",
+    "severityCounts" : "Medium: 7",
+    "cveList" : "CVE-2018-20676,CVE-2018-20677,CVE-2019-8331,CVE-2024-6485,CVE-2016-10735,CVE-2018-14040,CVE-2018-14042"
+  }, {
+    "packageName" : "webpack",
+    "version" : "5.74.0",
+    "safeVersion" : "5.104.1",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-05-24",
+    "severityCounts" : "Medium: 1 Critical: 1 Low: 2",
+    "cveList" : "CVE-2024-43788,CVE-2023-28154,CVE-2025-68157,CVE-2025-68458"
+  }, {
+    "packageName" : "HtmlSanitizer",
+    "version" : "8.1.870",
+    "safeVersion" : "9.1.893-beta",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-06-13",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2026-25543"
+  }, {
+    "packageName" : "log4net",
+    "version" : "3.0.1",
+    "safeVersion" : "3.3.0",
+    "firstFoundDate" : "2026-07-07T10:18:18Z",
+    "remediation_due_date" : "2026-08-06",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2026-40021"
+  }, {
+    "packageName" : "micromatch",
+    "version" : "4.0.5",
+    "safeVersion" : "4.0.8",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-06-13",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2024-4067"
+  }, {
+    "packageName" : "ajv",
+    "version" : "6.12.6",
+    "safeVersion" : "6.14.0",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-11-10",
+    "severityCounts" : "Low: 1",
+    "cveList" : "CVE-2025-69873"
+  }, {
+    "packageName" : "ajv",
+    "version" : "8.11.0",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-11-10",
+    "severityCounts" : "Low: 1",
+    "cveList" : "CVE-2025-69873"
+  }, {
+    "packageName" : "bluebird",
+    "version" : "3.3.4",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-05-14T18:59:55Z",
+    "remediation_due_date" : "2026-11-10",
+    "severityCounts" : "Low: 1",
+    "cveList" : "Cxda14f253-4e52"
+  } ],
+  "findingsWithCommentsSAST" : [ ],
+  "findingsWithCommentsSCA" : [ ],
+  "unselectedModules" : [ ],
+  "selectedModules" : [ ],
+  "architectures" : [ "csharp", "javascript" ],
+  "noPrecompile" : [ ],
+  "minifedFiles" : [ ],
+  "scaEcosystems" : "csharp,javascript",
+  "scaSafeVersionEnabled" : true,
+  "packagingAnomalies" : [ ],
+  "sastMitigationProposal" : {
+    "Total" : 0,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "scaMitigationProposal" : {
+    "Total" : 0,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "missingSCAForSelectedModules" : [ ]
+}

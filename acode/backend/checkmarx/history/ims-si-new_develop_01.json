@@ -1,0 +1,769 @@
+{
+  "overview" : {
+    "applicationName" : "ims-si-new",
+    "appId" : "ae7cdbf4-8728-422e-a8b8-42be57d2f1f2",
+    "accountId" : "ae7cdbf4-8728-422e-a8b8-42be57d2f1f2",
+    "buildId" : "e94d9090-fd4f-45a4-b87a-b617f930a09f",
+    "analysisId" : "b86407fc-8f5e-4ca1-ac09-36702e3cb1b4",
+    "scanName" : "develop",
+    "scanType" : "checkmarx",
+    "generationDate" : "2026-06-18T17:21:57.832531Z",
+    "policyName" : null,
+    "policyComplianceStatus" : "Failed",
+    "sastScore" : 95,
+    "sastRating" : null,
+    "staticAnalysisUnitId" : null,
+    "sandboxId" : "https://us.ast.checkmarx.net/sast-results/ae7cdbf4-8728-422e-a8b8-42be57d2f1f2/e94d9090-fd4f-45a4-b87a-b617f930a09f",
+    "tier" : "tier-1",
+    "gracePeriod" : null,
+    "submitted_date" : null
+  },
+  "sastSummary" : {
+    "vulnerabilities" : 2825,
+    "breakdown" : {
+      "Critical" : {
+        "total" : 4,
+        "findings" : [ {
+          "cwe" : "CWE-89",
+          "count" : 4,
+          "date_first_occurrence" : "2026-03-20T11:21:33Z",
+          "remediation_due_date" : "2026-03-30"
+        } ]
+      },
+      "High" : {
+        "total" : 138,
+        "findings" : [ {
+          "cwe" : "CWE-918",
+          "count" : 20,
+          "date_first_occurrence" : "2026-06-18T11:36:01Z",
+          "remediation_due_date" : "2026-06-28"
+        }, {
+          "cwe" : "CWE-23",
+          "count" : 112,
+          "date_first_occurrence" : "2026-03-20T11:21:33Z",
+          "remediation_due_date" : "2026-03-30"
+        }, {
+          "cwe" : "CWE-79",
+          "count" : 2,
+          "date_first_occurrence" : "2026-03-20T11:21:33Z",
+          "remediation_due_date" : "2026-03-30"
+        }, {
+          "cwe" : "CWE-319",
+          "count" : 3,
+          "date_first_occurrence" : "2026-06-17T08:03:13Z",
+          "remediation_due_date" : "2026-06-27"
+        }, {
+          "cwe" : "CWE-36",
+          "count" : 1,
+          "date_first_occurrence" : "2026-03-20T11:21:27Z",
+          "remediation_due_date" : "2026-03-30"
+        } ]
+      },
+      "Medium" : {
+        "total" : 638,
+        "findings" : [ {
+          "cwe" : "CWE-922",
+          "count" : 33,
+          "date_first_occurrence" : "2026-06-18T11:36:01Z",
+          "remediation_due_date" : "2026-07-18"
+        }, {
+          "cwe" : "CWE-359",
+          "count" : 36,
+          "date_first_occurrence" : "2026-06-18T11:36:01Z",
+          "remediation_due_date" : "2026-07-18"
+        }, {
+          "cwe" : "CWE-566",
+          "count" : 22,
+          "date_first_occurrence" : "2026-06-03T14:32:20Z",
+          "remediation_due_date" : "2026-07-03"
+        }, {
+          "cwe" : "CWE-352",
+          "count" : 465,
+          "date_first_occurrence" : "2026-06-03T14:18:20Z",
+          "remediation_due_date" : "2026-07-03"
+        }, {
+          "cwe" : "CWE-259",
+          "count" : 1,
+          "date_first_occurrence" : "2026-03-20T11:21:34Z",
+          "remediation_due_date" : "2026-04-19"
+        }, {
+          "cwe" : "CWE-606",
+          "count" : 50,
+          "date_first_occurrence" : "2026-03-20T11:21:34Z",
+          "remediation_due_date" : "2026-04-19"
+        }, {
+          "cwe" : "CWE-601",
+          "count" : 13,
+          "date_first_occurrence" : "2026-06-17T08:03:18Z",
+          "remediation_due_date" : "2026-07-17"
+        }, {
+          "cwe" : "CWE-23",
+          "count" : 1,
+          "date_first_occurrence" : "2026-06-17T08:03:18Z",
+          "remediation_due_date" : "2026-07-17"
+        }, {
+          "cwe" : "CWE-472",
+          "count" : 14,
+          "date_first_occurrence" : "2026-06-03T14:32:20Z",
+          "remediation_due_date" : "2026-07-03"
+        }, {
+          "cwe" : "CWE-346",
+          "count" : 1,
+          "date_first_occurrence" : "2026-03-20T11:21:33Z",
+          "remediation_due_date" : "2026-04-19"
+        }, {
+          "cwe" : "CWE-15",
+          "count" : 1,
+          "date_first_occurrence" : "2026-05-20T12:46:40Z",
+          "remediation_due_date" : "2026-06-19"
+        }, {
+          "cwe" : "CWE-1004",
+          "count" : 1,
+          "date_first_occurrence" : "2026-03-20T11:21:28Z",
+          "remediation_due_date" : "2026-04-19"
+        } ]
+      },
+      "Low" : {
+        "total" : 2042,
+        "findings" : [ {
+          "cwe" : "CWE-474",
+          "count" : 59,
+          "date_first_occurrence" : "2026-06-18T11:36:01Z",
+          "remediation_due_date" : "2026-12-15"
+        }, {
+          "cwe" : "CWE-524",
+          "count" : 5,
+          "date_first_occurrence" : "2026-06-18T11:36:01Z",
+          "remediation_due_date" : "2026-12-15"
+        }, {
+          "cwe" : "CWE-117",
+          "count" : 1440,
+          "date_first_occurrence" : "2026-06-17T08:03:13Z",
+          "remediation_due_date" : "2026-12-14"
+        }, {
+          "cwe" : "CWE-404",
+          "count" : 33,
+          "date_first_occurrence" : "2026-06-17T08:03:13Z",
+          "remediation_due_date" : "2026-12-14"
+        }, {
+          "cwe" : "CWE-567",
+          "count" : 93,
+          "date_first_occurrence" : "2026-05-20T12:46:44Z",
+          "remediation_due_date" : "2026-11-16"
+        }, {
+          "cwe" : "CWE-108",
+          "count" : 194,
+          "date_first_occurrence" : "2026-03-20T11:21:34Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-1022",
+          "count" : 6,
+          "date_first_occurrence" : "2026-03-20T11:21:34Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-798",
+          "count" : 13,
+          "date_first_occurrence" : "2026-03-20T11:21:34Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-248",
+          "count" : 30,
+          "date_first_occurrence" : "2026-03-20T11:21:34Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-497",
+          "count" : 1,
+          "date_first_occurrence" : "2026-06-17T08:03:17Z",
+          "remediation_due_date" : "2026-12-14"
+        }, {
+          "cwe" : "CWE-362",
+          "count" : 5,
+          "date_first_occurrence" : "2026-03-20T11:21:33Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-922",
+          "count" : 35,
+          "date_first_occurrence" : "2026-06-17T08:03:17Z",
+          "remediation_due_date" : "2026-12-14"
+        }, {
+          "cwe" : "CWE-495",
+          "count" : 2,
+          "date_first_occurrence" : "2026-03-20T11:21:33Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-496",
+          "count" : 2,
+          "date_first_occurrence" : "2026-03-20T11:21:33Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-250",
+          "count" : 1,
+          "date_first_occurrence" : "2026-03-20T11:21:33Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-829",
+          "count" : 4,
+          "date_first_occurrence" : "2026-03-20T11:21:33Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-79",
+          "count" : 1,
+          "date_first_occurrence" : "2026-03-20T11:21:33Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-346",
+          "count" : 1,
+          "date_first_occurrence" : "2026-03-20T11:21:33Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-1021",
+          "count" : 1,
+          "date_first_occurrence" : "2026-03-20T11:21:33Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-732",
+          "count" : 30,
+          "date_first_occurrence" : "2026-03-20T11:21:28Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-209",
+          "count" : 56,
+          "date_first_occurrence" : "2026-03-20T11:21:28Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-191",
+          "count" : 1,
+          "date_first_occurrence" : "2026-03-20T11:21:28Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-190",
+          "count" : 1,
+          "date_first_occurrence" : "2026-03-20T11:21:28Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-615",
+          "count" : 1,
+          "date_first_occurrence" : "2026-03-20T11:21:28Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-460",
+          "count" : 12,
+          "date_first_occurrence" : "2026-06-03T14:50:33Z",
+          "remediation_due_date" : "2026-11-30"
+        }, {
+          "cwe" : "CWE-378",
+          "count" : 3,
+          "date_first_occurrence" : "2026-03-20T11:21:28Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-379",
+          "count" : 2,
+          "date_first_occurrence" : "2026-03-20T11:21:28Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-477",
+          "count" : 9,
+          "date_first_occurrence" : "2026-03-20T11:21:28Z",
+          "remediation_due_date" : "2026-09-16"
+        }, {
+          "cwe" : "CWE-338",
+          "count" : 1,
+          "date_first_occurrence" : "2026-03-20T11:21:28Z",
+          "remediation_due_date" : "2026-09-16"
+        } ]
+      },
+      "Information" : {
+        "total" : 3,
+        "findings" : [ {
+          "cwe" : "CWE-426",
+          "count" : 3,
+          "date_first_occurrence" : "2026-03-20T11:21:28Z",
+          "remediation_due_date" : null
+        } ]
+      }
+    }
+  },
+  "scaSummary" : {
+    "vulnerabilities" : 147,
+    "breakdown" : {
+      "Critical" : {
+        "total" : 15,
+        "findings" : [ ]
+      },
+      "High" : {
+        "total" : 60,
+        "findings" : [ ]
+      },
+      "Medium" : {
+        "total" : 66,
+        "findings" : [ ]
+      },
+      "Low" : {
+        "total" : 6,
+        "findings" : [ ]
+      }
+    },
+    "totalPackages" : 54,
+    "totalVulnerablePackages" : 54
+  },
+  "scaDetails" : [ {
+    "packageName" : "moment",
+    "version" : "2.29.3",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 2",
+    "cveList" : "CVE-2022-31129,Cx62f5bb1b-fa5e"
+  }, {
+    "packageName" : "log4j:log4j",
+    "version" : "1.2.17",
+    "safeVersion" : "2.0",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 4 Critical: 2",
+    "cveList" : "CVE-2021-4104,CVE-2022-23302,CVE-2022-23307,CVE-2023-26464,CVE-2019-17571,CVE-2022-23305"
+  }, {
+    "packageName" : "moment-timezone",
+    "version" : "0.5.5",
+    "safeVersion" : "0.5.35",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 1 Medium: 1",
+    "cveList" : "Cxb5e411c7-17b4,Cx88793d01-c25f"
+  }, {
+    "packageName" : "org.apache.tika:tika-core",
+    "version" : "1.28.1",
+    "safeVersion" : "3.2.2",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 1 Critical: 1 Medium: 3",
+    "cveList" : "CVE-2025-54988,CVE-2025-66516,CVE-2022-25169,CVE-2022-30126,CVE-2022-30973"
+  }, {
+    "packageName" : "org.apache.struts:struts2-core",
+    "version" : "2.5.33",
+    "safeVersion" : "6.1.1",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 2 Critical: 1",
+    "cveList" : "CVE-2025-68493,CVE-2025-66675,CVE-2024-53677"
+  }, {
+    "packageName" : "org.apache.zookeeper:zookeeper",
+    "version" : "3.6.2",
+    "safeVersion" : "3.9.5",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 3 Critical: 1",
+    "cveList" : "CVE-2024-23944,CVE-2026-24281,CVE-2026-24308,CVE-2023-44981"
+  }, {
+    "packageName" : "org.apache.solr:solr-solrj",
+    "version" : "8.11.1",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2023-50298"
+  }, {
+    "packageName" : "org.eclipse.jetty.http2:http2-common",
+    "version" : "9.4.44.v20210927",
+    "safeVersion" : "11.0.26",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 4",
+    "cveList" : "CVE-2023-44487,CVE-2025-1948,CVE-2025-5115,CVE-2024-22201"
+  }, {
+    "packageName" : "org.apache.cxf:cxf-rt-transports-http",
+    "version" : "3.5.0",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2022-46363"
+  }, {
+    "packageName" : "org.apache.cxf:cxf-core",
+    "version" : "3.5.0",
+    "safeVersion" : "4.0.7",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 2 Critical: 3",
+    "cveList" : "CVE-2026-50645,CVE-2025-23184,CVE-2022-46364,CVE-2024-28752,CVE-2026-49875"
+  }, {
+    "packageName" : "com.fasterxml.jackson.core:jackson-core",
+    "version" : "2.13.1",
+    "safeVersion" : "2.21.1",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 2",
+    "cveList" : "CVE-2025-52999,Cxfa47c4e4-5ef9"
+  }, {
+    "packageName" : "com.google.guava:guava",
+    "version" : "r09",
+    "safeVersion" : "24.1.1-android",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 1 Low: 1",
+    "cveList" : "CVE-2023-2976,CVE-2020-8908"
+  }, {
+    "packageName" : "com.google.protobuf:protobuf-java",
+    "version" : "3.19.4",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 4",
+    "cveList" : "CVE-2022-3171,CVE-2022-3509,CVE-2022-3510,CVE-2024-7254"
+  }, {
+    "packageName" : "com.mchange:mchange-commons-java",
+    "version" : "0.2.15",
+    "safeVersion" : "0.4.0",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2026-27727"
+  }, {
+    "packageName" : "com.squareup.okhttp3:okhttp",
+    "version" : "3.4.2",
+    "safeVersion" : "4.9.2",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 1 Medium: 1",
+    "cveList" : "CVE-2021-0341,CVE-2023-0833"
+  }, {
+    "packageName" : "jszip",
+    "version" : "2.6.1",
+    "safeVersion" : "3.8.0",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 1 Medium: 1",
+    "cveList" : "CVE-2022-48285,CVE-2021-23413"
+  }, {
+    "packageName" : "commons-io:commons-io",
+    "version" : "2.5",
+    "safeVersion" : "2.14.0",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 1 Medium: 1",
+    "cveList" : "CVE-2024-47554,CVE-2021-29425"
+  }, {
+    "packageName" : "com.squareup.okio:okio",
+    "version" : "1.9.0",
+    "safeVersion" : "1.17.6",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2023-3635"
+  }, {
+    "packageName" : "io.netty:netty-codec",
+    "version" : "4.1.68.Final",
+    "safeVersion" : "4.1.133.Final",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 1 Medium: 1",
+    "cveList" : "CVE-2026-42583,CVE-2025-58057"
+  }, {
+    "packageName" : "org.eclipse.jetty:jetty-server",
+    "version" : "9.4.53.v20231009",
+    "safeVersion" : "12.0.32",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 1 Medium: 2",
+    "cveList" : "CVE-2024-13009,CVE-2024-8184,CVE-2024-6763"
+  }, {
+    "packageName" : "org.apache.opennlp:opennlp-tools",
+    "version" : "1.9.4",
+    "safeVersion" : "3.0.0-M3",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 1 Critical: 2",
+    "cveList" : "CVE-2026-42440,CVE-2026-42027,CVE-2026-40682"
+  }, {
+    "packageName" : "commons-beanutils:commons-beanutils",
+    "version" : "1.9.4",
+    "safeVersion" : "1.11.0",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2025-48734"
+  }, {
+    "packageName" : "com.google.code.gson:gson",
+    "version" : "2.2.2",
+    "safeVersion" : "2.8.9",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2022-25647"
+  }, {
+    "packageName" : "commons-fileupload:commons-fileupload",
+    "version" : "1.4",
+    "safeVersion" : "1.6.0",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 2",
+    "cveList" : "CVE-2023-24998,CVE-2025-48976"
+  }, {
+    "packageName" : "org.xerial.snappy:snappy-java",
+    "version" : "1.1.7.6",
+    "safeVersion" : "1.1.10.4",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 4",
+    "cveList" : "CVE-2023-34453,CVE-2023-34454,CVE-2023-34455,CVE-2023-43642"
+  }, {
+    "packageName" : "com.mchange:c3p0",
+    "version" : "0.9.5.5",
+    "safeVersion" : "0.12.0",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2026-27830"
+  }, {
+    "packageName" : "org.eclipse.jetty:jetty-http",
+    "version" : "9.4.44.v20210927",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 1 Medium: 4 Critical: 1 Low: 1",
+    "cveList" : "CVE-2023-36478,CVE-2023-26048,CVE-2023-26049,CVE-2023-40167,CVE-2024-6763,CVE-2026-2332,CVE-2022-2047"
+  }, {
+    "packageName" : "org.eclipse.jetty.http2:http2-hpack",
+    "version" : "9.4.44.v20210927",
+    "safeVersion" : "9.4.53",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2023-36478"
+  }, {
+    "packageName" : "org.json:json",
+    "version" : "20200518",
+    "safeVersion" : "20230227",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 4",
+    "cveList" : "CVE-2022-45688,CVE-2022-45689,CVE-2022-45690,CVE-2023-5072"
+  }, {
+    "packageName" : "angular",
+    "version" : "1.2.30",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 1 Medium: 16 Low: 1",
+    "cveList" : "CVE-2019-10768,CVE-2019-14863,CVE-2020-7676,CVE-2022-25869,Cx1d2566b2-1385,Cxb721c5e9-103a,Cxcad95f4c-ad21,Cxd034cc8e-79f3,CVE-2023-26116,CVE-2023-26117,CVE-2023-26118,CVE-2025-4690,CVE-2024-8373,CVE-2025-0716,Cx2a9a446f-bf33,Cxc6dff9ba-ff4a,Cxf013a387-1fbe,Cx6131f41a-a815"
+  }, {
+    "packageName" : "io.netty:netty-handler",
+    "version" : "4.1.68.Final",
+    "safeVersion" : "4.1.135.Final",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 2 Medium: 1 Critical: 1",
+    "cveList" : "CVE-2026-45416,CVE-2023-34462,CVE-2026-50010,CVE-2026-44249"
+  }, {
+    "packageName" : "org.postgresql:postgresql",
+    "version" : "42.4.0",
+    "safeVersion" : "42.7.11",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 2 Critical: 1 Medium: 1",
+    "cveList" : "CVE-2022-31197,CVE-2024-1597,CVE-2026-42198,CVE-2022-41946"
+  }, {
+    "packageName" : "com.fasterxml.woodstox:woodstox-core",
+    "version" : "6.2.4",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-08",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2022-40152"
+  }, {
+    "packageName" : "lodash",
+    "version" : "2.4.2",
+    "safeVersion" : "4.18.0",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "High: 3 Medium: 3 Critical: 1",
+    "cveList" : "CVE-2020-8203,Cx0b414307-5d4b,CVE-2018-16487,CVE-2018-3721,CVE-2019-10744,CVE-2021-23337,CVE-2019-1010266"
+  }, {
+    "packageName" : "org.bouncycastle:bcprov-jdk15on",
+    "version" : "1.70",
+    "safeVersion" : "1.78",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "Medium: 5",
+    "cveList" : "CVE-2024-30172,CVE-2023-33201,CVE-2023-33202,CVE-2024-29857,CVE-2024-30171"
+  }, {
+    "packageName" : "com.github.junrar:junrar",
+    "version" : "7.4.1",
+    "safeVersion" : "7.5.10",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "Medium: 2",
+    "cveList" : "CVE-2026-28208,CVE-2026-41245"
+  }, {
+    "packageName" : "commons-configuration:commons-configuration",
+    "version" : "1.10",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2025-46392"
+  }, {
+    "packageName" : "io.netty:netty-common",
+    "version" : "4.1.68.Final",
+    "safeVersion" : "4.1.118.Final",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "Medium: 2",
+    "cveList" : "CVE-2022-24823,CVE-2024-47535"
+  }, {
+    "packageName" : "junit:junit",
+    "version" : "4.10",
+    "safeVersion" : "4.13.1",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-04-19",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2020-15250"
+  }, {
+    "packageName" : "org.apache.commons:commons-compress",
+    "version" : "1.21",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "Medium: 2",
+    "cveList" : "CVE-2024-25710,CVE-2024-26308"
+  }, {
+    "packageName" : "org.apache.commons:commons-lang3",
+    "version" : "3.8.1",
+    "safeVersion" : "3.18.0",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2025-48924"
+  }, {
+    "packageName" : "org.apache.logging.log4j:log4j-1.2-api",
+    "version" : "2.17.1",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-05-19T11:32:58Z",
+    "remediation_due_date" : "2026-06-18",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2026-34479"
+  }, {
+    "packageName" : "org.apache.poi:poi-scratchpad",
+    "version" : "4.1.2",
+    "safeVersion" : "5.2.1",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2022-26336"
+  }, {
+    "packageName" : "org.owasp.antisamy:antisamy",
+    "version" : "1.6.8",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "Medium: 2",
+    "cveList" : "CVE-2023-43643,CVE-2024-23635"
+  }, {
+    "packageName" : "org.owasp.esapi:esapi",
+    "version" : "2.4.0.0",
+    "safeVersion" : "2.6.0.0",
+    "firstFoundDate" : "2026-05-20T12:40:50Z",
+    "remediation_due_date" : "2026-06-19",
+    "severityCounts" : "Medium: 2",
+    "cveList" : "CVE-2025-5878,Cx5b5cdd9c-b61e"
+  }, {
+    "packageName" : "ch.qos.logback:logback-core",
+    "version" : "1.2.13",
+    "safeVersion" : "1.5.25",
+    "firstFoundDate" : "2026-05-19T11:32:58Z",
+    "remediation_due_date" : "2026-06-18",
+    "severityCounts" : "Medium: 2 Low: 2",
+    "cveList" : "CVE-2024-12798,CVE-2025-11226,CVE-2026-1225,CVE-2024-12801"
+  }, {
+    "packageName" : "commons-lang:commons-lang",
+    "version" : "2.4",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-04-19",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2025-48924"
+  }, {
+    "packageName" : "org.apache.httpcomponents:httpclient",
+    "version" : "4.5.5",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-04-19",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2020-13956"
+  }, {
+    "packageName" : "org.apache.james:apache-mime4j-core",
+    "version" : "0.8.4",
+    "safeVersion" : "0.8.10",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2024-21742"
+  }, {
+    "packageName" : "org.apache.logging.log4j:log4j-core",
+    "version" : "2.17.1",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-04-19",
+    "severityCounts" : "Medium: 3",
+    "cveList" : "CVE-2025-68161,CVE-2026-34477,CVE-2026-34480"
+  }, {
+    "packageName" : "org.apache.poi:poi-ooxml",
+    "version" : "4.1.2",
+    "safeVersion" : "5.4.0",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2025-31672"
+  }, {
+    "packageName" : "org.apache.sis.core:sis-metadata",
+    "version" : "1.1",
+    "safeVersion" : "1.6",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2025-68280"
+  }, {
+    "packageName" : "org.apache.tika:tika-parsers",
+    "version" : "1.28.1",
+    "safeVersion" : "2.0.0",
+    "firstFoundDate" : "2026-03-20T11:15:37Z",
+    "remediation_due_date" : "2026-03-30",
+    "severityCounts" : "Medium: 1 Critical: 1",
+    "cveList" : "CVE-2022-25169,CVE-2025-66516"
+  }, {
+    "packageName" : "org.eclipse.jetty:jetty-client",
+    "version" : "9.4.44.v20210927",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-05-29T08:16:52Z",
+    "remediation_due_date" : "2026-11-25",
+    "severityCounts" : "Low: 1",
+    "cveList" : "CVE-2022-2047"
+  } ],
+  "findingsWithCommentsSAST" : [ ],
+  "findingsWithCommentsSCA" : [ ],
+  "unselectedModules" : [ ],
+  "selectedModules" : [ ],
+  "architectures" : [ "java", "javascript" ],
+  "noPrecompile" : [ ],
+  "minifedFiles" : [ ],
+  "scaEcosystems" : "java,javascript",
+  "scaSafeVersionEnabled" : true,
+  "packagingAnomalies" : [ ],
+  "sastMitigationProposal" : {
+    "Total" : 0,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "scaMitigationProposal" : {
+    "Total" : 0,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "missingSCAForSelectedModules" : [ ]
+}

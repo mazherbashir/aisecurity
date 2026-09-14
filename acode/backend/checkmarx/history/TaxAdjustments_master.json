@@ -1,0 +1,323 @@
+{
+  "overview" : {
+    "applicationName" : "TaxAdjustments",
+    "appId" : "5c930543-d172-4f64-87fc-3068d218aebc",
+    "accountId" : "5c930543-d172-4f64-87fc-3068d218aebc",
+    "buildId" : "0baee059-ab59-4495-81f8-f4741ac0b311",
+    "analysisId" : "b86407fc-8f5e-4ca1-ac09-36702e3cb1b4",
+    "scanName" : "master",
+    "scanType" : "checkmarx",
+    "generationDate" : "2026-06-20T03:02:54.242031Z",
+    "policyName" : null,
+    "policyComplianceStatus" : "Failed",
+    "sastScore" : 90,
+    "sastRating" : null,
+    "staticAnalysisUnitId" : null,
+    "sandboxId" : "https://us.ast.checkmarx.net/sast-results/5c930543-d172-4f64-87fc-3068d218aebc/0baee059-ab59-4495-81f8-f4741ac0b311",
+    "tier" : "tier-1",
+    "gracePeriod" : null,
+    "submitted_date" : null
+  },
+  "sastSummary" : {
+    "vulnerabilities" : 228,
+    "breakdown" : {
+      "Low" : {
+        "total" : 223,
+        "findings" : [ {
+          "cwe" : "CWE-922",
+          "count" : 184,
+          "date_first_occurrence" : "2026-06-19T03:06:52Z",
+          "remediation_due_date" : "2026-12-16"
+        }, {
+          "cwe" : "CWE-346",
+          "count" : 2,
+          "date_first_occurrence" : "2026-06-16T03:21:00Z",
+          "remediation_due_date" : "2026-12-13"
+        }, {
+          "cwe" : "CWE-117",
+          "count" : 8,
+          "date_first_occurrence" : "2025-10-01T03:06:38Z",
+          "remediation_due_date" : "2026-03-30"
+        }, {
+          "cwe" : "CWE-338",
+          "count" : 5,
+          "date_first_occurrence" : "2025-06-20T03:05:22Z",
+          "remediation_due_date" : "2025-12-17"
+        }, {
+          "cwe" : "CWE-1022",
+          "count" : 2,
+          "date_first_occurrence" : "2025-03-19T03:30:40Z",
+          "remediation_due_date" : "2025-09-15"
+        }, {
+          "cwe" : "CWE-116",
+          "count" : 3,
+          "date_first_occurrence" : "2026-04-29T03:05:19Z",
+          "remediation_due_date" : "2026-10-26"
+        }, {
+          "cwe" : "CWE-209",
+          "count" : 5,
+          "date_first_occurrence" : "2026-04-21T03:04:22Z",
+          "remediation_due_date" : "2026-10-18"
+        }, {
+          "cwe" : "CWE-79",
+          "count" : 1,
+          "date_first_occurrence" : "2025-10-09T03:07:02Z",
+          "remediation_due_date" : "2026-04-07"
+        }, {
+          "cwe" : "CWE-532",
+          "count" : 1,
+          "date_first_occurrence" : "2025-06-10T03:15:40Z",
+          "remediation_due_date" : "2025-12-07"
+        }, {
+          "cwe" : "CWE-200",
+          "count" : 2,
+          "date_first_occurrence" : "2025-03-28T03:26:16Z",
+          "remediation_due_date" : "2025-09-24"
+        }, {
+          "cwe" : "CWE-377",
+          "count" : 1,
+          "date_first_occurrence" : "2025-03-06T21:14:04Z",
+          "remediation_due_date" : "2025-09-02"
+        }, {
+          "cwe" : "CWE-244",
+          "count" : 6,
+          "date_first_occurrence" : "2025-03-06T21:14:02Z",
+          "remediation_due_date" : "2025-09-02"
+        }, {
+          "cwe" : "CWE-404",
+          "count" : 3,
+          "date_first_occurrence" : "2025-03-06T21:14:02Z",
+          "remediation_due_date" : "2025-09-02"
+        } ]
+      },
+      "Information" : {
+        "total" : 5,
+        "findings" : [ {
+          "cwe" : "CWE-209",
+          "count" : 3,
+          "date_first_occurrence" : "2026-04-21T03:04:22Z",
+          "remediation_due_date" : null
+        }, {
+          "cwe" : "CWE-426",
+          "count" : 2,
+          "date_first_occurrence" : "2025-03-06T21:14:02Z",
+          "remediation_due_date" : null
+        } ]
+      }
+    }
+  },
+  "scaSummary" : {
+    "vulnerabilities" : 25,
+    "breakdown" : {
+      "High" : {
+        "total" : 12,
+        "findings" : [ ]
+      },
+      "Medium" : {
+        "total" : 1,
+        "findings" : [ ]
+      },
+      "Low" : {
+        "total" : 9,
+        "findings" : [ ]
+      },
+      "Information" : {
+        "total" : 3,
+        "findings" : [ ]
+      }
+    },
+    "totalPackages" : 19,
+    "totalVulnerablePackages" : 19
+  },
+  "scaDetails" : [ {
+    "packageName" : "ws",
+    "version" : "8.20.1",
+    "safeVersion" : "8.21.0",
+    "firstFoundDate" : "2026-06-19T03:04:50Z",
+    "remediation_due_date" : "2026-06-29",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2026-48779"
+  }, {
+    "packageName" : "@angular/common",
+    "version" : "21.2.5",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2026-06-18T03:03:02Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "High: 4",
+    "cveList" : "CVE-2026-50170,CVE-2026-50171,CVE-2026-54268,CVE-2026-54266"
+  }, {
+    "packageName" : "piscina",
+    "version" : "5.1.4",
+    "safeVersion" : "6.0.0-rc.2",
+    "firstFoundDate" : "2026-06-20T03:03:45Z",
+    "remediation_due_date" : "2026-06-30",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2026-55388"
+  }, {
+    "packageName" : "undici",
+    "version" : "7.24.0",
+    "safeVersion" : "8.5.0",
+    "firstFoundDate" : "2026-06-18T14:25:31Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "High: 3",
+    "cveList" : "CVE-2026-12151,CVE-2026-6734,CVE-2026-9697"
+  }, {
+    "packageName" : "vite",
+    "version" : "6.4.2",
+    "safeVersion" : "6.4.3",
+    "firstFoundDate" : "2026-06-18T03:03:02Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2026-53571"
+  }, {
+    "packageName" : "form-data",
+    "version" : "4.0.4",
+    "safeVersion" : "4.0.6",
+    "firstFoundDate" : "2026-06-18T03:03:02Z",
+    "remediation_due_date" : "2026-06-28",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2026-12143"
+  }, {
+    "packageName" : "hono",
+    "version" : "4.12.18",
+    "safeVersion" : "4.12.25",
+    "firstFoundDate" : "2026-06-19T03:04:50Z",
+    "remediation_due_date" : "2026-06-29",
+    "severityCounts" : "High: 1",
+    "cveList" : "CVE-2026-54290"
+  }, {
+    "packageName" : "webpack-dev-server",
+    "version" : "5.2.2",
+    "safeVersion" : "5.2.5",
+    "firstFoundDate" : "2026-06-17T03:03:20Z",
+    "remediation_due_date" : "2026-07-17",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2026-9595"
+  }, {
+    "packageName" : "uuid",
+    "version" : "3.4.0",
+    "safeVersion" : "11.1.1",
+    "firstFoundDate" : "2026-05-15T03:02:58Z",
+    "remediation_due_date" : "2026-11-11",
+    "severityCounts" : "Low: 1",
+    "cveList" : "CVE-2026-41988"
+  }, {
+    "packageName" : "diff",
+    "version" : "4.0.2",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-01-29T03:02:39Z",
+    "remediation_due_date" : "2026-07-28",
+    "severityCounts" : "Low: 1",
+    "cveList" : "CVE-2026-24001"
+  }, {
+    "packageName" : "ajv",
+    "version" : "8.12.0",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-02-20T03:02:17Z",
+    "remediation_due_date" : "2026-08-19",
+    "severityCounts" : "Low: 1",
+    "cveList" : "CVE-2025-69873"
+  }, {
+    "packageName" : "ajv",
+    "version" : "8.17.1",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2026-02-20T03:02:17Z",
+    "remediation_due_date" : "2026-08-19",
+    "severityCounts" : "Low: 1",
+    "cveList" : "CVE-2025-69873"
+  }, {
+    "packageName" : "webpack",
+    "version" : "5.99.9",
+    "safeVersion" : "5.104.1",
+    "firstFoundDate" : "2026-02-06T03:02:57Z",
+    "remediation_due_date" : "2026-08-05",
+    "severityCounts" : "Low: 2",
+    "cveList" : "CVE-2025-68157,CVE-2025-68458"
+  }, {
+    "packageName" : "diff",
+    "version" : "3.5.0",
+    "safeVersion" : "3.5.1",
+    "firstFoundDate" : "2026-01-29T03:02:39Z",
+    "remediation_due_date" : "2026-07-28",
+    "severityCounts" : "Low: 1",
+    "cveList" : "CVE-2026-24001"
+  }, {
+    "packageName" : "ajv",
+    "version" : "6.12.6",
+    "safeVersion" : "6.14.0",
+    "firstFoundDate" : "2026-02-20T03:02:17Z",
+    "remediation_due_date" : "2026-08-19",
+    "severityCounts" : "Low: 1",
+    "cveList" : "CVE-2025-69873"
+  }, {
+    "packageName" : "uuid",
+    "version" : "11.1.1",
+    "safeVersion" : "11.1.1",
+    "firstFoundDate" : "2026-05-15T03:02:58Z",
+    "remediation_due_date" : "2026-11-11",
+    "severityCounts" : "Low: 1",
+    "cveList" : "CVE-2026-41988"
+  }, {
+    "packageName" : "protobufjs",
+    "version" : "7.5.8",
+    "safeVersion" : "8.5.0",
+    "firstFoundDate" : "2026-06-19T03:04:50Z",
+    "remediation_due_date" : "2026-12-16",
+    "severityCounts" : "",
+    "cveList" : "CVE-2026-48712"
+  }, {
+    "packageName" : "esbuild",
+    "version" : "0.25.3",
+    "safeVersion" : "0.28.1",
+    "firstFoundDate" : "2026-06-18T03:03:02Z",
+    "remediation_due_date" : "2026-12-15",
+    "severityCounts" : "",
+    "cveList" : "Cxa83491f0-29a9"
+  }, {
+    "packageName" : "@babel/plugin-transform-modules-systemjs",
+    "version" : "7.29.0",
+    "safeVersion" : "8.0.0-alpha.13",
+    "firstFoundDate" : "2026-05-12T03:02:42Z",
+    "remediation_due_date" : "2026-11-08",
+    "severityCounts" : "",
+    "cveList" : "CVE-2026-44728"
+  } ],
+  "findingsWithCommentsSAST" : [ ],
+  "findingsWithCommentsSCA" : [ {
+    "type" : "SCA",
+    "id" : "tfKo23ft4kz3O48J1SJQPTtQIrJdztp1VIXJY+N8Yt8=",
+    "title" : "CVE-2026-9595",
+    "severity" : "Medium",
+    "location" : "Npm-webpack-dev-server-5.2.2",
+    "cve_summary" : "When a user-configured proxy on webpack-dev-server has a broad context (e.g. /) and \"ws: true\", it also intercepts the dev server's own HMR WebSocket and forwards it to the proxy target. This leaks the browser's cookies and Origin header to the backend, bypasses the dev server's Host/Origin validation, and corrupts the HMR socket (both HMR and the proxy end up writing to the same socket). Fixed in webpack-dev-server@5.2.5.\nWorkarounds: Scope user-defined proxy \"context\" to specific paths instead of \"/\", or omit \"ws: true\" from the proxy entry when WebSocket forwarding is not required.",
+    "userComments" : [ ],
+    "remediation_due_date" : "2026-07-17",
+    "state" : "Proposed Not Exploitable",
+    "firstFoundDate" : "2026-06-17T03:03:20Z"
+  } ],
+  "unselectedModules" : [ ],
+  "selectedModules" : [ ],
+  "architectures" : [ "csharp", "javascript" ],
+  "noPrecompile" : [ ],
+  "minifedFiles" : [ ],
+  "scaEcosystems" : "csharp,javascript",
+  "scaSafeVersionEnabled" : false,
+  "packagingAnomalies" : [ ],
+  "sastMitigationProposal" : {
+    "Total" : 0,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "scaMitigationProposal" : {
+    "Total" : 1,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 1,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "missingSCAForSelectedModules" : [ ]
+}

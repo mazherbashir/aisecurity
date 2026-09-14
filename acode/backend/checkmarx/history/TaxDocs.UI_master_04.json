@@ -1,0 +1,108 @@
+{
+  "overview" : {
+    "applicationName" : "TaxDocs.UI",
+    "appId" : "345982b3-fbcd-4273-a160-efd81664e13f",
+    "accountId" : "345982b3-fbcd-4273-a160-efd81664e13f",
+    "buildId" : "1ec6e995-f57c-4769-ae36-b2a237a912cc",
+    "analysisId" : "b86407fc-8f5e-4ca1-ac09-36702e3cb1b4",
+    "scanName" : "master",
+    "scanType" : "checkmarx",
+    "generationDate" : "2026-07-07T06:25:03.90273Z",
+    "policyName" : null,
+    "policyComplianceStatus" : "Failed",
+    "sastScore" : 0,
+    "sastRating" : null,
+    "staticAnalysisUnitId" : null,
+    "sandboxId" : "https://us.ast.checkmarx.net/sast-results/345982b3-fbcd-4273-a160-efd81664e13f/1ec6e995-f57c-4769-ae36-b2a237a912cc",
+    "tier" : "tier-1",
+    "gracePeriod" : null,
+    "submitted_date" : null
+  },
+  "sastSummary" : {
+    "vulnerabilities" : 0,
+    "breakdown" : { }
+  },
+  "scaSummary" : {
+    "vulnerabilities" : 2,
+    "breakdown" : {
+      "High" : {
+        "total" : 1,
+        "findings" : [ ]
+      },
+      "Medium" : {
+        "total" : 1,
+        "findings" : [ ]
+      }
+    },
+    "totalPackages" : 2091,
+    "totalVulnerablePackages" : 2
+  },
+  "scaDetails" : [ {
+    "packageName" : "inflight",
+    "version" : "1.0.6",
+    "safeVersion" : "No safe version published in GHSA. Check manually.",
+    "firstFoundDate" : "2025-01-27T22:34:27Z",
+    "remediation_due_date" : "2025-02-06",
+    "severityCounts" : "High: 1",
+    "cveList" : "Cxdca8e59f-8bfe"
+  }, {
+    "packageName" : "request",
+    "version" : "2.88.2",
+    "safeVersion" : "No safe version found. Fix applies to a different major version. Check manually.",
+    "firstFoundDate" : "2025-01-27T22:34:27Z",
+    "remediation_due_date" : "2025-02-26",
+    "severityCounts" : "Medium: 1",
+    "cveList" : "CVE-2023-28155"
+  } ],
+  "findingsWithCommentsSAST" : [ ],
+  "findingsWithCommentsSCA" : [ {
+    "type" : "SCA",
+    "id" : "TO/ZE7E3kHbdqVkrZNLIx8+uBUssWXJ6Ax+y/x9unT8=",
+    "title" : "Cxdca8e59f-8bfe",
+    "severity" : "High",
+    "location" : "Npm-inflight-1.0.6",
+    "fileName" : "Npm-inflight-1.0.6",
+    "cve_summary" : "In NPM `inflight` there is a Memory Leak because some resources are not freed correctly after being used. It appears to affect all versions, as the issue was not addressed and no fix is found. NOTE: In the meantime, `logdna-agent`, a package that depends on `inflight`, has merged a commit to address this solely in their package (so it should be fixed in `logdna-agent` in versions 1.6.5 and later). `Node-glob`, a package that also depends on `inflight`, was also planning to address this by not using `inflight` after version 8 is released, but it is still being used.",
+    "userComments" : [ ],
+    "remediation_due_date" : "2025-02-06",
+    "state" : "Proposed Not Exploitable",
+    "firstFoundDate" : "2025-01-27T22:34:27Z"
+  }, {
+    "type" : "SCA",
+    "id" : "sy5BdRtoSYDhuAgtbaxBgrnEUpp0DlWaRAV8TU2ek5Q=",
+    "title" : "CVE-2023-28155",
+    "severity" : "Medium",
+    "location" : "Npm-request-2.88.2",
+    "fileName" : "Npm-request-2.88.2",
+    "cve_summary" : "The request package through 2.88.2 for Node.js and the @cypress/request package prior to 3.0.0 allow a bypass of SSRF mitigations via an attacker-controller server that does a cross-protocol redirect (HTTP to HTTPS, or HTTPS to HTTP). NOTE: The request package is no longer supported by the maintainer.",
+    "userComments" : [ ],
+    "remediation_due_date" : "2025-02-26",
+    "state" : "Proposed Not Exploitable",
+    "firstFoundDate" : "2025-01-27T22:34:27Z"
+  } ],
+  "unselectedModules" : [ ],
+  "selectedModules" : [ ],
+  "architectures" : [ ],
+  "noPrecompile" : [ ],
+  "minifedFiles" : [ ],
+  "scaEcosystems" : "",
+  "scaSafeVersionEnabled" : true,
+  "packagingAnomalies" : [ ],
+  "sastMitigationProposal" : {
+    "Total" : 0,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "scaMitigationProposal" : {
+    "Total" : 2,
+    "Critical" : 0,
+    "High" : 1,
+    "Medium" : 1,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "missingSCAForSelectedModules" : [ ]
+}

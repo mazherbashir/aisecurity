@@ -1,0 +1,2 @@
+2442:                                        <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest mt-0.5">Remediation timelines by Asset Tier & Severity</p>
+2450:                                                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 border-r border-slate-800/50">Asset Tier</th>

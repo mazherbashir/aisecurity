@@ -1,0 +1,59 @@
+{
+  "overview" : {
+    "applicationName" : "TaxDocs.UI",
+    "appId" : "345982b3-fbcd-4273-a160-efd81664e13f",
+    "accountId" : "345982b3-fbcd-4273-a160-efd81664e13f",
+    "buildId" : "2849fdf6-c110-4e96-b74f-72eb5262dad4",
+    "analysisId" : "b86407fc-8f5e-4ca1-ac09-36702e3cb1b4",
+    "scanName" : "master",
+    "scanType" : "checkmarx",
+    "generationDate" : "2026-07-08T00:06:04.840594Z",
+    "policyName" : null,
+    "policyComplianceStatus" : "Passed",
+    "sastScore" : 0,
+    "sastRating" : null,
+    "staticAnalysisUnitId" : null,
+    "sandboxId" : "https://us.ast.checkmarx.net/sast-results/345982b3-fbcd-4273-a160-efd81664e13f/2849fdf6-c110-4e96-b74f-72eb5262dad4",
+    "tier" : "tier-1",
+    "gracePeriod" : null,
+    "submitted_date" : null
+  },
+  "sastSummary" : {
+    "vulnerabilities" : 0,
+    "breakdown" : { }
+  },
+  "scaSummary" : {
+    "vulnerabilities" : 0,
+    "breakdown" : { },
+    "totalPackages" : 2092,
+    "totalVulnerablePackages" : 0
+  },
+  "scaDetails" : [ ],
+  "findingsWithCommentsSAST" : [ ],
+  "findingsWithCommentsSCA" : [ ],
+  "unselectedModules" : [ ],
+  "selectedModules" : [ ],
+  "architectures" : [ ],
+  "noPrecompile" : [ ],
+  "minifedFiles" : [ ],
+  "scaEcosystems" : "",
+  "scaSafeVersionEnabled" : true,
+  "packagingAnomalies" : [ ],
+  "sastMitigationProposal" : {
+    "Total" : 0,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "scaMitigationProposal" : {
+    "Total" : 0,
+    "Critical" : 0,
+    "High" : 0,
+    "Medium" : 0,
+    "Low" : 0,
+    "Information" : 0
+  },
+  "missingSCAForSelectedModules" : [ ]
+}
