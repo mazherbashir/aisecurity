@@ -1,8 +1,0 @@
-{
-  "2501749131": {
-    "data": "{\"projects\":[{\"id\":198369,\"type\":\"web\",\"userPermissions\":[],\"resolvedWorkspaceIntegration\":null,\"flavor\":\"design\",\"name\":\"Checkmarx One API Reference Guide\",\"description\":\"\",\"visibility\":\"public\",\"createdAt\":\"2023-05-01T09:14:56.712188+00:00\",\"updatedAt\":\"2023-05-08T09:52:27.017573+00:00\",\"slug\":\"checkmarx-one-api-reference-guide\",\"iconName\":\"cabinet-filing\",\"iconColor\":\"#324267\",\"isDesignLibrary\":false,\"workspaceIntegrationId\":null,\"groupId\":null,\"useLegacyExporter\":true,\"__typename\":\"sl_projects\"}]}"
-  },
-  "2670719207": {
-    "data": "{\"defaultBranchNodes\":[{\"id\":513226059,\"name\":\"Change a SAST predicate\",\"snapshot\":{\"id\":620683661,\"summary\":\"Change the predicate for a specific vulnerability instance. You can change the severity and/or state and add a comment.\\r\\n<!-- theme: warning -->\\r\\n> The \\\"Send API Request\\\" feature is not currently supported in this platform. You can try out this AP...\",\"__typename\":\"sl_node_snapshots\"},\"__typename\":\"sl_branch_nodes\"}]}"
-  }
-}
