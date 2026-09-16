@@ -80,4 +80,67 @@ public class VeracodeServiceTest {
         // Clean up
         java.nio.file.Files.deleteIfExists(statusPath);
     }
+
+    @Test
+    public void testMapToPrettyName_AndroidWithSastContext() {
+        java.util.Map<String, String> mappings = new java.util.LinkedHashMap<>();
+        mappings.put("Go", "go,golang,GO,GOLANG");
+        mappings.put("Java", "maven,gradle,JAVA,JVM,jar,bytecode");
+        mappings.put("JavaScript", "npm,bower,JAVASCRIPT");
+        mappings.put("NET", "nuget,CIL32,MSIL");
+        mappings.put("PHP", "composer,PHP,Packagist");
+        mappings.put("Python", "pip,pypi,PYTHON");
+        mappings.put("Ruby", "rubygems,RUBY");
+        mappings.put("Android", "java,maven,gradle,jar,bytecode,aar,apk,JVM");
+
+        when(veracodeConfig.getArchitectureMappings()).thenReturn(mappings);
+
+        java.util.Set<String> androidContext = java.util.Collections.singleton("Android");
+
+        // When active SAST architecture is Android, Java/Maven/Gradle/JAR dependencies should map to Android
+        org.junit.jupiter.api.Assertions.assertEquals("Android", veracodeService.mapToPrettyName("maven", androidContext));
+        org.junit.jupiter.api.Assertions.assertEquals("Android", veracodeService.mapToPrettyName("java", androidContext));
+        org.junit.jupiter.api.Assertions.assertEquals("Android", veracodeService.mapToPrettyName("jar", androidContext));
+        org.junit.jupiter.api.Assertions.assertEquals("Android", veracodeService.mapToPrettyName("bytecode", androidContext));
+        org.junit.jupiter.api.Assertions.assertEquals("Android", veracodeService.mapToPrettyName("gradle", androidContext));
+    }
+
+    @Test
+    public void testMapToPrettyName_AllConfiguredArchitectures() {
+        java.util.Map<String, String> mappings = new java.util.LinkedHashMap<>();
+        mappings.put("Go", "go,golang,GO,GOLANG");
+        mappings.put("Java", "maven,gradle,JAVA,JVM,jar,bytecode");
+        mappings.put("JavaScript", "npm,bower,JAVASCRIPT");
+        mappings.put("NET", "nuget,CIL32,MSIL");
+        mappings.put("PHP", "composer,PHP,Packagist");
+        mappings.put("Python", "pip,pypi,PYTHON");
+        mappings.put("Ruby", "rubygems,RUBY");
+        mappings.put("Android", "java,maven,gradle,jar,bytecode,aar,apk,JVM");
+
+        when(veracodeConfig.getArchitectureMappings()).thenReturn(mappings);
+
+        // Verify each architecture resolves correctly with its respective SAST context
+        org.junit.jupiter.api.Assertions.assertEquals("Go", veracodeService.mapToPrettyName("golang", java.util.Collections.singleton("Go")));
+        org.junit.jupiter.api.Assertions.assertEquals("Java", veracodeService.mapToPrettyName("maven", java.util.Collections.singleton("Java")));
+        org.junit.jupiter.api.Assertions.assertEquals("JavaScript", veracodeService.mapToPrettyName("npm", java.util.Collections.singleton("JavaScript")));
+        org.junit.jupiter.api.Assertions.assertEquals("NET", veracodeService.mapToPrettyName("nuget", java.util.Collections.singleton("NET")));
+        org.junit.jupiter.api.Assertions.assertEquals("PHP", veracodeService.mapToPrettyName("composer", java.util.Collections.singleton("PHP")));
+        org.junit.jupiter.api.Assertions.assertEquals("Python", veracodeService.mapToPrettyName("pip", java.util.Collections.singleton("Python")));
+        org.junit.jupiter.api.Assertions.assertEquals("Ruby", veracodeService.mapToPrettyName("rubygems", java.util.Collections.singleton("Ruby")));
+    }
+
+    @Test
+    public void testMapToPrettyName_FallbackWhenNoSastContextMatches() {
+        java.util.Map<String, String> mappings = new java.util.LinkedHashMap<>();
+        mappings.put("Go", "go,golang,GO,GOLANG");
+        mappings.put("Java", "maven,gradle,JAVA,JVM,jar,bytecode");
+        mappings.put("Python", "pip,pypi,PYTHON");
+        mappings.put("Android", "java,maven,gradle,jar,bytecode,aar,apk,JVM");
+
+        when(veracodeConfig.getArchitectureMappings()).thenReturn(mappings);
+
+        // If SAST context is Android, but raw ecosystem is 'pip' (Python), fallback should correctly return 'Python'
+        java.util.Set<String> androidContext = java.util.Collections.singleton("Android");
+        org.junit.jupiter.api.Assertions.assertEquals("Python", veracodeService.mapToPrettyName("pip", androidContext));
+    }
 }

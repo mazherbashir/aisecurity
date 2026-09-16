@@ -1578,7 +1578,7 @@ public class VeracodeService {
                 boolean ignore = veracodeConfig.getIgnoreEcosystems().stream()
                         .anyMatch(ecoName -> ecoName.equalsIgnoreCase(eco));
                 if (!ignore) {
-                    ecosystems.add(mapToPrettyName(eco));
+                    ecosystems.add(mapToPrettyName(eco, new java.util.HashSet<>(dto.architectures)));
                 }
             }
 
@@ -1880,11 +1880,34 @@ public class VeracodeService {
         }
     }
 
-    private String mapToPrettyName(String technicalName) {
+    String mapToPrettyName(String technicalName) {
+        return mapToPrettyName(technicalName, null);
+    }
+
+    String mapToPrettyName(String technicalName, java.util.Set<String> activeArchitectures) {
         var mappings = veracodeConfig.getArchitectureMappings();
         if (mappings == null || mappings.isEmpty())
             return technicalName;
 
+        // 1. Priority check: Match against SAST architectures active in the current scan
+        if (activeArchitectures != null && !activeArchitectures.isEmpty()) {
+            for (String arch : activeArchitectures) {
+                for (var entry : mappings.entrySet()) {
+                    if (entry.getKey().equalsIgnoreCase(arch)) {
+                        String rawVal = entry.getValue();
+                        if (rawVal != null) {
+                            boolean match = java.util.Arrays.stream(rawVal.split(","))
+                                    .anyMatch(v -> v.trim().equalsIgnoreCase(technicalName));
+                            if (match) {
+                                return entry.getKey(); // Returns "Android"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Fallback: Search all global mappings
         return mappings.entrySet().stream()
                 .filter(e -> {
                     if (e.getKey().equalsIgnoreCase(technicalName))
