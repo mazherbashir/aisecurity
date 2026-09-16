@@ -331,14 +331,40 @@ public class ConfigService {
 
         if (updates.isEmpty()) return;
 
-        // Persist to file while preserving all comments, grouping, and line formatting!
-        File file = new File(getConfigFilePath());
+        // Persist to configuration file(s) while preserving comments, grouping, line formatting, and removing duplicates
+        for (File file : getConfigFileList()) {
+            updatePropertiesFile(file, updates);
+        }
+    }
+
+    private java.util.List<File> getConfigFileList() {
+        java.util.List<File> files = new java.util.ArrayList<>();
+        File devFile = new File("src/main/resources/application.properties");
+        if (devFile.exists()) {
+            files.add(devFile);
+        }
+        File externalFile = new File("application.properties");
+        try {
+            if (externalFile.exists() && (!devFile.exists() || !externalFile.getCanonicalPath().equals(devFile.getCanonicalPath()))) {
+                files.add(externalFile);
+            }
+        } catch (Exception e) {
+            if (externalFile.exists()) {
+                files.add(externalFile);
+            }
+        }
+        if (files.isEmpty()) {
+            files.add(externalFile);
+        }
+        return files;
+    }
+
+    private void updatePropertiesFile(File file, java.util.Map<String, String> updates) throws Exception {
         if (!file.exists()) {
             return;
         }
 
         java.util.List<String> lines = java.nio.file.Files.readAllLines(file.toPath(), java.nio.charset.StandardCharsets.UTF_8);
-
         java.util.Set<String> processedKeys = new java.util.HashSet<>();
 
         for (int i = 0; i < lines.size(); i++) {
@@ -348,9 +374,15 @@ public class ConfigService {
                 int eqIdx = line.indexOf("=");
                 String key = line.substring(0, eqIdx).trim();
                 if (updates.containsKey(key)) {
-                    String escapedVal = escapePropertyValue(updates.get(key));
-                    lines.set(i, key + "=" + escapedVal);
-                    processedKeys.add(key);
+                    if (!processedKeys.contains(key)) {
+                        String escapedVal = escapePropertyValue(updates.get(key));
+                        lines.set(i, key + "=" + escapedVal);
+                        processedKeys.add(key);
+                    } else {
+                        // Remove duplicate occurrences of the same key
+                        lines.remove(i);
+                        i--;
+                    }
                 }
             }
         }
