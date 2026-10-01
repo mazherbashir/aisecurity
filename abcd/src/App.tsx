@@ -35,6 +35,8 @@ import {
   Sun,
   Moon,
   Download,
+  Calendar,
+  Lock,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -432,6 +434,27 @@ function buildPdfFilename(
   return `${prefix}_${sanitized}_${datePart}.pdf`;
 }
 
+/**
+ * Calculate the date for current date + next N working days.
+ * Saturdays and Sundays are treated as holidays and skipped.
+ * Returns date in format "YYYY-MM-DD" (e.g. 2026-10-02).
+ */
+function calculateNextWorkingDays(daysToAdd = 2, fromDate = new Date()): string {
+  const date = new Date(fromDate);
+  let added = 0;
+  while (added < daysToAdd) {
+    date.setDate(date.getDate() + 1);
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) { // Skip Sunday (0) and Saturday (6)
+      added++;
+    }
+  }
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function ReviewTabContent({
   overview,
   backendSastSummary,
@@ -449,6 +472,9 @@ function ReviewTabContent({
   removedMinifiedFiles = [],
   onDownloadReport,
   isDownloadingPdf = false,
+  profileName,
+  onShowSuccessMessage,
+  resultsLoaded = true,
 }: {
   overview: any;
   backendSastSummary: any;
@@ -466,6 +492,9 @@ function ReviewTabContent({
   removedMinifiedFiles?: string[];
   onDownloadReport?: () => void;
   isDownloadingPdf?: boolean;
+  profileName?: string;
+  onShowSuccessMessage?: (msg: string) => void;
+  resultsLoaded?: boolean;
 }) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -549,6 +578,80 @@ function ReviewTabContent({
 
   // TEMPORARY TOGGLE for Scan Too Old
   const [isScanTooOld, setIsScanTooOld] = useState(false);
+
+  // ServiceNow SCTASK Update Modal State
+  const [isSnowModalOpen, setIsSnowModalOpen] = useState(false);
+  const [sctaskNumber, setSctaskNumber] = useState("");
+  const [addCommentsOnly, setAddCommentsOnly] = useState(false);
+  const [pendingDate, setPendingDate] = useState(() => calculateNextWorkingDays(2));
+  const [snowModalError, setSnowModalError] = useState<string | null>(null);
+  const [isSubmittingSnow, setIsSubmittingSnow] = useState(false);
+
+  const handleSubmitSnow = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedTask = sctaskNumber.trim().toUpperCase();
+
+    if (!trimmedTask) {
+      setSnowModalError("SCTASK number is required.");
+      return;
+    }
+
+    if (!trimmedTask.startsWith("SCTASK")) {
+      setSnowModalError("SCTASK number must start with 'SCTASK' (e.g. SCTASK0123456).");
+      return;
+    }
+
+    if (!addCommentsOnly && !pendingDate) {
+      setSnowModalError("Pending Date is required (format: YYYY-MM-DD).");
+      return;
+    }
+
+    setIsSubmittingSnow(true);
+    setSnowModalError(null);
+
+    try {
+      const action = addCommentsOnly ? "AddComment" : "setReviewComments";
+      const endpoint = `/api/snow/sctaskUpdate?action=${action}`;
+
+      const payload = addCommentsOnly
+        ? {
+            u_number: trimmedTask,
+            u_additional_comments: rawHtml,
+          }
+        : {
+            u_number: trimmedTask,
+            u_state: "Pending",
+            u_pending_reason: "Awaiting Customer Response",
+            u_end_pending: pendingDate,
+            u_additional_comments: rawHtml,
+          };
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let errDetail = `Server returned ${response.status}`;
+        try {
+          const errData = await response.json();
+          errDetail = errData.message || errData.error || errDetail;
+        } catch {}
+        throw new Error(errDetail);
+      }
+
+      setIsSnowModalOpen(false);
+      if (onShowSuccessMessage) {
+        onShowSuccessMessage(`ServiceNow task ${trimmedTask} updated successfully (${action}).`);
+      }
+    } catch (err: any) {
+      console.error("SNOW update error:", err);
+      setSnowModalError(err.message || "Failed to update ServiceNow task.");
+    } finally {
+      setIsSubmittingSnow(false);
+    }
+  };
 
   const formattedHeader = React.useMemo(() => {
     let header = "";
@@ -782,11 +885,11 @@ function ReviewTabContent({
               id="btn-sign-off-trigger"
               type="button"
               onClick={() => setIsSignOffModalOpen(true)}
-              className="flex items-center gap-2 text-white font-black bg-emerald-600 hover:bg-emerald-500 px-3.5 py-1.5 rounded-lg border border-emerald-500 shadow-md shadow-emerald-900/20 text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer signoff-btn"
+              className="flex items-center gap-1.5 text-white font-bold bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1.5 rounded-lg border border-emerald-500 shadow-sm shadow-emerald-900/20 text-[10px] tracking-wide transition-all active:scale-95 cursor-pointer signoff-btn"
               title="Sign-off scan"
             >
-              <Check size={15} className="stroke-[2.5]" />
-              <span className="font-black text-xs uppercase tracking-wider">
+              <Check size={12} className="stroke-[2.5]" />
+              <span className="font-bold text-[10px] tracking-wide whitespace-nowrap">
                 Sign-off
               </span>
             </button>
@@ -798,11 +901,11 @@ function ReviewTabContent({
                 setRpError(null);
                 setIsRpSignOffModalOpen(true);
               }}
-              className="flex items-center gap-2 text-white font-black bg-sky-600 hover:bg-sky-500 px-3.5 py-1.5 rounded-lg border border-sky-500 shadow-md shadow-sky-900/20 text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer rp-signoff-btn"
+              className="flex items-center gap-1.5 text-white font-bold bg-sky-600 hover:bg-sky-500 px-2.5 py-1.5 rounded-lg border border-sky-500 shadow-sm shadow-sky-900/20 text-[10px] tracking-wide transition-all active:scale-95 cursor-pointer rp-signoff-btn"
               title="RP Sign-off scan"
             >
-              <CheckCircle2 size={15} className="stroke-[2.5]" />
-              <span className="font-black text-xs uppercase tracking-wider">
+              <CheckCircle2 size={12} className="stroke-[2.5]" />
+              <span className="font-bold text-[10px] tracking-wide whitespace-nowrap">
                 RP Sign-off
               </span>
             </button>
@@ -813,11 +916,11 @@ function ReviewTabContent({
               id="btn-reset-sign-off"
               type="button"
               onClick={() => setOverrideHtml(null)}
-              className="flex items-center gap-2 text-white font-black bg-rose-600 hover:bg-rose-500 px-3.5 py-1.5 rounded-lg border border-rose-500 shadow-md shadow-rose-900/20 text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer reset-signoff-btn"
+              className="flex items-center gap-1.5 text-white font-bold bg-rose-600 hover:bg-rose-500 px-2.5 py-1.5 rounded-lg border border-rose-500 shadow-sm shadow-rose-900/20 text-[10px] tracking-wide transition-all active:scale-95 cursor-pointer reset-signoff-btn"
               title="Reset Sign-off"
             >
-              <X size={15} className="stroke-[2.5]" />
-              <span className="font-black text-xs uppercase tracking-wider">
+              <X size={12} className="stroke-[2.5]" />
+              <span className="font-bold text-[10px] tracking-wide whitespace-nowrap">
                 Reset
               </span>
             </button>
@@ -828,39 +931,57 @@ function ReviewTabContent({
               id="btn-toolbar-download-veracode-pdf"
               type="button"
               onClick={onDownloadReport}
-              disabled={isDownloadingPdf}
-              className="flex items-center gap-2 text-white font-black bg-indigo-600 hover:bg-indigo-500 px-3.5 py-1.5 rounded-lg border border-indigo-500 shadow-md shadow-indigo-900/20 text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer disabled:opacity-50 veracode-pdf-btn"
-              title={`Download Veracode PDF report (calls http://localhost:8080/api/veracode/custom-pdf?appName=${overview?.applicationName || 'USA-TAX-Tax Research Chatbot'})`}
+              disabled={isDownloadingPdf || !resultsLoaded}
+              className="flex items-center gap-1.5 text-white font-bold bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1.5 rounded-lg border border-indigo-500 shadow-sm shadow-indigo-900/20 text-[10px] tracking-wide transition-all active:scale-95 cursor-pointer disabled:opacity-50 veracode-pdf-btn"
+              title={!resultsLoaded ? "Scan results must be pulled first to download report" : `Download Customized Report for ${(profileName || overview?.applicationName || 'USA-TAX-Tax Research Chatbot').trim()} (calls http://localhost:8080/api/veracode/custom-pdf?appName=${encodeURIComponent((profileName || overview?.applicationName || 'USA-TAX-Tax Research Chatbot').trim())})`}
             >
               {isDownloadingPdf ? (
-                <RefreshCcw size={15} className="animate-spin" />
+                <RefreshCcw size={12} className="animate-spin" />
               ) : (
-                <Download size={15} className="stroke-[2.5]" />
+                <Download size={12} className="stroke-[2.5]" />
               )}
-              <span className="font-black text-xs uppercase tracking-wider">
-                {isDownloadingPdf ? "Downloading..." : "Download Report"}
+              <span className="font-bold text-[10px] tracking-wide whitespace-nowrap">
+                {isDownloadingPdf ? "Downloading..." : "Customized Report"}
               </span>
             </button>
           )}
 
           <button
+            id="btn-update-snow-trigger"
+            type="button"
+            onClick={() => {
+              setSnowModalError(null);
+              setSctaskNumber("");
+              setAddCommentsOnly(false);
+              setPendingDate(calculateNextWorkingDays(2));
+              setIsSnowModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 text-white font-bold bg-blue-600 hover:bg-blue-500 px-2.5 py-1.5 rounded-lg border border-blue-500 shadow-sm shadow-blue-900/20 text-[10px] tracking-wide transition-all active:scale-95 cursor-pointer snow-update-btn"
+            title="Update ServiceNow task with review comments"
+          >
+            <Database size={12} className="stroke-[2.5]" />
+            <span className="font-bold text-[10px] tracking-wide whitespace-nowrap">
+              Update SNOW
+            </span>
+          </button>
+
+          <button
             id="btn-copy-raw-html"
+            type="button"
             onClick={handleCopy}
-            className={`flex items-center gap-2 font-bold px-3 py-1.5 rounded-lg border text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer copy-html-btn ${
+            className={`flex items-center justify-center p-2 rounded-lg border transition-all active:scale-95 cursor-pointer copy-html-btn ${
               copied
                 ? "bg-emerald-600 text-white border-emerald-500"
                 : "bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700/60"
             }`}
-            title="Copy Raw HTML"
+            title={copied ? "Copied!" : "Review Comments"}
+            aria-label="Review Comments"
           >
             {copied ? (
-              <Check size={15} className="text-white stroke-[2.5]" />
+              <Check size={14} className="text-white stroke-[2.5]" />
             ) : (
-              <Copy size={15} />
+              <Copy size={14} />
             )}
-            <span className="text-xs font-bold uppercase tracking-wider">
-              {copied ? "Copied!" : "Copy HTML"}
-            </span>
           </button>
 
           {/* HTML Snippet Insertion Dropdown */}
@@ -898,13 +1019,13 @@ function ReviewTabContent({
           </button>
           <label className="flex items-center gap-2 cursor-pointer">
             <span className="text-[10px] font-bold uppercase text-slate-500">
-              Edit Raw HTML
+              EDIT HTML
             </span>
             <input
               type="checkbox"
               checked={isEditMode}
               onChange={() => setIsEditMode(!isEditMode)}
-              className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-blue-500 focus:ring-0"
+              className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-blue-500 focus:ring-0 cursor-pointer"
             />
           </label>
         </div>
@@ -1323,6 +1444,172 @@ ${scaSec}`;
                     className="px-5 py-2 text-xs font-black uppercase tracking-widest bg-sky-600 hover:bg-sky-500 text-white rounded-lg transition-all font-sans"
                   >
                     Generate RP Sign-off
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ServiceNow SCTASK Update Modal */}
+        {isSnowModalOpen && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-transparent pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSnowModalOpen(false)}
+              className="absolute inset-0 bg-black/75 pointer-events-auto"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-lg bg-slate-900 border border-blue-500/30 rounded-xl flex flex-col shadow-2xl overflow-hidden relative z-10 pointer-events-auto signoff-modal-dialog"
+            >
+              <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                <div className="flex items-center gap-2 text-blue-400">
+                  <Database size={18} />
+                  <h2 className="text-sm font-black uppercase tracking-widest text-blue-400">
+                    UPDATE SERVICENOW TASK
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSnowModalOpen(false)}
+                  className="text-slate-500 hover:text-slate-300 transition-all cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitSnow} className="flex flex-col">
+                <div className="p-6 space-y-4">
+                  <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                    Post Review Comments HTML to ServiceNow SCTASK. You can set the pending state and reason, or add comments only.
+                  </p>
+
+                  {snowModalError && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400 font-bold flex items-center gap-2">
+                      <AlertCircle size={16} className="text-red-400 shrink-0" />
+                      <span>{snowModalError}</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-sans flex items-center justify-between">
+                      <span>SCTASK NUMBER <span className="text-red-400">*</span></span>
+                      <span className="text-[9px] text-slate-500 lowercase font-mono">(must start with SCTASK)</span>
+                    </label>
+                    <input
+                      id="input-sctask-number"
+                      type="text"
+                      required
+                      value={sctaskNumber}
+                      onChange={(e) => {
+                        setSctaskNumber(e.target.value);
+                        if (snowModalError) setSnowModalError(null);
+                      }}
+                      placeholder="e.g. SCTASK0123456"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-blue-500 font-mono tracking-wide uppercase placeholder:normal-case"
+                    />
+                  </div>
+
+                  {/* Toggle: ADD-COMMENTS ONLY */}
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
+                        ADD-COMMENTS ONLY
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">
+                        {addCommentsOnly 
+                          ? "Removes pending date and pending reason; posts comment only" 
+                          : "Sets state to Pending with reason and pending date"}
+                      </span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        id="toggle-add-comments-only"
+                        type="checkbox"
+                        checked={addCommentsOnly}
+                        onChange={(e) => {
+                          setAddCommentsOnly(e.target.checked);
+                          if (snowModalError) setSnowModalError(null);
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
+                  {/* Pending Date and Pending Reason Fields (Removed if ADD-COMMENTS ONLY is TRUE) */}
+                  {!addCommentsOnly && (
+                    <div className="grid grid-cols-2 gap-4 pt-1">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-sans flex items-center gap-1.5">
+                          <Calendar size={12} className="text-blue-400" />
+                          <span>Pending Date</span>
+                        </label>
+                        <input
+                          id="input-pending-date"
+                          type="date"
+                          required={!addCommentsOnly}
+                          value={pendingDate}
+                          onChange={(e) => setPendingDate(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-blue-500 font-mono"
+                        />
+                        <span className="text-[9px] text-slate-500 block">
+                          Format: YYYY-MM-DD (+2 working days)
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-sans flex items-center gap-1.5">
+                          <Lock size={12} className="text-slate-500" />
+                          <span>Pending Reason</span>
+                        </label>
+                        <input
+                          id="input-pending-reason"
+                          type="text"
+                          readOnly
+                          value="Awaiting Customer Response"
+                          className="w-full px-3 py-2 bg-slate-950/80 border border-slate-800 rounded-lg text-sm text-slate-400 cursor-not-allowed font-medium select-none"
+                          title="Value not changeable: Awaiting Customer Response"
+                        />
+                        <span className="text-[9px] text-slate-500 block">
+                          Fixed: Awaiting Customer Response
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Review Comments HTML summary */}
+                  <div className="p-3 bg-slate-950/50 rounded-lg border border-slate-800/60 text-[10px] text-slate-400 flex items-center justify-between">
+                    <span>
+                      Attaching <strong className="text-slate-300">Review Comments</strong> HTML ({rawHtml.length} characters)
+                    </span>
+                    <span className="text-emerald-400 font-mono text-[9px] font-bold">
+                      READY TO SEND
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-900/40 border-t border-slate-800 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsSnowModalOpen(false)}
+                    className="px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-white transition-all font-sans cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    id="btn-submit-snow-task"
+                    type="submit"
+                    disabled={isSubmittingSnow}
+                    className="px-5 py-2 text-xs font-black uppercase tracking-widest bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all font-sans flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSubmittingSnow && <RefreshCcw size={12} className="animate-spin" />}
+                    <span>{isSubmittingSnow ? "Updating..." : "SUBMIT"}</span>
                   </button>
                 </div>
               </form>
@@ -3300,9 +3587,15 @@ export default function App() {
   };
 
   const handleDownloadVeracodeReport = async () => {
-    const targetAppName = (activeOverview?.applicationName || appProfile || "USA-TAX-Tax Research Chatbot").trim();
+    if (!resultsLoaded) {
+      setBackendError("Scan results must be pulled first before downloading the Veracode report. Please enter a profile and run analysis.");
+      return;
+    }
+
+    // Automatically map appName to the profile name from the pulled scan results
+    const targetAppName = (appProfile || (activeOverview?.applicationName !== "System Idle" ? activeOverview?.applicationName : "") || "").trim();
     if (!targetAppName) {
-      setBackendError("Please specify an Application Profile to download the report.");
+      setBackendError("No profile name found for the current scan. Please pull a scan profile before downloading.");
       return;
     }
 
@@ -3673,24 +3966,6 @@ export default function App() {
                     "RUN ANALYSIS"
                   )}
                 </button>
-
-                {selectedTools.includes("Veracode") && (
-                  <button
-                    type="button"
-                    id="btn-download-veracode-report"
-                    onClick={handleDownloadVeracodeReport}
-                    disabled={isDownloadingPdf}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-1.5 px-3.5 rounded-lg text-xs transition-all shadow-lg shadow-indigo-900/20 disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0 border border-indigo-500 cursor-pointer veracode-pdf-btn"
-                    title={`Download Veracode PDF report (calls http://localhost:8080/api/veracode/custom-pdf?appName=${activeOverview?.applicationName || appProfile || 'USA-TAX-Tax Research Chatbot'})`}
-                  >
-                    {isDownloadingPdf ? (
-                      <RefreshCcw size={13} className="animate-spin" />
-                    ) : (
-                      <Download size={13} className="stroke-[2.5]" />
-                    )}
-                    <span>{isDownloadingPdf ? "DOWNLOADING..." : "DOWNLOAD REPORT"}</span>
-                  </button>
-                )}
               </form>
             </div>
 
@@ -4675,26 +4950,6 @@ export default function App() {
                       </p>
                     </div>
                   </div>
-
-                  {(!selectedTools.includes("Checkmarx") && activeOverview.scanType !== "checkmarx") && (
-                    <div className="flex flex-col flex-shrink-0 ml-auto justify-center">
-                      <button
-                        type="button"
-                        id="btn-overview-download-report"
-                        onClick={handleDownloadVeracodeReport}
-                        disabled={isDownloadingPdf}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-black py-1.5 px-3.5 rounded-lg text-xs transition-all shadow-md shadow-indigo-900/20 disabled:opacity-50 flex items-center gap-1.5 border border-indigo-500 cursor-pointer veracode-pdf-btn"
-                        title={`Download Veracode PDF report (calls http://localhost:8080/api/veracode/custom-pdf?appName=${activeOverview?.applicationName || appProfile || 'USA-TAX-Tax Research Chatbot'})`}
-                      >
-                        {isDownloadingPdf ? (
-                          <RefreshCcw size={13} className="animate-spin" />
-                        ) : (
-                          <Download size={13} className="stroke-[2.5]" />
-                        )}
-                        <span>{isDownloadingPdf ? "Downloading..." : "Download Report"}</span>
-                      </button>
-                    </div>
-                  )}
                 </div>
 
                 <div className="flex w-full justify-start border-b border-slate-800 bg-slate-900 sticky top-0 z-10 overflow-x-auto whitespace-nowrap scrollbar-hide">
@@ -4828,6 +5083,9 @@ export default function App() {
                       removedMinifiedFiles={removedMinifiedFiles}
                       onDownloadReport={handleDownloadVeracodeReport}
                       isDownloadingPdf={isDownloadingPdf}
+                      profileName={appProfile || activeOverview?.applicationName}
+                      onShowSuccessMessage={(msg) => setSuccessMessage(msg)}
+                      resultsLoaded={resultsLoaded}
                     />
                   ) : activeTab === "DevDeps" ? (
                     <div className="p-6 flex flex-col gap-4 min-h-0 flex-1">

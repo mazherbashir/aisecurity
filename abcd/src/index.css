@@ -1065,10 +1065,10 @@ body.theme-light,
    VERACODE CUSTOM PDF DOWNLOAD BUTTON
    Vibrant, crisp, high-contrast in both Dark and Light themes
    ========================================================================== */
-.veracode-pdf-btn,
-#btn-download-veracode-report,
-#btn-overview-download-report,
-#btn-toolbar-download-veracode-pdf {
+.veracode-pdf-btn:not(:disabled),
+#btn-download-veracode-report:not(:disabled),
+#btn-overview-download-report:not(:disabled),
+#btn-toolbar-download-veracode-pdf:not(:disabled) {
   background-color: #6366f1 !important; /* Indigo-500 */
   color: #ffffff !important;
   border: 1px solid #4f46e5 !important;
@@ -1076,50 +1076,184 @@ body.theme-light,
   cursor: pointer !important;
 }
 
-.veracode-pdf-btn:hover,
-#btn-download-veracode-report:hover,
-#btn-overview-download-report:hover,
-#btn-toolbar-download-veracode-pdf:hover {
+.veracode-pdf-btn:not(:disabled):hover,
+#btn-download-veracode-report:not(:disabled):hover,
+#btn-overview-download-report:not(:disabled):hover,
+#btn-toolbar-download-veracode-pdf:not(:disabled):hover {
   background-color: #4f46e5 !important; /* Indigo-600 */
   border-color: #4338ca !important;
   color: #ffffff !important;
 }
 
-.veracode-pdf-btn svg,
-#btn-download-veracode-report svg,
-#btn-overview-download-report svg,
-#btn-toolbar-download-veracode-pdf svg,
-.veracode-pdf-btn span,
-#btn-download-veracode-report span,
-#btn-overview-download-report span,
-#btn-toolbar-download-veracode-pdf span {
+.veracode-pdf-btn:not(:disabled) svg,
+#btn-download-veracode-report:not(:disabled) svg,
+#btn-overview-download-report:not(:disabled) svg,
+#btn-toolbar-download-veracode-pdf:not(:disabled) svg,
+.veracode-pdf-btn:not(:disabled) span,
+#btn-download-veracode-report:not(:disabled) span,
+#btn-overview-download-report:not(:disabled) span,
+#btn-toolbar-download-veracode-pdf:not(:disabled) span {
   color: #ffffff !important;
 }
 
-.theme-light .veracode-pdf-btn,
-[data-theme="light"] .veracode-pdf-btn,
-.theme-light #btn-download-veracode-report,
-[data-theme="light"] #btn-download-veracode-report,
-.theme-light #btn-overview-download-report,
-[data-theme="light"] #btn-overview-download-report,
-.theme-light #btn-toolbar-download-veracode-pdf,
-[data-theme="light"] #btn-toolbar-download-veracode-pdf {
+.veracode-pdf-btn:disabled,
+#btn-download-veracode-report:disabled,
+#btn-overview-download-report:disabled,
+#btn-toolbar-download-veracode-pdf:disabled {
+  background-color: #1e293b !important;
+  color: #64748b !important;
+  border: 1px solid #334155 !important;
+  box-shadow: none !important;
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+.veracode-pdf-btn:disabled svg,
+#btn-download-veracode-report:disabled svg,
+#btn-overview-download-report:disabled svg,
+#btn-toolbar-download-veracode-pdf:disabled svg,
+.veracode-pdf-btn:disabled span,
+#btn-download-veracode-report:disabled span,
+#btn-overview-download-report:disabled span,
+#btn-toolbar-download-veracode-pdf:disabled span {
+  color: #64748b !important;
+}
+
+.theme-light .veracode-pdf-btn:not(:disabled),
+[data-theme="light"] .veracode-pdf-btn:not(:disabled),
+.theme-light #btn-download-veracode-report:not(:disabled),
+[data-theme="light"] #btn-download-veracode-report:not(:disabled),
+.theme-light #btn-overview-download-report:not(:disabled),
+[data-theme="light"] #btn-overview-download-report:not(:disabled),
+.theme-light #btn-toolbar-download-veracode-pdf:not(:disabled),
+[data-theme="light"] #btn-toolbar-download-veracode-pdf:not(:disabled) {
   background-color: #4f46e5 !important; /* Indigo-600 */
   color: #ffffff !important;
   border-color: #4338ca !important;
   box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3) !important;
 }
 
-.theme-light .veracode-pdf-btn:hover,
-[data-theme="light"] .veracode-pdf-btn:hover,
-.theme-light #btn-download-veracode-report:hover,
-[data-theme="light"] #btn-download-veracode-report:hover,
-.theme-light #btn-overview-download-report:hover,
-[data-theme="light"] #btn-overview-download-report:hover,
-.theme-light #btn-toolbar-download-veracode-pdf:hover,
-[data-theme="light"] #btn-toolbar-download-veracode-pdf:hover {
+.theme-light .veracode-pdf-btn:not(:disabled):hover,
+[data-theme="light"] .veracode-pdf-btn:not(:disabled):hover,
+.theme-light #btn-download-veracode-report:not(:disabled):hover,
+[data-theme="light"] #btn-download-veracode-report:not(:disabled):hover,
+.theme-light #btn-overview-download-report:not(:disabled):hover,
+[data-theme="light"] #btn-overview-download-report:not(:disabled):hover,
+.theme-light #btn-toolbar-download-veracode-pdf:not(:disabled):hover,
+[data-theme="light"] #btn-toolbar-download-veracode-pdf:not(:disabled):hover {
   background-color: #4338ca !important; /* Indigo-700 */
   border-color: #3730a3 !important;
+}
+
+.theme-light .veracode-pdf-btn:disabled,
+[data-theme="light"] .veracode-pdf-btn:disabled,
+.theme-light #btn-download-veracode-report:disabled,
+[data-theme="light"] #btn-download-veracode-report:disabled,
+.theme-light #btn-overview-download-report:disabled,
+[data-theme="light"] #btn-overview-download-report:disabled,
+.theme-light #btn-toolbar-download-veracode-pdf:disabled,
+[data-theme="light"] #btn-toolbar-download-veracode-pdf:disabled {
+  background-color: #f1f5f9 !important;
+  color: #94a3b8 !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: none !important;
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+.theme-light .veracode-pdf-btn:disabled svg,
+[data-theme="light"] .veracode-pdf-btn:disabled svg,
+.theme-light #btn-download-veracode-report:disabled svg,
+[data-theme="light"] #btn-download-veracode-report:disabled svg,
+.theme-light .veracode-pdf-btn:disabled span,
+[data-theme="light"] .veracode-pdf-btn:disabled span,
+.theme-light #btn-download-veracode-report:disabled span,
+[data-theme="light"] #btn-download-veracode-report:disabled span {
+  color: #94a3b8 !important;
+}
+
+/* Review Comments toolbar action buttons: unified font matching Customized Report */
+.signoff-btn,
+#btn-sign-off-trigger,
+.rp-signoff-btn,
+#btn-rp-sign-off-trigger,
+.reset-signoff-btn,
+#btn-reset-sign-off,
+.copy-html-btn,
+#btn-copy-raw-html,
+#btn-toolbar-download-veracode-pdf,
+.snow-update-btn,
+#btn-update-snow-trigger {
+  font-size: 10px !important;
+  line-height: 14px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.025em !important;
+  padding: 5px 10px !important;
+  height: auto !important;
+}
+
+.signoff-btn span,
+#btn-sign-off-trigger span,
+.rp-signoff-btn span,
+#btn-rp-sign-off-trigger span,
+.reset-signoff-btn span,
+#btn-reset-sign-off span,
+.copy-html-btn span,
+#btn-copy-raw-html span,
+#btn-toolbar-download-veracode-pdf span,
+.snow-update-btn span,
+#btn-update-snow-trigger span {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.025em !important;
+}
+
+/* Icon-only copy button styling */
+#btn-copy-raw-html {
+  padding: 6px 7px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* ServiceNow SNOW Update Button styling */
+.snow-update-btn,
+#btn-update-snow-trigger {
+  background-color: #2563eb !important; /* Blue-600 */
+  color: #ffffff !important;
+  border: 1px solid #1d4ed8 !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25) !important;
+  cursor: pointer !important;
+}
+
+.snow-update-btn:hover,
+#btn-update-snow-trigger:hover {
+  background-color: #1d4ed8 !important; /* Blue-700 */
+  border-color: #1e40af !important;
+  color: #ffffff !important;
+}
+
+.snow-update-btn svg,
+#btn-update-snow-trigger svg,
+.snow-update-btn span,
+#btn-update-snow-trigger span {
+  color: #ffffff !important;
+}
+
+.theme-light .snow-update-btn,
+[data-theme="light"] .snow-update-btn,
+.theme-light #btn-update-snow-trigger,
+[data-theme="light"] #btn-update-snow-trigger {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+  border-color: #1d4ed8 !important;
+}
+
+.theme-light .snow-update-btn:hover,
+[data-theme="light"] .snow-update-btn:hover,
+.theme-light #btn-update-snow-trigger:hover,
+[data-theme="light"] #btn-update-snow-trigger:hover {
+  background-color: #1d4ed8 !important;
 }
 
 
