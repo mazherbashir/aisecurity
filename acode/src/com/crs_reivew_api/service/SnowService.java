@@ -96,10 +96,7 @@ public class SnowService {
         if (targetUrl.startsWith("http://") || targetUrl.startsWith("https://")) {
             fullUrl = targetUrl;
         } else {
-            if (!baseUrl.endsWith("/") && !targetUrl.startsWith("/")) {
-                baseUrl = baseUrl + "/";
-            }
-            fullUrl = baseUrl + (targetUrl.startsWith("/") ? targetUrl.substring(1) : targetUrl);
+            fullUrl = combineBaseAndPath(baseUrl, targetUrl);
         }
 
         logger.info("Calling ServiceNow API: {}", fullUrl);
@@ -470,6 +467,21 @@ public class SnowService {
         return url.toString();
     }
 
+    private String combineBaseAndPath(String baseUrl, String path) {
+        if (baseUrl == null) baseUrl = "";
+        if (path == null) path = "";
+        String cleanBase = baseUrl.trim();
+        String cleanPath = path.trim();
+
+        if (cleanBase.endsWith("/") && cleanPath.startsWith("/")) {
+            return cleanBase + cleanPath.substring(1);
+        } else if (!cleanBase.endsWith("/") && !cleanPath.startsWith("/")) {
+            return cleanBase + "/" + cleanPath;
+        } else {
+            return cleanBase + cleanPath;
+        }
+    }
+
     /**
      * Executes HTTP POST request against ServiceNow API.
      */
@@ -480,10 +492,7 @@ public class SnowService {
         if (targetUrl.startsWith("http://") || targetUrl.startsWith("https://")) {
             fullUrl = targetUrl;
         } else {
-            if (!baseUrl.endsWith("/") && !targetUrl.startsWith("/")) {
-                baseUrl = baseUrl + "/";
-            }
-            fullUrl = baseUrl + (targetUrl.startsWith("/") ? targetUrl.substring(1) : targetUrl);
+            fullUrl = combineBaseAndPath(baseUrl, targetUrl);
         }
 
         logger.info("Calling ServiceNow POST API: {}", fullUrl);
@@ -639,11 +648,7 @@ public class SnowService {
 
     private String buildTableUrl(String path, String sysparmQuery, int limit, boolean displayValue) {
         String baseUrl = veracodeConfig.getSnowBaseUrl();
-        if (!baseUrl.endsWith("/") && !path.startsWith("/")) {
-            baseUrl = baseUrl + "/";
-        }
-        String endpointPath = path.startsWith("/") ? path.substring(1) : path;
-        StringBuilder url = new StringBuilder(baseUrl).append(endpointPath);
+        StringBuilder url = new StringBuilder(combineBaseAndPath(baseUrl, path));
 
         url.append("?sysparm_limit=").append(limit);
         url.append("&sysparm_display_value=").append(displayValue ? "True" : "False");
