@@ -940,7 +940,9 @@ body.theme-light,
 
 /* RP Sign-off button: vivid sky blue with solid white text and icon */
 .rp-signoff-btn,
-#btn-rp-sign-off-trigger {
+#btn-rp-sign-off-trigger,
+.auto-rp-signoff-btn,
+#btn-auto-rp-sign-off-trigger {
   background-color: #0284c7 !important; /* Sky-600 */
   color: #ffffff !important;
   border: 1px solid #0369a1 !important;
@@ -949,7 +951,9 @@ body.theme-light,
 }
 
 .rp-signoff-btn:hover,
-#btn-rp-sign-off-trigger:hover {
+#btn-rp-sign-off-trigger:hover,
+.auto-rp-signoff-btn:hover,
+#btn-auto-rp-sign-off-trigger:hover {
   background-color: #0369a1 !important; /* Sky-700 */
   border-color: #075985 !important;
   color: #ffffff !important;
@@ -958,13 +962,60 @@ body.theme-light,
 .rp-signoff-btn svg,
 #btn-rp-sign-off-trigger svg,
 .rp-signoff-btn span,
-#btn-rp-sign-off-trigger span {
+#btn-rp-sign-off-trigger span,
+.auto-rp-signoff-btn svg,
+#btn-auto-rp-sign-off-trigger svg,
+.auto-rp-signoff-btn span,
+#btn-auto-rp-sign-off-trigger span {
   color: #ffffff !important;
 }
 
-/* Sign-off button: crisp emerald green with solid white text and icon */
+/* Manual RP Sign-off button: sleek sky outline style */
+.manual-rp-signoff-btn,
+#btn-manual-rp-sign-off-trigger {
+  background-color: rgba(3, 105, 161, 0.25) !important;
+  color: #38bdf8 !important;
+  border: 1px solid rgba(56, 189, 248, 0.4) !important;
+  cursor: pointer !important;
+}
+
+.manual-rp-signoff-btn:hover,
+#btn-manual-rp-sign-off-trigger:hover {
+  background-color: #0284c7 !important;
+  border-color: #0369a1 !important;
+  color: #ffffff !important;
+}
+
+.manual-rp-signoff-btn:hover svg,
+.manual-rp-signoff-btn:hover span,
+#btn-manual-rp-sign-off-trigger:hover svg,
+#btn-manual-rp-sign-off-trigger:hover span {
+  color: #ffffff !important;
+}
+
+.theme-light .manual-rp-signoff-btn,
+[data-theme="light"] .manual-rp-signoff-btn,
+.theme-light #btn-manual-rp-sign-off-trigger,
+[data-theme="light"] #btn-manual-rp-sign-off-trigger {
+  background-color: #f0f9ff !important;
+  color: #0369a1 !important;
+  border: 1px solid #bae6fd !important;
+}
+
+.theme-light .manual-rp-signoff-btn:hover,
+[data-theme="light"] .manual-rp-signoff-btn:hover,
+.theme-light #btn-manual-rp-sign-off-trigger:hover,
+[data-theme="light"] #btn-manual-rp-sign-off-trigger:hover {
+  background-color: #0284c7 !important;
+  color: #ffffff !important;
+  border-color: #0369a1 !important;
+}
+
+/* Auto Sign-off button: crisp emerald green with solid white text and icon */
 .signoff-btn,
-#btn-sign-off-trigger {
+#btn-sign-off-trigger,
+.auto-signoff-btn,
+#btn-auto-sign-off-trigger {
   background-color: #059669 !important; /* Emerald-600 */
   color: #ffffff !important;
   border: 1px solid #047857 !important;
@@ -973,7 +1024,9 @@ body.theme-light,
 }
 
 .signoff-btn:hover,
-#btn-sign-off-trigger:hover {
+#btn-sign-off-trigger:hover,
+.auto-signoff-btn:hover,
+#btn-auto-sign-off-trigger:hover {
   background-color: #047857 !important; /* Emerald-700 */
   border-color: #065f46 !important;
   color: #ffffff !important;
@@ -982,8 +1035,53 @@ body.theme-light,
 .signoff-btn svg,
 #btn-sign-off-trigger svg,
 .signoff-btn span,
-#btn-sign-off-trigger span {
+#btn-sign-off-trigger span,
+.auto-signoff-btn svg,
+#btn-auto-sign-off-trigger svg,
+.auto-signoff-btn span,
+#btn-auto-sign-off-trigger span {
   color: #ffffff !important;
+}
+
+/* Manual Sign-off button: sleek outline style */
+.manual-signoff-btn,
+#btn-manual-sign-off-trigger {
+  background-color: rgba(6, 78, 59, 0.3) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.4) !important;
+  cursor: pointer !important;
+}
+
+.manual-signoff-btn:hover,
+#btn-manual-sign-off-trigger:hover {
+  background-color: #059669 !important;
+  border-color: #047857 !important;
+  color: #ffffff !important;
+}
+
+.manual-signoff-btn:hover svg,
+.manual-signoff-btn:hover span,
+#btn-manual-sign-off-trigger:hover svg,
+#btn-manual-sign-off-trigger:hover span {
+  color: #ffffff !important;
+}
+
+.theme-light .manual-signoff-btn,
+[data-theme="light"] .manual-signoff-btn,
+.theme-light #btn-manual-sign-off-trigger,
+[data-theme="light"] #btn-manual-sign-off-trigger {
+  background-color: #ecfdf5 !important;
+  color: #047857 !important;
+  border: 1px solid #a7f3d0 !important;
+}
+
+.theme-light .manual-signoff-btn:hover,
+[data-theme="light"] .manual-signoff-btn:hover,
+.theme-light #btn-manual-sign-off-trigger:hover,
+[data-theme="light"] #btn-manual-sign-off-trigger:hover {
+  background-color: #059669 !important;
+  color: #ffffff !important;
+  border-color: #047857 !important;
 }
 
 /* Reset Sign-off button: solid rose red */
@@ -1175,8 +1273,16 @@ body.theme-light,
 /* Review Comments toolbar action buttons: unified font matching Customized Report */
 .signoff-btn,
 #btn-sign-off-trigger,
+.auto-signoff-btn,
+#btn-auto-sign-off-trigger,
+.manual-signoff-btn,
+#btn-manual-sign-off-trigger,
 .rp-signoff-btn,
 #btn-rp-sign-off-trigger,
+.auto-rp-signoff-btn,
+#btn-auto-rp-sign-off-trigger,
+.manual-rp-signoff-btn,
+#btn-manual-rp-sign-off-trigger,
 .reset-signoff-btn,
 #btn-reset-sign-off,
 .copy-html-btn,
@@ -1194,8 +1300,16 @@ body.theme-light,
 
 .signoff-btn span,
 #btn-sign-off-trigger span,
+.auto-signoff-btn span,
+#btn-auto-sign-off-trigger span,
+.manual-signoff-btn span,
+#btn-manual-sign-off-trigger span,
 .rp-signoff-btn span,
 #btn-rp-sign-off-trigger span,
+.auto-rp-signoff-btn span,
+#btn-auto-rp-sign-off-trigger span,
+.manual-rp-signoff-btn span,
+#btn-manual-rp-sign-off-trigger span,
 .reset-signoff-btn span,
 #btn-reset-sign-off span,
 .copy-html-btn span,
@@ -1254,6 +1368,40 @@ body.theme-light,
 .theme-light #btn-update-snow-trigger:hover,
 [data-theme="light"] #btn-update-snow-trigger:hover {
   background-color: #1d4ed8 !important;
+}
+
+/* Compact Icon-Based Toolbar Buttons */
+.toolbar-icon-btn,
+#btn-auto-sign-off-trigger,
+#btn-manual-sign-off-trigger,
+#btn-auto-rp-sign-off-trigger,
+#btn-manual-rp-sign-off-trigger,
+#btn-update-snow-trigger,
+#btn-copy-raw-html,
+#btn-mar-closed-trigger,
+#btn-invalid-profile-trigger,
+#btn-toolbar-download-veracode-pdf,
+#btn-reset-sign-off {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 8px !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+.toolbar-icon-btn:active {
+  transform: scale(0.95);
+}
+
+.toolbar-icon-btn svg {
+  width: 14px !important;
+  height: 14px !important;
+  flex-shrink: 0 !important;
 }
 
 

@@ -28,6 +28,25 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * <h1>ServiceNow Integration Service</h1>
+ * <p>
+ * This service provides a complete client interface for communicating with ServiceNow REST APIs.
+ * Key capabilities include:
+ * </p>
+ * <ul>
+ *   <li><b>Table Queries</b>: Fetching RITM ({@code sc_req_item}) and SCTASK ({@code sc_task}) records.</li>
+ *   <li><b>Variable Parsing & Enrichment</b>: Extracting multiline {@code u_variables_string} key-value pairs
+ *       and promoting core fields (Application Profile Name, SCA Tool, Application Version, Request Reason, etc.)
+ *       directly to top-level attributes.</li>
+ *   <li><b>Catalog Task Updates</b>: Posting updates to the catalog task import table ({@code /now/import/u_generic_catalog_task_update}).</li>
+ *   <li><b>RITM Variable Updates</b>: Patching RITM variables via ({@code /api/ipwc/request_item/update/$RITM/variables/nv}).</li>
+ *   <li><b>PDF Attachment Uploads</b>: Uploading binary PDF reports directly to RITM records via ({@code /api/now/attachment/file}).</li>
+ * </ul>
+ *
+ * @see com.crs_reivew_api.controller.SnowController
+ * @see com.crs_reivew_api.scheduler.TicketScheduler
+ */
 @Service
 public class SnowService {
 
@@ -601,6 +620,9 @@ public class SnowService {
     }
 
     private String getFirstNonEmptyText(JsonNode input, String... candidateKeys) {
+        if (input == null) {
+            return null;
+        }
         for (String key : candidateKeys) {
             if (input.hasNonNull(key)) {
                 String txt = input.get(key).asText("").trim();
@@ -657,5 +679,302 @@ public class SnowService {
         }
 
         return url.toString();
+    }
+
+    /**
+     * Gets the ServiceNow sys_id for a given RITM number.
+     * GET https://pwcnetwork.service-now.com/api/now/table/sc_req_item?sysparm_query=number=$RITM&sysparm_fields=sys_id,number
+     */
+    public String getSysIdByRitmNumber(String ritmNumber) {
+        if (ritmNumber == null || ritmNumber.trim().isEmpty()) {
+            throw new IllegalArgumentException("RITM number is required");
+        }
+        String cleanRitm = ritmNumber.trim();
+        String query = "sysparm_query=number=" + URLEncoder.encode(cleanRitm, StandardCharsets.UTF_8) + "&sysparm_fields=sys_id,number";
+        String targetUrl = "/api/now/table/sc_req_item?" + query;
+
+        JsonNode response = callSnowApi(targetUrl);
+        if (response != null && response.has("result") && response.get("result").isArray()) {
+            JsonNode resultList = response.get("result");
+            if (resultList.size() > 0 && resultList.get(0).hasNonNull("sys_id")) {
+                return resultList.get(0).get("sys_id").asText();
+            }
+        }
+        throw new RuntimeException("RITM record not found in ServiceNow: " + cleanRitm);
+    }
+
+    /**
+     * Uploads a PDF file attachment to ServiceNow table sc_req_item.
+     * If ritmOrSysId is a RITM number, it first retrieves the sys_id using getSysIdByRitmNumber.
+     *
+     * URL: POST https://pwcnetwork.service-now.com/api/now/attachment/file?table_name=sc_req_item&table_sys_id=$sysId&file_name=$fileName
+     * Headers:
+     *   Authorization: Basic $APIKEY
+     *   Content-Type: application/pdf
+     *   Accept: application/json
+     */
+    public JsonNode uploadPdfAttachment(byte[] pdfBytes, String fileName, String ritmOrSysId) {
+        if (pdfBytes == null || pdfBytes.length == 0) {
+            throw new IllegalArgumentException("PDF content byte array is empty");
+        }
+        if (fileName == null || fileName.trim().isEmpty()) {
+            fileName = "report.pdf";
+        }
+        String cleanFileName = fileName.trim();
+
+        if (ritmOrSysId == null || ritmOrSysId.trim().isEmpty()) {
+            throw new IllegalArgumentException("RITM number or sys_id is required for attachment upload");
+        }
+
+        String targetSysId = ritmOrSysId.trim();
+        if (targetSysId.toUpperCase().startsWith("RITM") || targetSysId.length() != 32) {
+            targetSysId = getSysIdByRitmNumber(targetSysId);
+        }
+
+        String baseUrl = veracodeConfig.getSnowBaseUrl();
+        String hostUrl = "https://pwcnetwork.service-now.com";
+        try {
+            if (baseUrl != null && baseUrl.startsWith("http")) {
+                URI uri = URI.create(baseUrl);
+                hostUrl = uri.getScheme() + "://" + uri.getHost();
+                if (uri.getPort() > 0 && uri.getPort() != 80 && uri.getPort() != 443) {
+                    hostUrl += ":" + uri.getPort();
+                }
+            }
+        } catch (Exception ignored) {}
+
+        String path = String.format("/api/now/attachment/file?table_name=sc_req_item&table_sys_id=%s&file_name=%s",
+                targetSysId, URLEncoder.encode(cleanFileName, StandardCharsets.UTF_8));
+
+        String fullUrl = combineBaseAndPath(hostUrl, path);
+
+        logger.info("Uploading PDF attachment '{}' (size: {} bytes) to ServiceNow table sc_req_item, sys_id: {}", cleanFileName, pdfBytes.length, targetSysId);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(fullUrl))
+                .header("Authorization", getAuthHeader())
+                .header("Content-Type", "application/pdf")
+                .header("Accept", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofByteArray(pdfBytes))
+                .build();
+
+        try {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 400) {
+                throw new RuntimeException("ServiceNow attachment upload failed. Status: " + response.statusCode() + ", details: " + response.body());
+            }
+
+            JsonNode rootNode = objectMapper.readTree(response.body());
+            if (rootNode.has("result") && rootNode.get("result").isObject()) {
+                ObjectNode resultObj = (ObjectNode) rootNode.get("result");
+                String attachmentSysId = resultObj.hasNonNull("sys_id") ? resultObj.get("sys_id").asText() : "";
+                String tableSysId = resultObj.hasNonNull("table_sys_id") ? resultObj.get("table_sys_id").asText() : targetSysId;
+
+                String thisUrl = "sc_req_item.do%3Fsys_id%3D" + tableSysId + "%26sysparm_view%3D";
+                String attachmentLink = hostUrl + "/sys_attachment.do?sys_id=" + attachmentSysId + "&sysparm_this_url=" + thisUrl;
+
+                resultObj.put("attachment_url", thisUrl);
+                resultObj.put("attachment_link", attachmentLink);
+                resultObj.put("this_url", thisUrl);
+            }
+
+            return rootNode;
+
+        } catch (RuntimeException re) {
+            throw re;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to upload PDF attachment to ServiceNow: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Overload to upload a PDF file from a local file path.
+     */
+    public JsonNode uploadPdfAttachment(String filePath, String ritmOrSysId) {
+        if (filePath == null || filePath.trim().isEmpty()) {
+            throw new IllegalArgumentException("File path is required");
+        }
+        java.nio.file.Path path = java.nio.file.Paths.get(filePath.trim());
+        if (!java.nio.file.Files.exists(path)) {
+            throw new IllegalArgumentException("File not found: " + filePath);
+        }
+        try {
+            byte[] fileBytes = java.nio.file.Files.readAllBytes(path);
+            String fileName = path.getFileName().toString();
+            return uploadPdfAttachment(fileBytes, fileName, ritmOrSysId);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to read PDF file at " + filePath + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Generic method to execute HTTP PATCH request against ServiceNow API.
+     */
+    public JsonNode patchSnowApi(String targetUrl, JsonNode bodyNode) {
+        String baseUrl = veracodeConfig.getSnowBaseUrl();
+        String fullUrl;
+
+        if (targetUrl.startsWith("http://") || targetUrl.startsWith("https://")) {
+            fullUrl = targetUrl;
+        } else {
+            fullUrl = combineBaseAndPath(baseUrl, targetUrl);
+        }
+
+        logger.info("Calling ServiceNow API PATCH: {}", fullUrl);
+
+        try {
+            String jsonBody = objectMapper.writeValueAsString(bodyNode != null ? bodyNode : objectMapper.createObjectNode());
+            logger.info("ServiceNow PATCH Payload: {}", jsonBody);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(fullUrl))
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
+                    .header("username", veracodeConfig.getSnowUsername())
+                    .header("Authorization", getAuthHeader())
+                    .method("PATCH", HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            int statusCode = response.statusCode();
+            logger.info("ServiceNow API PATCH response status: {}", statusCode);
+
+            if (statusCode < 200 || statusCode >= 300) {
+                logger.error("ServiceNow API PATCH Error ({}) for URL {}: {}", statusCode, fullUrl, response.body());
+                throw new RuntimeException("ServiceNow API returned HTTP " + statusCode + ": " + response.body());
+            }
+
+            return objectMapper.readTree(response.body());
+
+        } catch (RuntimeException re) {
+            throw re;
+        } catch (Exception e) {
+            logger.error("Failed to execute ServiceNow API PATCH call for {}: {}", fullUrl, e.getMessage(), e);
+            throw new RuntimeException("ServiceNow API PATCH request failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Dynamically maps JSON body for updating ServiceNow RITM variables.
+     * Only fields with non-null, non-empty values are mapped to the payload.
+     * Integrates fields from VeracodeReportDTO report DTO if provided.
+     */
+    public ObjectNode buildRitmVariablesPayload(JsonNode input, com.crs_reivew_api.dto.VeracodeReportDTO reportDto, String ritmNumber) {
+        ObjectNode body = objectMapper.createObjectNode();
+
+        // 1. assessment_findings
+        String findings = getFirstNonEmptyText(input, "assessment_findings", "assessmentFindings", "findings");
+        if (findings == null && reportDto != null && reportDto.assessmentFindings != null) {
+            findings = reportDto.assessmentFindings;
+        }
+        if (findings != null && !findings.trim().isEmpty()) {
+            body.put("assessment_findings", findings.trim());
+        }
+
+        // 2. date_of_assessed_scan
+        String scanDate = getFirstNonEmptyText(input, "date_of_assessed_scan", "dateOfAssessedScan", "scanDate");
+        if (scanDate == null && reportDto != null && reportDto.overview != null) {
+            scanDate = reportDto.overview.submittedDate != null ? reportDto.overview.submittedDate : reportDto.overview.generationDate;
+        }
+        if (scanDate != null && !scanDate.trim().isEmpty()) {
+            body.put("date_of_assessed_scan", scanDate.trim());
+        }
+
+        // 3. application_version
+        String appVersion = getFirstNonEmptyText(input, "application_version", "applicationVersion", "version", "buildId");
+        if (appVersion == null && reportDto != null && reportDto.overview != null) {
+            appVersion = reportDto.overview.buildId;
+        }
+        if (appVersion != null && !appVersion.trim().isEmpty()) {
+            body.put("application_version", appVersion.trim());
+        }
+
+        // 4. scan_name
+        String scanName = getFirstNonEmptyText(input, "scan_name", "scanName");
+        if (scanName == null && reportDto != null && reportDto.overview != null) {
+            scanName = reportDto.overview.scanName;
+        }
+        if (scanName != null && !scanName.trim().isEmpty()) {
+            body.put("scan_name", scanName.trim());
+        }
+
+        // 5. scan_tool_profile_url
+        String profileUrl = getFirstNonEmptyText(input, "scan_tool_profile_url", "scanToolProfileUrl", "profileUrl");
+        if (profileUrl == null && reportDto != null) {
+            profileUrl = reportDto.scanToolProfileUrl;
+        }
+        if (profileUrl != null && !profileUrl.trim().isEmpty()) {
+            body.put("scan_tool_profile_url", profileUrl.trim());
+        }
+
+        // 6. scan_url
+        String scanUrl = getFirstNonEmptyText(input, "scan_url", "scanUrl");
+        if (scanUrl == null && reportDto != null) {
+            scanUrl = reportDto.scanUrl;
+        }
+        if (scanUrl != null && !scanUrl.trim().isEmpty()) {
+            body.put("scan_url", scanUrl.trim());
+        }
+
+        // 7. sign_off_reason
+        String reason = getFirstNonEmptyText(input, "sign_off_reason", "signOffReason", "reason");
+        if (reason != null && !reason.trim().isEmpty()) {
+            body.put("sign_off_reason", reason.trim());
+        }
+
+        // 8. mitigation_proposals_reviewed
+        String mitigations = getFirstNonEmptyText(input, "mitigation_proposals_reviewed", "mitigationProposalsReviewed", "mitigationsReviewed");
+        if (mitigations != null && !mitigations.trim().isEmpty()) {
+            body.put("mitigation_proposals_reviewed", mitigations.trim());
+        }
+
+        // 9. data_classification
+        String dataClass = getFirstNonEmptyText(input, "data_classification", "dataClassification");
+        if (dataClass != null && !dataClass.trim().isEmpty()) {
+            body.put("data_classification", dataClass.trim());
+        }
+
+        // 10. exposure
+        String exposure = getFirstNonEmptyText(input, "exposure");
+        if (exposure != null && !exposure.trim().isEmpty()) {
+            body.put("exposure", exposure.trim());
+        }
+
+        // Include any additional custom keys from input JSON if present and non-null/non-empty
+        if (input != null && input.isObject()) {
+            input.fields().forEachRemaining(entry -> {
+                if (!body.has(entry.getKey()) && entry.getValue() != null && !entry.getValue().isNull()) {
+                    String textVal = entry.getValue().asText("").trim();
+                    if (!textVal.isEmpty()) {
+                        body.set(entry.getKey(), entry.getValue());
+                    }
+                }
+            });
+        }
+
+        return body;
+    }
+
+    /**
+     * Updates ServiceNow RITM variables via PATCH /api/ipwc/request_item/update/$RITM/variables/nv
+     */
+    public JsonNode updateRitmVariables(String ritmNumber, JsonNode inputPayload, com.crs_reivew_api.dto.VeracodeReportDTO reportDto) {
+        if (ritmNumber == null || ritmNumber.trim().isEmpty()) {
+            throw new IllegalArgumentException("RITM number is required");
+        }
+        String cleanRitm = ritmNumber.trim();
+        ObjectNode bodyPayload = buildRitmVariablesPayload(inputPayload, reportDto, cleanRitm);
+
+        String path = String.format("/api/ipwc/request_item/update/%s/variables/nv", cleanRitm);
+        logger.info("Updating RITM variables for RITM: {} at endpoint: {}", cleanRitm, path);
+
+        return patchSnowApi(path, bodyPayload);
+    }
+
+    /**
+     * Updates ServiceNow RITM variables via PATCH /api/ipwc/request_item/update/$RITM/variables/nv
+     */
+    public JsonNode updateRitmVariables(String ritmNumber, JsonNode inputPayload) {
+        return updateRitmVariables(ritmNumber, inputPayload, null);
     }
 }

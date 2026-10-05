@@ -32,6 +32,24 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * <h1>Veracode Integration & Analysis Service</h1>
+ * <p>
+ * Core service providing integration with Veracode XML APIs, REST APIs, Custom PDF Report generation,
+ * SAST flaw analysis, SCA component parsing, and mitigation workflow management.
+ * </p>
+ * <h3>Key Capabilities:</h3>
+ * <ul>
+ *   <li><b>Application Lookup & Caching</b>: Resolves Veracode Application Profile Names to App IDs with fuzzy-matching fallback.</li>
+ *   <li><b>Report Generation</b>: Fetches detailed XML reports, parses SAST flaws and SCA third-party components into {@link VeracodeReportDTO}.</li>
+ *   <li><b>Custom PDF Generation</b>: Communicates with Veracode Custom PDF REST APIs to request, poll, and download customized PDF report archives.</li>
+ *   <li><b>Scan Name Updates</b>: Updates scan versions/names via Veracode API ({@code /api/5.0/updatebuild.do}).</li>
+ *   <li><b>Mitigation Management</b>: Submits flaw mitigation proposals, reviews, and comments via Veracode Mitigation API.</li>
+ * </ul>
+ *
+ * @see com.crs_reivew_api.controller.VeracodeController
+ * @see com.crs_reivew_api.dto.VeracodeReportDTO
+ */
 @Service
 public class VeracodeService {
 
@@ -1029,6 +1047,10 @@ public class VeracodeService {
             populateReviewComments(dto);
         }
 
+        dto.status = computeScanStatus(dto);
+        dto.assessmentFindings = generateAssessmentFindings(dto);
+        computeScanUrls(dto);
+
         saveJsonToLog(dto.overview.applicationName, dto);
         return dto;
     }
@@ -1177,6 +1199,9 @@ public class VeracodeService {
             VeracodeReportDTO dto = mapper.readValue(json, VeracodeReportDTO.class);
             if (dto != null) {
                 dto.scaSafeVersionEnabled = veracodeConfig.isScaSafeVersionEnabled();
+                dto.status = computeScanStatus(dto);
+                dto.assessmentFindings = generateAssessmentFindings(dto);
+                computeScanUrls(dto);
             }
             return dto;
         } catch (Exception e) {
@@ -2647,6 +2672,337 @@ public class VeracodeService {
         }
 
         return pdfBytes;
+    }
+
+    public static String computeScanStatus(VeracodeReportDTO dto) {
+        if (dto == null) {
+            return "Pending";
+        }
+
+        boolean hasOnlyLowFindings = true;
+        java.util.List<String> highMediumSevs = java.util.Arrays.asList("CRITICAL", "VERY HIGH", "VERYHIGH", "HIGH", "MEDIUM");
+
+        if (dto.sastSummary != null && dto.sastSummary.breakdown != null) {
+            for (java.util.Map.Entry<String, VeracodeReportDTO.SeverityBreakdownDTO> entry : dto.sastSummary.breakdown.entrySet()) {
+                String sevKey = entry.getKey() != null ? entry.getKey().trim().toUpperCase() : "";
+                if (highMediumSevs.contains(sevKey)) {
+                    VeracodeReportDTO.SeverityBreakdownDTO breakdown = entry.getValue();
+                    if (breakdown != null && (breakdown.total > 0 || (breakdown.findings != null && !breakdown.findings.isEmpty()))) {
+                        hasOnlyLowFindings = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (hasOnlyLowFindings && dto.scaSummary != null && dto.scaSummary.breakdown != null) {
+            for (java.util.Map.Entry<String, VeracodeReportDTO.SeverityBreakdownDTO> entry : dto.scaSummary.breakdown.entrySet()) {
+                String sevKey = entry.getKey() != null ? entry.getKey().trim().toUpperCase() : "";
+                if (highMediumSevs.contains(sevKey)) {
+                    VeracodeReportDTO.SeverityBreakdownDTO breakdown = entry.getValue();
+                    if (breakdown != null && breakdown.total > 0) {
+                        hasOnlyLowFindings = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        boolean isScaMissingNormal = true;
+        if (dto.missingSCAForSelectedModules != null && !dto.missingSCAForSelectedModules.isEmpty()) {
+            isScaMissingNormal = false;
+        }
+
+        return (hasOnlyLowFindings && isScaMissingNormal) ? "Sign-Off" : "Pending";
+    }
+
+    public static String generateAssessmentFindings(VeracodeReportDTO dto) {
+        if (dto == null) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+
+        // --- Part A: SAST Open Flaw Summary ---
+        int totalFlaws = (dto.sastSummary != null) ? dto.sastSummary.vulnerabilities : 0;
+        sb.append("Open Flaw Summary:").append(totalFlaws);
+
+        java.util.List<String> orderedSevs = java.util.Arrays.asList("Critical", "Very High", "High", "Medium", "Low", "Info");
+
+        java.util.Map<String, java.util.Map<String, Integer>> sevCweCounts = new java.util.LinkedHashMap<>();
+        java.util.Map<String, Integer> sevTotals = new java.util.LinkedHashMap<>();
+
+        for (String targetSev : orderedSevs) {
+            sevCweCounts.put(targetSev, new java.util.TreeMap<>(new java.util.Comparator<String>() {
+                @Override
+                public int compare(String a, String b) {
+                    int numA = extractCweNumber(a);
+                    int numB = extractCweNumber(b);
+                    if (numA != numB) {
+                        return Integer.compare(numA, numB);
+                    }
+                    return a.compareTo(b);
+                }
+            }));
+            sevTotals.put(targetSev, 0);
+        }
+
+        boolean hasSastData = false;
+        if (dto.sastSummary != null && dto.sastSummary.breakdown != null && !dto.sastSummary.breakdown.isEmpty()) {
+            hasSastData = true;
+            for (java.util.Map.Entry<String, VeracodeReportDTO.SeverityBreakdownDTO> entry : dto.sastSummary.breakdown.entrySet()) {
+                String rawSev = entry.getKey();
+                VeracodeReportDTO.SeverityBreakdownDTO bDto = entry.getValue();
+                if (rawSev == null || bDto == null) continue;
+
+                String targetSev = mapSastSeverityLabel(rawSev);
+                if (!sevTotals.containsKey(targetSev)) {
+                    targetSev = "Info";
+                }
+
+                int countForSev = bDto.total;
+                if (countForSev <= 0 && bDto.findings != null) {
+                    countForSev = bDto.findings.stream().mapToInt(f -> f.count).sum();
+                }
+                sevTotals.put(targetSev, sevTotals.get(targetSev) + countForSev);
+
+                if (bDto.findings != null) {
+                    java.util.Map<String, Integer> cweMap = sevCweCounts.get(targetSev);
+                    for (VeracodeReportDTO.CweFindingDTO f : bDto.findings) {
+                        String cweRaw = (f.cwe != null && !f.cwe.isEmpty()) ? f.cwe : "";
+                        String cweFormatted = formatCweString(cweRaw);
+                        if (!cweFormatted.isEmpty()) {
+                            int cnt = f.count > 0 ? f.count : 1;
+                            cweMap.put(cweFormatted, cweMap.getOrDefault(cweFormatted, 0) + cnt);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: Aggregate from findingsWithCommentsSAST if breakdown had no findings detail
+        if (!hasSastData && dto.findingsWithCommentsSAST != null && !dto.findingsWithCommentsSAST.isEmpty()) {
+            for (VeracodeReportDTO.FindingDTO f : dto.findingsWithCommentsSAST) {
+                String targetSev = mapSastSeverityLabel(f.severity);
+                if (!sevTotals.containsKey(targetSev)) {
+                    targetSev = "Info";
+                }
+                sevTotals.put(targetSev, sevTotals.get(targetSev) + 1);
+
+                String cweRaw = (f.cweid != null && !f.cweid.isEmpty()) ? f.cweid : (f.title != null ? f.title : "");
+                String cweFormatted = formatCweString(cweRaw);
+                if (!cweFormatted.isEmpty()) {
+                    java.util.Map<String, Integer> cweMap = sevCweCounts.get(targetSev);
+                    cweMap.put(cweFormatted, cweMap.getOrDefault(cweFormatted, 0) + 1);
+                }
+            }
+        }
+
+        for (String sev : orderedSevs) {
+            int sevTotal = sevTotals.getOrDefault(sev, 0);
+            if (sevTotal > 0) {
+                sb.append("\n- ").append(sev).append(": ").append(sevTotal);
+                java.util.Map<String, Integer> cweMap = sevCweCounts.get(sev);
+                if (cweMap != null) {
+                    for (java.util.Map.Entry<String, Integer> cweEntry : cweMap.entrySet()) {
+                        String cwe = cweEntry.getKey();
+                        int count = cweEntry.getValue();
+                        if (count > 0) {
+                            if ("Info".equalsIgnoreCase(sev)) {
+                                sb.append("\n  - ").append(cwe).append(" x ").append(count);
+                            } else {
+                                sb.append("\n  - ").append(cwe).append("  ").append(sev).append("  x  ").append(count);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Part B: SCA Third-Party Component Summary ---
+        sb.append("\nThird-Party Component Summary:");
+        int totalPackages = (dto.scaSummary != null) ? dto.scaSummary.totalPackages : 0;
+        int vulnerablePackages = (dto.scaSummary != null) ? dto.scaSummary.totalVulnerablePackages : 0;
+        int scaVulns = (dto.scaSummary != null) ? dto.scaSummary.vulnerabilities : 0;
+
+        sb.append("\n- Components: ").append(totalPackages);
+        sb.append("\n- Vulnerable Components: ").append(vulnerablePackages);
+        sb.append("\n- Vulnerabilities: ").append(scaVulns);
+
+        if (dto.scaSummary != null && dto.scaSummary.breakdown != null && !dto.scaSummary.breakdown.isEmpty()) {
+            java.util.List<String> scaSevOrder = java.util.Arrays.asList("Very High", "High", "Medium", "Low", "Information");
+            for (String sev : scaSevOrder) {
+                VeracodeReportDTO.SeverityBreakdownDTO bDto = dto.scaSummary.breakdown.get(sev);
+                if (bDto == null && "Information".equals(sev)) {
+                    bDto = dto.scaSummary.breakdown.get("Info");
+                }
+                int count = (bDto != null) ? bDto.total : 0;
+                if (count > 0) {
+                    String label = sev;
+                    if ("Very High".equals(sev)) {
+                        label = ("checkmarx".equalsIgnoreCase(dto.overview != null ? dto.overview.scanType : "")) ? "Critical" : "Very High";
+                    } else if ("Information".equals(sev)) {
+                        label = "Info";
+                    }
+                    sb.append("\n-- ").append(label).append(": ").append(count);
+                }
+            }
+        }
+
+        return sb.toString();
+    }
+
+    private static String formatCweString(String raw) {
+        if (raw == null || raw.trim().isEmpty()) {
+            return "";
+        }
+        String trimmed = raw.trim();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)(CWE-)?(\\d+)").matcher(trimmed);
+        if (m.find()) {
+            return "CWE-" + m.group(2);
+        }
+        return trimmed.toUpperCase();
+    }
+
+    private static int extractCweNumber(String cweStr) {
+        if (cweStr == null) return 0;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\d+").matcher(cweStr);
+        if (m.find()) {
+            try {
+                return Integer.parseInt(m.group());
+            } catch (NumberFormatException ignored) {}
+        }
+        return 0;
+    }
+
+    private static String mapSastSeverityLabel(String rawSev) {
+        if (rawSev == null) return "Info";
+        String upper = rawSev.trim().toUpperCase();
+        return switch (upper) {
+            case "CRITICAL" -> "Critical";
+            case "VERY HIGH", "VERYHIGH" -> "Very High";
+            case "HIGH" -> "High";
+            case "MEDIUM" -> "Medium";
+            case "LOW" -> "Low";
+            default -> "Info";
+        };
+    }
+
+    public static void computeScanUrls(VeracodeReportDTO dto) {
+        if (dto == null || dto.overview == null) {
+            return;
+        }
+
+        String scanType = dto.overview.scanType != null ? dto.overview.scanType.trim().toLowerCase() : "";
+        String appId = dto.overview.appId != null ? dto.overview.appId.trim() : "";
+        String accountId = dto.overview.accountId != null ? dto.overview.accountId.trim() : "";
+        String buildId = dto.overview.buildId != null ? dto.overview.buildId.trim() : "";
+        String analysisId = dto.overview.analysisId != null ? dto.overview.analysisId.trim() : "";
+        String unitId = dto.overview.staticAnalysisUnitId != null ? dto.overview.staticAnalysisUnitId.trim() : "";
+        String sandboxId = dto.overview.sandboxId != null ? dto.overview.sandboxId.trim() : "";
+        String scanName = dto.overview.scanName != null ? dto.overview.scanName.trim() : "";
+
+        if ("checkmarx".equals(scanType)) {
+            String checkmarxUrl = String.format("https://us.ast.checkmarx.net/projects/%s/overview?branch=%s", appId, scanName);
+            dto.scanUrl = checkmarxUrl;
+            dto.scanToolProfileUrl = checkmarxUrl;
+        } else {
+            // Veracode
+            dto.scanUrl = String.format(
+                "https://analysiscenter.veracode.com/auth/index.jsp#StaticOverview:%s:%s:%s:%s:%s::::%s",
+                accountId, appId, buildId, analysisId, unitId, sandboxId
+            );
+            dto.scanToolProfileUrl = String.format(
+                "https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:%s:%s:%s",
+                accountId, appId, buildId
+            );
+        }
+    }
+
+    /**
+     * Updates the scan name (version) for a specified application build in Veracode.
+     * Endpoint: POST https://analysiscenter.veracode.com/api/5.0/updatebuild.do
+     * Parameters: app_id, build_id, version
+     */
+    public String updateScanName(String appNameOrId, String buildId, String newScanName) {
+        if (appNameOrId == null || appNameOrId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Application name or App ID is required");
+        }
+        if (newScanName == null || newScanName.trim().isEmpty()) {
+            throw new IllegalArgumentException("New scan name (version) is required");
+        }
+
+        String appId = resolveAppIdString(appNameOrId);
+        String resolvedBuildId = buildId;
+        if (resolvedBuildId == null || resolvedBuildId.trim().isEmpty()) {
+            resolvedBuildId = getLatestBuildId(appId);
+        }
+
+        if (resolvedBuildId == null || resolvedBuildId.trim().isEmpty()) {
+            throw new VeracodeException("Could not resolve a valid build ID for application " + appNameOrId, "INVALID_BUILD");
+        }
+
+        debugLog("DEBUG: Updating scan name for App ID: " + appId + ", Build ID: " + resolvedBuildId + " to '" + newScanName.trim() + "'");
+
+        String fullUrl = "https://analysiscenter.veracode.com/api/5.0/updatebuild.do";
+        String[] creds = getCredentials();
+        String apiId = creds[0];
+        String apiKey = creds[1];
+
+        String authHeader;
+        try {
+            java.net.URL url = new java.net.URL(fullUrl);
+            authHeader = com.veracode.http.util.HmacAuthHeaderGenerator.getVeracodeAuthorizationHeader(apiId, apiKey, url, "POST");
+        } catch (Exception e) {
+            try {
+                authHeader = new AuthorizationHeaderGenerator(apiId, apiKey).generateAuthorizationHeader("analysiscenter.veracode.com", "/api/5.0/updatebuild.do", "POST");
+            } catch (Exception ex) {
+                throw new VeracodeException("Failed to generate Veracode HMAC authorization header: " + ex.getMessage(), "AUTH_ERROR");
+            }
+        }
+
+        String formData = "app_id=" + java.net.URLEncoder.encode(appId, StandardCharsets.UTF_8)
+                + "&build_id=" + java.net.URLEncoder.encode(resolvedBuildId, StandardCharsets.UTF_8)
+                + "&version=" + java.net.URLEncoder.encode(newScanName.trim(), StandardCharsets.UTF_8);
+
+        HttpClient client = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .connectTimeout(java.time.Duration.ofSeconds(30))
+                .build();
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(fullUrl))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Authorization", authHeader)
+                .POST(HttpRequest.BodyPublishers.ofString(formData, StandardCharsets.UTF_8))
+                .build();
+
+        try {
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                throw new VeracodeException("Failed to update scan name. HTTP Status: " + response.statusCode() + ", details: " + response.body(), "HTTP_ERROR");
+            }
+
+            String xmlResponse = response.body();
+            saveXmlToLog("update_build_name", resolvedBuildId, xmlResponse);
+
+            DocumentBuilderFactory factory = createSecureDocumentBuilderFactory();
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(new InputSource(new StringReader(xmlResponse)));
+            org.w3c.dom.Element root = doc.getDocumentElement();
+
+            if ("error".equalsIgnoreCase(root.getTagName()) || "error".equalsIgnoreCase(root.getNodeName())) {
+                String errorMsg = root.getTextContent() != null ? root.getTextContent().trim() : "Unknown Veracode error";
+                throw new VeracodeException("Veracode API returned error when updating scan name: " + errorMsg, "API_ERROR");
+            }
+
+            return "Success: Scan name updated to '" + newScanName.trim() + "' for build " + resolvedBuildId;
+
+        } catch (VeracodeException ve) {
+            throw ve;
+        } catch (Exception e) {
+            throw new VeracodeException("Failed to update scan name in Veracode: " + e.getMessage(), "SYSTEM_ERROR");
+        }
     }
 }
 

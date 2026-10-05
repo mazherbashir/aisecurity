@@ -10,6 +10,9 @@ export interface AppConfig {
     heartbeat: string;
     mitigationPresets: string;
     veracodeCustomPdf: string;
+    snowSctaskUpdate: string;
+    snowProcessSignoff: string;
+    snowCloseMar: string;
   };
 }
 
@@ -24,7 +27,10 @@ let config: AppConfig = {
     aiAnalyze: '/api/ai/analyze',
     heartbeat: '/api/heartbeat',
     mitigationPresets: '/api/mitigation-presets',
-    veracodeCustomPdf: '/api/veracode/custom-pdf'
+    veracodeCustomPdf: '/api/veracode/custom-pdf',
+    snowSctaskUpdate: '/api/snow/sctaskUpdate',
+    snowProcessSignoff: '/api/snow/processSignoff',
+    snowCloseMar: '/api/snow/closeMar'
   }
 };
 

@@ -19,6 +19,26 @@ import java.util.Map;
 import com.crs_reivew_api.config.VeracodeConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 
+/**
+ * <h1>Checkmarx AST Integration & Analysis Service</h1>
+ * <p>
+ * Core service providing integration with Checkmarx AST (Application Security Testing) OAuth2 REST APIs,
+ * project resolution, scan report generation, SAST/SCA flaw extraction into {@link com.crs_reivew_api.dto.VeracodeReportDTO},
+ * and flaw predicate/mitigation management.
+ * </p>
+ * <h3>Key Capabilities:</h3>
+ * <ul>
+ *   <li><b>OAuth2 Token Management</b>: Obtains and caches OpenID Connect OAuth2 bearer tokens.</li>
+ *   <li><b>Project & Scan Lookup</b>: Resolves Checkmarx project IDs by application profile name and locates completed SAST scans.</li>
+ *   <li><b>Report Generation & Parsing</b>: Requests report generation, polls status, downloads JSON report archives,
+ *       and normalizes findings into unified {@link com.crs_reivew_api.dto.VeracodeReportDTO} structure.</li>
+ *   <li><b>Predicate / Mitigation Management</b>: Submits single and batch predicate updates (state, comments, severity overrides)
+ *       via Checkmarx AST Predicate APIs.</li>
+ * </ul>
+ *
+ * @see com.crs_reivew_api.controller.CheckmarxController
+ * @see com.crs_reivew_api.dto.VeracodeReportDTO
+ */
 @Service
 public class CheckmarxService {
 
@@ -534,6 +554,10 @@ public class CheckmarxService {
             
             dto.overview.policyComplianceStatus = failed ? "Failed" : "Passed";
         }
+
+        dto.status = VeracodeService.computeScanStatus(dto);
+        dto.assessmentFindings = VeracodeService.generateAssessmentFindings(dto);
+        VeracodeService.computeScanUrls(dto);
 
         return dto;
     }
@@ -1173,6 +1197,9 @@ public class CheckmarxService {
             com.crs_reivew_api.dto.VeracodeReportDTO dto = mapper.readValue(json, com.crs_reivew_api.dto.VeracodeReportDTO.class);
             if (dto != null) {
                 dto.scaSafeVersionEnabled = veracodeConfig.isScaSafeVersionEnabled();
+                dto.status = VeracodeService.computeScanStatus(dto);
+                dto.assessmentFindings = VeracodeService.generateAssessmentFindings(dto);
+                VeracodeService.computeScanUrls(dto);
             }
             
             // Fix buildId if it contains the projectId (appId) instead of the scanId

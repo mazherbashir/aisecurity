@@ -1,3 +1,5 @@
+import snippetsData from "./data/snippets.json";
+
 export class StaticContent {
   public static readonly header_style = `
 [code]
@@ -13,7 +15,7 @@ export class StaticContent {
     .heading {border-radius: 5px; display: inline-block; font-weight: bold;
         padding: 5px 25px; text-transform: uppercase;}
     .highlight {padding: 2px 5px 5px;}
-    .crs-rounded {border-radius: 15px; display: inline-block; font-weight: bold;
+    .rounded, .crs-rounded {border-radius: 15px; display: inline-block; font-weight: bold;
         margin: 1px; padding: 2px 7.5px; text-align: center;}
     .minwidth {min-width: 50px;}
     .textbold {font-weight: bold; font-size: 1.2em;color: red;}
@@ -147,5 +149,63 @@ Confirm if the file(s) below are required for production, and <b>if so, unminify
 ${listItems}
 </ul>
 <b>Note:</b> The Veracode scan engine uses line length in determining if a file is minified. If the file is not minified but is reported as such, ensure that there are no lines with a length of 500 or more characters.`;
+  }
+
+  public static invalidProfileMsg(profileName: string, ritmNumber: string) {
+    const cleanProfile = (profileName || "Application Profile").trim();
+    const cleanRitm = (ritmNumber || "RITM").trim();
+    return `
+The application profile
+<span class="rounded bg-red highlight">${cleanProfile}</span>
+submitted with this <b>${cleanRitm}</b> does not correspond to an existing application profile in Veracode.
+
+<p><b>Before Code Review Services can proceed</b>, please provide the correct Veracode application profile.</p>
+
+<div style="border:1px solid #f0ad4e; background-color:#fcf8e3; color:#8a6d3b; padding:10px; border-radius:5px; margin-top:10px;">
+    <b>Important:</b> The provided application profile could not be found in Veracode.
+    <br/><br/>
+    If no application profile exists yet, the application has not been onboarded to the scanning platform. According to <a target="_blank" href="https://pwceur.sharepoint.com/:p:/r/sites/GBL-IFS-NIS-Application-Security/_layouts/15/Doc.aspx?sourcedoc=%7B7D36A28C-D1A4-4D48-B044-9A25AC0DA588%7D&file=CRS%20High%20Level%20User%20Guide.pptx&action=edit&mobileredirect=true">CRS High Level User Guide.pptx</a>, you must first submit a <b>Create Scanning Tool Profile</b> request during the onboarding phase.
+    <br/><br/>
+    You can begin the onboarding process by submitting a
+    <a target="_blank" href="https://pwcnetwork.service-now.com/hub?id=sc_cat_item&sys_id=6382512ddb59bf40dbf414a05b96194e">Create Scanning Tool Profile</a>
+ 
+    request.
+    <br/><br/>
+    The current request was submitted as a <b>Sign-off Request</b>, which is the final stage of the CRS process and requires an existing application profile, completed scan results, and remediation/mitigation activities to be completed before CRS can perform a review.
+    <br/><br/>
+    <b>CRS Process Summary:</b>
+    <ol style="margin-top:5px;">
+        <li><b>Phase 1 - Onboarding:</b> Register the application and submit a <i>Create Scanning Tool Profile</i> request.</li>
+        <li><b>Phase 2 - Scan and Review Results:</b> Upload code and perform Veracode scans.</li>
+        <li><b>Phase 3 - Remediate and Mitigate Findings:</b> Address scan findings and submit mitigation proposals if required.</li>
+        <li><b>Phase 4 - Request Sign-off:</b> Submit a Sign-off Request after the previous phases have been completed.</li>
+    </ol>
+
+    Please submit a <b>Create Scanning Tool Profile</b> request and wait for confirmation that the application profile has been created. Once the profile is available, complete the required scans, review and remediate any findings, obtain mitigation approvals where applicable, and submit a Sign-off Request only after all preceding CRS phases have been completed.
+</div>
+
+<hr/>
+
+If more assistance is needed, please schedule a consultation call by selecting the <i><b>Remediation Consultation</b></i> option from the appointment calendar. For more help, refer to the <i><b>Scheduling Consultations</b></i> section, as detailed in the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/:w:/r/sites/GBL-IFS-NIS-Application-Security/AppReadiness/CRS%20Documents/Client-Facing%20Documentation/CRS%20Process%20Overview.docx?d=w60b17b59a86342efa122e0767f68490f">CRS Process Overview</a> document.
+<br/>
+`;
+  }
+
+  public static generateInvalidProfileHtml(profileName: string, ritmNumber: string) {
+    return StaticContent.header_style + StaticContent.invalidProfileMsg(profileName, ritmNumber) + StaticContent.footerMsg;
+  }
+
+  public static generateSnippetHtml(snippetText: string) {
+    return StaticContent.header_style + snippetText + StaticContent.footerMsg;
+  }
+
+  public static generateNoResponseHtml(snippetText?: string) {
+    const content = snippetText || (snippetsData as Record<string, string>)["No-Response"] || "";
+    return StaticContent.generateSnippetHtml(content);
+  }
+
+  public static generateResponseNeededHtml(snippetText?: string) {
+    const content = snippetText || (snippetsData as Record<string, string>)["Response-Needed"] || "";
+    return StaticContent.generateSnippetHtml(content);
   }
 }
