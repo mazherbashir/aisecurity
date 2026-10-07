@@ -1515,12 +1515,34 @@ ${scaSec}`;
       );
     }
 
+    let extraMissingScaMessages = "";
+    if (backendScaSummary && (backendScaSummary.totalPackages ?? 0) === 0) {
+      const archs: string[] = overview.architectures || [];
+      const isScaRemoved = (removedMissingSca || []).some(
+        (r: string) => r.toLowerCase().trim() === "sca" || r.toLowerCase().trim() === "application"
+      );
+      if (archs.length > 0) {
+        archs.forEach((arch: string) => {
+          const isArchRemoved = (removedMissingSca || []).some(
+            (r: string) => r.toLowerCase().trim() === arch.toLowerCase().trim()
+          );
+          const msgHeader = `Missing Software Composition Analysis for ${arch}`;
+          if (!isArchRemoved && !missingScaMessages.includes(msgHeader)) {
+            extraMissingScaMessages += StaticContent.missingScaMsg(arch);
+          }
+        });
+      } else if (!isScaRemoved && !missingScaMessages.includes("Missing Software Composition Analysis for Application")) {
+        extraMissingScaMessages += StaticContent.missingScaMsg("Application");
+      }
+    }
+
     return (
       StaticContent.header_style +
       header +
       sastSection +
       scaSection +
       missingScaMessages +
+      extraMissingScaMessages +
       moduleSelectionSection +
       noPrecompileSection +
       minifiedFilesSection +
@@ -4995,19 +5017,38 @@ export default function App() {
 
       if (data && data.overview) {
         console.log("Merging Overview...");
-        let languages = mockOverview.scanLanguages
-          ? [...mockOverview.scanLanguages]
-          : [];
-        if (data.architectures) {
-          if (Array.isArray(data.architectures)) {
-            languages = data.architectures;
-          } else if (typeof data.architectures === "string") {
-            languages = data.architectures
-              .replace(/[\[\]]/g, "")
-              .split(",")
-              .map((s: string) => s.trim())
-              .filter(Boolean);
-          }
+        const hasExplicitArchitectures =
+          data.architectures !== undefined ||
+          (data.overview && (data.overview as any).architectures !== undefined);
+
+        let parsedArchitectures: string[] = [];
+        const rawArch =
+          data.architectures !== undefined
+            ? data.architectures
+            : data.overview && (data.overview as any).architectures;
+
+        if (Array.isArray(rawArch)) {
+          parsedArchitectures = rawArch
+            .map((s: any) => String(s).trim())
+            .filter(Boolean);
+        } else if (typeof rawArch === "string") {
+          parsedArchitectures = rawArch
+            .replace(/[\[\]]/g, "")
+            .split(",")
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+        }
+
+        let resolvedScanLanguages: string[] = [];
+        if (hasExplicitArchitectures) {
+          resolvedScanLanguages = parsedArchitectures;
+        } else if (data.overview && Array.isArray((data.overview as any).scanLanguages)) {
+          resolvedScanLanguages = (data.overview as any).scanLanguages;
+        } else if (data.selectedModules !== undefined) {
+          // If selectedModules is explicitly defined (even as []), do not inject mock languages
+          resolvedScanLanguages = parsedArchitectures;
+        } else {
+          resolvedScanLanguages = mockOverview.scanLanguages || [];
         }
 
         const getSafeArray = (key: string) => {
@@ -5042,7 +5083,7 @@ export default function App() {
           ...mockOverview,
           ...data.overview,
           scanType: data.overview?.scanType || (selectedTools.includes("Checkmarx") ? "checkmarx" : "veracode"),
-          architectures: data.architectures || [],
+          architectures: hasExplicitArchitectures ? parsedArchitectures : (mockOverview.architectures || []),
           scaEcosystems: ecosArray.length > 0 ? `[${ecosArray.join(", ")}]` : "",
           packagingAnomalies,
           unselectedModules,
@@ -5050,10 +5091,7 @@ export default function App() {
           noPrecompile,
           missingSCAForSelectedModules,
           selectedModules: data.selectedModules || [],
-          scanLanguages:
-            languages && languages.length > 0
-              ? languages
-              : mockOverview.scanLanguages,
+          scanLanguages: resolvedScanLanguages,
         };
 
         console.log("Updating Overview State.");
@@ -5863,16 +5901,47 @@ export default function App() {
       ecos = ecoObj;
     }
     const allEcos = [...ecos, ...(configNoSca || [])];
-    return archs.filter(
-      (a: string) =>
-        !allEcos.some(
-          (e: string) => e.toLowerCase().trim() === a.toLowerCase().trim(),
-        ) &&
+
+    const totalPkgs = scaSummary?.totalPackages ?? (backendScaSummary?.totalPackages ?? 0);
+    const isTotalPackagesZero = resultsLoaded && totalPkgs === 0;
+
+    let missingList: string[] = [];
+
+    if (isTotalPackagesZero) {
+      if (archs.length > 0) {
+        missingList = archs.filter(
+          (a: string) =>
+            !removedMissingSca.some(
+              (r: string) => r.toLowerCase().trim() === a.toLowerCase().trim(),
+            ),
+        );
+      }
+      if (
+        missingList.length === 0 &&
         !removedMissingSca.some(
-          (r: string) => r.toLowerCase().trim() === a.toLowerCase().trim(),
-        ),
-    );
-  }, [activeOverview, configNoSca, removedMissingSca]);
+          (r: string) =>
+            r.toLowerCase().trim() === "sca" ||
+            r.toLowerCase().trim() === "0 packages" ||
+            r.toLowerCase().trim() === "zero packages" ||
+            r.toLowerCase().trim() === "missing",
+        )
+      ) {
+        missingList = ["SCA"];
+      }
+    } else {
+      missingList = archs.filter(
+        (a: string) =>
+          !allEcos.some(
+            (e: string) => e.toLowerCase().trim() === a.toLowerCase().trim(),
+          ) &&
+          !removedMissingSca.some(
+            (r: string) => r.toLowerCase().trim() === a.toLowerCase().trim(),
+          ),
+      );
+    }
+
+    return missingList;
+  }, [activeOverview, configNoSca, removedMissingSca, resultsLoaded, scaSummary, backendScaSummary]);
 
   const activeNoPrecompile = React.useMemo(() => {
     const list: string[] = (activeOverview as any).noPrecompile || [];
@@ -5893,6 +5962,25 @@ export default function App() {
         ),
     );
   }, [activeOverview, removedMinifiedFiles]);
+
+  const isArchBlank = React.useMemo(() => {
+    const archs = (activeOverview as any).architectures;
+    const langs = (activeOverview as any).scanLanguages;
+    if (archs !== undefined && Array.isArray(archs) && archs.length === 0) {
+      return true;
+    }
+    const hasArchs = Array.isArray(archs)
+      ? archs.length > 0 && archs.some((a: any) => String(a).trim().length > 0)
+      : typeof archs === "string"
+      ? archs.replace(/[\[\]]/g, "").trim().length > 0
+      : false;
+    const hasLangs = Array.isArray(langs)
+      ? langs.length > 0 && langs.some((l: any) => String(l).trim().length > 0)
+      : typeof langs === "string"
+      ? langs.replace(/[\[\]]/g, "").trim().length > 0
+      : false;
+    return !hasArchs && !hasLangs;
+  }, [activeOverview]);
 
   useEffect(() => {
     const tierVal = (activeOverview as any)?.tier;
@@ -6304,17 +6392,28 @@ export default function App() {
                         MODULE SELECTED
                       </span>
                       <div className="flex gap-1 flex-wrap justify-end">
-                        {((activeOverview as any).scanLanguages || []).map(
-                          (lang: string) => (
-                            <div
-                              key={lang}
-                              className="scan-analysis-chip flex items-center px-1.5 py-0.5 rounded-none bg-slate-800/80 border border-slate-700/60"
-                            >
-                              <span className="text-[9px] font-bold text-slate-300">
-                                {lang}
-                              </span>
-                            </div>
-                          ),
+                        {isArchBlank ? (
+                          <div
+                            id="scan-analysis-module-selected-error"
+                            className="scan-analysis-chip flex items-center px-1.5 py-0.5 rounded-none bg-red-950/40 border border-red-500/40"
+                          >
+                            <span className="text-[9px] font-bold text-red-400">
+                              Error
+                            </span>
+                          </div>
+                        ) : (
+                          ((activeOverview as any).scanLanguages || []).map(
+                            (lang: string) => (
+                              <div
+                                key={lang}
+                                className="scan-analysis-chip flex items-center px-1.5 py-0.5 rounded-none bg-slate-800/80 border border-slate-700/60"
+                              >
+                                <span className="text-[9px] font-bold text-slate-300">
+                                  {lang}
+                                </span>
+                              </div>
+                            ),
+                          )
                         )}
                       </div>
                     </div>
@@ -6453,10 +6552,18 @@ export default function App() {
                         MODULE SELECTION
                       </span>
                       <span
-                        className={`text-[10px] font-black uppercase ${((activeOverview as any).unselectedModules || []).length === 0 ? "text-emerald-500" : "text-red-400"}`}
+                        id="scan-analysis-module-selection-status"
+                        className={`text-[10px] font-black uppercase ${
+                          isArchBlank
+                            ? "text-red-400"
+                            : ((activeOverview as any).unselectedModules || []).length === 0
+                            ? "text-emerald-500"
+                            : "text-red-400"
+                        }`}
                       >
-                        {((activeOverview as any).unselectedModules || [])
-                          .length === 0
+                        {isArchBlank
+                          ? "Error"
+                          : ((activeOverview as any).unselectedModules || []).length === 0
                           ? "Complete"
                           : "Partial"}
                       </span>

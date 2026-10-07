@@ -13,6 +13,7 @@ export const mockOverview = {
   "policyComplianceStatus": "Conditional Pass",
   "sastScore": 87,
   "sastRating": "B",
+  "architectures": ["JavaScript", ".NET"],
   "scanLanguages": ["JavaScript", ".NET"],
   "packagingAnomalies": [],
   "unselectedModules": ["FusionCommonLib.dll"],

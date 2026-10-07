@@ -1819,6 +1819,12 @@ public class VeracodeService {
 
     private void verifyPackaging(java.util.Set<String> architectures, java.util.Set<String> ecosystems,
             VeracodeReportDTO dto) {
+        if (architectures == null || architectures.isEmpty()) {
+            dto.packagingAnomalies.add("No architecture/technology detected in SAST scan results (architecture is blank). Software Composition Analysis (SCA) coverage cannot be validated for Sign-Off.");
+        } else if (dto.scaSummary == null || dto.scaSummary.totalPackages <= 0) {
+            dto.packagingAnomalies.add("No third-party packages/dependencies identified in Software Composition Analysis (totalPackages is 0). SCA coverage is required for Sign-Off.");
+        }
+
         var mappings = veracodeConfig.getArchitectureMappings();
         if (mappings == null || mappings.isEmpty())
             return;
@@ -2679,6 +2685,44 @@ public class VeracodeService {
             return "Pending";
         }
 
+        // 1. Architecture check: If no architecture/technology was detected (dto.architectures is empty/null), status MUST be Pending
+        boolean hasArchitecture = dto.architectures != null && !dto.architectures.isEmpty();
+        if (!hasArchitecture) {
+            return "Pending";
+        }
+
+        // 2. SCA totalPackages check: If scaSummary is null or totalPackages <= 0, status MUST be Pending
+        boolean hasScaPackages = dto.scaSummary != null && dto.scaSummary.totalPackages > 0;
+        if (!hasScaPackages) {
+            return "Pending";
+        }
+
+        // 3. Packaging Anomalies check: If packaging anomalies were flagged, status MUST be Pending
+        if (dto.packagingAnomalies != null && !dto.packagingAnomalies.isEmpty()) {
+            return "Pending";
+        }
+
+        // 4. Missing SCA for Selected Modules check
+        if (dto.missingSCAForSelectedModules != null && !dto.missingSCAForSelectedModules.isEmpty()) {
+            return "Pending";
+        }
+
+        // 5. Unselected Modules check
+        if (dto.unselectedModules != null && !dto.unselectedModules.isEmpty()) {
+            return "Pending";
+        }
+
+        // 6. No Precompile (ASP.NET) issue check
+        if (dto.noPrecompile != null && !dto.noPrecompile.isEmpty()) {
+            return "Pending";
+        }
+
+        // 7. Minified Files issue check
+        if (dto.minifedFiles != null && !dto.minifedFiles.isEmpty()) {
+            return "Pending";
+        }
+
+        // 8. SAST & SCA Vulnerabilities check: Must have only LOW or INFO severity findings
         boolean hasOnlyLowFindings = true;
         java.util.List<String> highMediumSevs = java.util.Arrays.asList("CRITICAL", "VERY HIGH", "VERYHIGH", "HIGH", "MEDIUM");
 
@@ -2708,12 +2752,7 @@ public class VeracodeService {
             }
         }
 
-        boolean isScaMissingNormal = true;
-        if (dto.missingSCAForSelectedModules != null && !dto.missingSCAForSelectedModules.isEmpty()) {
-            isScaMissingNormal = false;
-        }
-
-        return (hasOnlyLowFindings && isScaMissingNormal) ? "Sign-Off" : "Pending";
+        return hasOnlyLowFindings ? "Sign-Off" : "Pending";
     }
 
     public static String generateAssessmentFindings(VeracodeReportDTO dto) {
@@ -2722,6 +2761,12 @@ public class VeracodeService {
         }
 
         StringBuilder sb = new StringBuilder();
+
+        if (dto.architectures == null || dto.architectures.isEmpty()) {
+            sb.append("WARNING: No architecture/technology detected in SAST scan results (architecture is blank). Software Composition Analysis (SCA) results are missing or unvalidated.\n");
+        } else if (dto.scaSummary == null || dto.scaSummary.totalPackages <= 0) {
+            sb.append("WARNING: Software Composition Analysis (SCA) total packages is 0. Third-party dependency scan results are missing or unvalidated.\n");
+        }
 
         // --- Part A: SAST Open Flaw Summary ---
         int totalFlaws = (dto.sastSummary != null) ? dto.sastSummary.vulnerabilities : 0;

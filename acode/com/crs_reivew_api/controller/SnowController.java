@@ -464,19 +464,19 @@ public class SnowController {
                 // Force fresh fetch for RP / with_plan
                 report = veracodeService.getFinalReport(cleanProfile, null, null, true, true);
             } else {
-                if (hasMediumOrAboveVulnerabilities(report)) {
+                if (hasMediumOrAboveVulnerabilities(report) || (report != null && "Pending".equalsIgnoreCase(report.status))) {
                     // Pull a fresh report to verify
                     report = veracodeService.getFinalReport(cleanProfile, null, null, true, true);
-                    if (hasMediumOrAboveVulnerabilities(report)) {
+                    if (hasMediumOrAboveVulnerabilities(report) || (report != null && "Pending".equalsIgnoreCase(report.status))) {
                         int sastVulns = (report != null && report.sastSummary != null) ? report.sastSummary.vulnerabilities : 0;
                         int scaVulns = (report != null && report.scaSummary != null) ? report.scaSummary.vulnerabilities : 0;
 
                         Map<String, Object> errResp = new LinkedHashMap<>();
                         errResp.put("status", "error");
-                        errResp.put("message", "Scan is not clear for Veracode profile '" + cleanProfile + "'. Open Medium or higher severity vulnerabilities remain.");
+                        errResp.put("message", "Scan is not clear for Veracode profile '" + cleanProfile + "'. Report status is '" + (report != null ? report.status : "Pending") + "' and cannot be signed off.");
                         errResp.put("sastVulnerabilities", sastVulns);
                         errResp.put("scaVulnerabilities", scaVulns);
-                        errResp.put("assessmentFindings", (report != null && report.assessmentFindings != null) ? report.assessmentFindings : "Open Medium or higher severity vulnerabilities remaining in scan.");
+                        errResp.put("assessmentFindings", (report != null && report.assessmentFindings != null) ? report.assessmentFindings : "Open vulnerabilities or missing SCA/architecture remaining in scan.");
                         return ResponseEntity.badRequest().body(errResp);
                     }
                 }

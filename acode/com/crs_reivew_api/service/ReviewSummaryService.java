@@ -140,7 +140,7 @@ public class ReviewSummaryService {
             html.append(buildMinifiedFilesMsg(dto.minifedFiles));
         }
 
-        // Missing SCA Notice
+        // Missing SCA Notice / Blank Architecture Notice
         if (dto.architectures != null && !dto.architectures.isEmpty()) {
             Set<String> ecosystems = parseEcosystems(dto.scaEcosystems);
             if (veracodeConfig.getNoSca() != null) {
@@ -153,6 +153,8 @@ public class ReviewSummaryService {
                     html.append(buildMissingScaMsg(arch));
                 }
             }
+        } else {
+            html.append(buildBlankArchitectureMsg());
         }
 
         // SAST Section
@@ -470,6 +472,16 @@ A review of the third-party components in Software Composition Analysis was perf
 <br/>
 Confirm if you have any third-party components/dependencies. If so, to successfully upload and scan an application that includes Veracode Software Composition Analysis, your application upload must include the appropriate <a target="_blank" href="https://docs.veracode.com/r/Understanding_the_Upload_and_Scan_Language_Support_Matrix">package manager artifacts</a> for the relevant supported language(s).
 """, arch);
+    }
+
+    private String buildBlankArchitectureMsg() {
+        return """
+<hr/>
+<h3 class="heading bg-red">Missing Architecture and Software Composition Analysis</h3></br>
+No architecture or language technology was identified in the static scan results (architecture is blank). Because no architecture was detected, Software Composition Analysis (SCA) results could not be validated for sign-off. It is a requirement of static code analysis to include Software Composition Analysis of third-party dependencies for a complete scan.<br/>
+<br/>
+Confirm if your application modules are properly selected and precompiled with appropriate package manager artifacts for scanning.
+""";
     }
 
     private String buildNoPrecompileMsg() {
