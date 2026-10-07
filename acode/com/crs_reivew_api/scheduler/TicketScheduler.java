@@ -513,6 +513,21 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
                 || "mar".equals(clean);
     }
 
+    /**
+     * Helper method to check if a ServiceNow task state represents a closed state (3=Closed Complete, 4=Closed Incomplete, 7=Closed Skipped).
+     */
+    public boolean isClosedState(String state) {
+        if (state == null || state.trim().isEmpty()) {
+            return false;
+        }
+        String clean = state.trim().replaceAll("[\\s_-]", "").toLowerCase();
+        return "3".equals(clean) || "4".equals(clean) || "7".equals(clean)
+                || "closedcomplete".equals(clean)
+                || "closedincomplete".equals(clean)
+                || "closedskipped".equals(clean)
+                || "closed".equals(clean);
+    }
+
 
     /**
      * Helper method to fetch Veracode report, update scan name, download/upload PDF, update RITM variables, and post SCTASK update to ServiceNow.

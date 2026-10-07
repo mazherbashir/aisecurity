@@ -796,6 +796,137 @@ public class SnowController {
     }
 
     /**
+     * Dedicated API endpoint to close a catalog task with state CLOSED_INCOMPLETE (4) or CLOSED_SKIPPED (7).
+     *
+     * Endpoints:
+     * - POST /api/snow/closeTicket
+     * - POST /api/snow/close_ticket
+     * - POST /api/snow/ticket/close
+     *
+     * Requirements:
+     * 1. Body MUST contain "u_number" (sctaskNumber).
+     * 2. Body MUST contain "u_state" which must be either CLOSED_INCOMPLETE (4) or CLOSED_SKIPPED (7).
+     * 3. Body MUST contain "u_additional_comments".
+     * 4. "u_work_notes" is optional.
+     * 5. Checks if task status is already CLOSED_COMPLETE (3), CLOSED_INCOMPLETE (4), or CLOSED_SKIPPED (7) -> throws error.
+     * 6. Pulls RITM number and verifies that "Request Reason" is either "Sign Off" or "Mitigation Approval Review".
+     * 7. Builds u_closure_message by stripping [code] and [/code] tags.
+     */
+    @PostMapping(
+            value = {"/closeTicket", "/close_ticket", "/ticket/close"},
+            produces = MediaType.APPLICATION_JSON_VALUE,
+            consumes = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<?> closeTicket(@RequestBody JsonNode payload) {
+        if (payload == null || !payload.isObject()) {
+            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", "Request payload must be a JSON object"));
+        }
+
+        // 1. Mandatory parameter: u_number (sctaskNumber)
+        String sctaskNumber = getFirstNonEmptyText(payload, "u_number", "sctaskNumber", "sctask", "number", "task_number");
+        if (sctaskNumber == null || sctaskNumber.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", "u_number (sctaskNumber) is required"));
+        }
+        sctaskNumber = sctaskNumber.trim();
+
+        // 2. Mandatory parameter: u_state (must be CLOSED_INCOMPLETE '4' or CLOSED_SKIPPED '7')
+        String rawState = getFirstNonEmptyText(payload, "u_state", "state", "uState");
+        Integer targetState = null;
+        if (rawState != null && !rawState.trim().isEmpty()) {
+            String cleanState = rawState.trim().toLowerCase().replace("-", "_").replace(" ", "");
+            if ("4".equals(cleanState) || "closed_incomplete".equals(cleanState) || "closedincomplete".equals(cleanState)) {
+                targetState = 4; // CLOSED_INCOMPLETE
+            } else if ("7".equals(cleanState) || "closed_skipped".equals(cleanState) || "closedskipped".equals(cleanState)) {
+                targetState = 7; // CLOSED_SKIPPED
+            }
+        }
+
+        if (targetState == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "error",
+                    "message", "u_state is required and must be either CLOSED_INCOMPLETE ('4') or CLOSED_SKIPPED ('7')"
+            ));
+        }
+
+        // 3. Mandatory parameter: u_additional_comments
+        String additionalComments = getFirstNonEmptyText(payload, "u_additional_comments", "additionalComments", "additional_comments", "uAdditionalComments");
+        if (additionalComments == null || additionalComments.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", "u_additional_comments is required"));
+        }
+        additionalComments = additionalComments.trim();
+
+        // 4. Optional parameter: u_work_notes
+        String workNotes = getFirstNonEmptyText(payload, "u_work_notes", "workNotes", "work_notes", "uWorkNotes");
+        if (workNotes == null || workNotes.trim().isEmpty()) {
+            workNotes = "Ticket closed by Automation API";
+        } else {
+            workNotes = workNotes.trim();
+        }
+
+        // 5. Query SCTASK details in ServiceNow
+        SnowScTaskDTO scTaskDto = snowService.getScTaskDetails(sctaskNumber);
+        if (scTaskDto == null) {
+            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", "Catalog task " + sctaskNumber + " not found in ServiceNow"));
+        }
+
+        // Check if task status is ALREADY CLOSED (3 = CLOSED_COMPLETE, 4 = CLOSED_INCOMPLETE, 7 = CLOSED_SKIPPED)
+        String currentState = scTaskDto.getState();
+        if (ticketScheduler.isClosedState(currentState)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "error",
+                    "message", "Cannot close ticket: Catalog task " + sctaskNumber + " is already closed with state '" + (currentState != null ? currentState : "UNKNOWN") + "'."
+            ));
+        }
+
+        // 6. Pull RITM number & validate Request Reason (Sign Off OR Mitigation Approval Review)
+        String ritmNumber = scTaskDto.getRequestItemNumber();
+        SnowRitmDTO ritmDto = (ritmNumber != null) ? snowService.getRitmDetails(ritmNumber) : null;
+        String requestReason = (ritmDto != null) ? ritmDto.getRequestReason() : null;
+
+        boolean isSignoff = ticketScheduler.isSignoffRequestReason(requestReason);
+        boolean isMar = ticketScheduler.isMarRequestReason(requestReason);
+
+        if (!isSignoff && !isMar) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "error",
+                    "message", "Cannot close ticket: Request Reason for RITM " + (ritmNumber != null ? ritmNumber : "") + " is '" + (requestReason != null ? requestReason : "UNKNOWN") + "', but this API only processes Sign Off or Mitigation Approval Review requests."
+            ));
+        }
+
+        // 7. Format u_additional_comments & build u_closure_message (strip [code] and [/code])
+        String additionMessage;
+        if (additionalComments.startsWith("[code]") && additionalComments.endsWith("[/code]")) {
+            additionMessage = additionalComments;
+        } else {
+            additionMessage = "[code]\n" + additionalComments + "\n[/code]";
+        }
+
+        String closureMessage = additionMessage.replace("[code]", "").replace("[/code]", "").trim();
+
+        // 8. Post update to ServiceNow
+        ObjectNode closePayload = objectMapper.createObjectNode();
+        closePayload.put("u_number", sctaskNumber);
+        closePayload.put("u_action", "closeSctask");
+        closePayload.put("u_additional_comments", additionMessage);
+        closePayload.put("u_closure_message", closureMessage);
+        closePayload.put("u_state", targetState);
+        closePayload.put("u_work_notes", workNotes);
+
+        JsonNode closeResp = snowService.updateScTask(closePayload);
+
+        Map<String, Object> respMap = new LinkedHashMap<>();
+        respMap.put("status", "success");
+        respMap.put("message", "Catalog task " + sctaskNumber + " closed successfully.");
+        respMap.put("sctaskNumber", sctaskNumber);
+        respMap.put("ritmNumber", (ritmNumber != null ? ritmNumber : ""));
+        respMap.put("u_state", targetState);
+        respMap.put("requestReason", (requestReason != null ? requestReason : ""));
+        respMap.put("snowResponse", closeResp);
+
+        return ResponseEntity.ok(respMap);
+    }
+
+    /**
      * Get ServiceNow Auto Scheduler configuration and status.
      * GET /api/snow/scheduler/status
      */
