@@ -855,12 +855,13 @@ public class VeracodeService {
                     if (searchTarget.contains(" within ")) {
                         searchTarget = searchTarget.substring(searchTarget.lastIndexOf(" within ") + 8).trim();
                     }
+                    String baseTarget = searchTarget.replaceAll("(?i)\\.(tar\\.gz|tgz|tar\\.bz2|tbz|zip|tar|7z|war|ear|jar)$", "").trim();
                     for (String scaPath : scaFilePaths) {
-                        if (scaPath.contains(searchTarget)) {
+                        if (scaPath.contains(searchTarget) || (!baseTarget.isEmpty() && scaPath.contains(baseTarget))) {
                             hasScaRef = true;
                             break;
                         }
-                        if (searchTarget.contains(scaPath) && !scaPath.trim().isEmpty()) {
+                        if ((searchTarget.contains(scaPath) || (!baseTarget.isEmpty() && baseTarget.contains(scaPath))) && !scaPath.trim().isEmpty()) {
                             hasScaRef = true;
                             break;
                         }

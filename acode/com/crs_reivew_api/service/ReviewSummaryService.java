@@ -125,22 +125,19 @@ public class ReviewSummaryService {
             html.append(buildScanTooOldMsg(dto.overview));
         }
 
-        // Module Selection Notice
-        if (dto.unselectedModules != null && !dto.unselectedModules.isEmpty()) {
-            html.append(buildModuleSelectionMsg(dto.overview, dto.selectedModules, dto.unselectedModules));
+        // 1. CODE FLAW (SAST Section)
+        String sastSection = buildSastSection(dto);
+        if (!sastSection.isEmpty()) {
+            html.append(sastSection);
         }
 
-        // Missing Precompiled Files Notice
-        if (dto.noPrecompile != null && !dto.noPrecompile.isEmpty()) {
-            html.append(buildNoPrecompileMsg());
+        // 2. SCA findings (SCA Section)
+        String scaSection = buildScaSection(dto);
+        if (!scaSection.isEmpty()) {
+            html.append(scaSection);
         }
 
-        // Minified Files Notice
-        if (dto.minifedFiles != null && !dto.minifedFiles.isEmpty()) {
-            html.append(buildMinifiedFilesMsg(dto.minifedFiles));
-        }
-
-        // Missing SCA Notice / Blank Architecture Notice
+        // 3. MISSING SCA MESSAGE / Blank Architecture Notice
         if (dto.architectures != null && !dto.architectures.isEmpty()) {
             Set<String> ecosystems = parseEcosystems(dto.scaEcosystems);
             if (veracodeConfig.getNoSca() != null) {
@@ -157,16 +154,20 @@ public class ReviewSummaryService {
             html.append(buildBlankArchitectureMsg());
         }
 
-        // SAST Section
-        String sastSection = buildSastSection(dto);
-        if (!sastSection.isEmpty()) {
-            html.append(sastSection);
+        // 4. MODULE SELECTION ISSUE
+        if (dto.unselectedModules != null && !dto.unselectedModules.isEmpty()) {
+            html.append(buildModuleSelectionMsg(dto.overview, dto.selectedModules, dto.unselectedModules));
         }
 
-        // SCA Section
-        String scaSection = buildScaSection(dto);
-        if (!scaSection.isEmpty()) {
-            html.append(scaSection);
+        // 5. AFTER THAT SHOW THE REST, IN ANY ORDER
+        // Missing Precompiled Files Notice
+        if (dto.noPrecompile != null && !dto.noPrecompile.isEmpty()) {
+            html.append(buildNoPrecompileMsg());
+        }
+
+        // Minified Files Notice
+        if (dto.minifedFiles != null && !dto.minifedFiles.isEmpty()) {
+            html.append(buildMinifiedFilesMsg(dto.minifedFiles));
         }
 
         html.append(FOOTER_MSG);
