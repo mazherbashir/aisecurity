@@ -26,6 +26,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * <h1>ServiceNow Automated Ticket Scheduler</h1>
@@ -243,17 +245,23 @@ public class TicketScheduler {
         return new String[] { cleaned, null };
     }
 
+    private static final Pattern MULTI_PART_VERSION =
+            Pattern.compile("^(?i)v?(\\d+)\\.(\\d+)(?:\\.(\\d+))?((?:\\.\\d+)*)([-+].*)?$");
+    private static final Pattern SINGLE_PART_VERSION =
+            Pattern.compile("^(?i)v?(\\d{1,4})([-+].*)?$");
+
     /**
      * Format application version per rule:
      * - If version is null/empty or equals "N/A", "na", or "n/a" (case-insensitive), change to "v1.0.0".
+     * - If version is a semantic version (e.g. 1, 1.0, 2.0, 0.0, 1.0.0, 2.10.0.2), normalize to 3-part semver with leading 'v' (e.g. v1.0.0, v2.0.0, v0.0.0).
      * - Replace space, double spaces, or commas with "_".
      */
-    public String sanitizeApplicationVersion(String rawVersion) {
+    public static String sanitizeVersion(String rawVersion) {
         if (rawVersion == null || rawVersion.trim().isEmpty()) {
             return "v1.0.0";
         }
         String clean = rawVersion.trim();
-        if (clean.equalsIgnoreCase("n/a") || clean.equalsIgnoreCase("na")) {
+        if (clean.equalsIgnoreCase("n/a") || clean.equalsIgnoreCase("na") || clean.equalsIgnoreCase("none") || clean.equalsIgnoreCase("null")) {
             return "v1.0.0";
         }
 
@@ -269,12 +277,48 @@ public class TicketScheduler {
             }
         }
 
+        // Normalize common prefixes like "version ", "ver ", "v ", "v."
+        if (clean.matches("^(?i)ver(sion)?[\\s_:]+\\d.*")) {
+            clean = clean.replaceFirst("^(?i)ver(sion)?[\\s_:]+", "");
+        } else if (clean.matches("^(?i)v[\\s_:]+\\d.*")) {
+            clean = clean.replaceFirst("^(?i)v[\\s_:]+", "");
+        } else if (clean.matches("^(?i)v\\.\\d.*")) {
+            clean = clean.substring(2);
+        }
+
+        while (clean.endsWith(".")) {
+            clean = clean.substring(0, clean.length() - 1);
+        }
+
         clean = clean.replaceAll("[,\\s]+", "_");
         if (clean.isEmpty() || clean.equals("_") || clean.equals("=")) {
             return "v1.0.0";
         }
 
+        // Check multi-part dot-separated version (e.g. 1.0, 2.0, 0.0, 1.0.0, 2.10.0.2, v1.0, v2.0)
+        Matcher multiMatcher = MULTI_PART_VERSION.matcher(clean);
+        if (multiMatcher.matches()) {
+            String major = multiMatcher.group(1);
+            String minor = multiMatcher.group(2);
+            String patch = multiMatcher.group(3) != null ? multiMatcher.group(3) : "0";
+            String extra = multiMatcher.group(4) != null ? multiMatcher.group(4) : "";
+            String suffix = multiMatcher.group(5) != null ? multiMatcher.group(5) : "";
+            return "v" + major + "." + minor + "." + patch + extra + suffix;
+        }
+
+        // Check single-part integer version (e.g. 1, 2, 0, v1, v2)
+        Matcher singleMatcher = SINGLE_PART_VERSION.matcher(clean);
+        if (singleMatcher.matches()) {
+            String major = singleMatcher.group(1);
+            String suffix = singleMatcher.group(2) != null ? singleMatcher.group(2) : "";
+            return "v" + major + ".0.0" + suffix;
+        }
+
         return clean;
+    }
+
+    public String sanitizeApplicationVersion(String rawVersion) {
+        return sanitizeVersion(rawVersion);
     }
 
     /**
@@ -656,6 +700,8 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
         boolean canAutoSignoff = "Sign-Off".equalsIgnoreCase(reportStatus) && isSignoffRequest && config.isAutoSignoffEnabled();
 
         if (canAutoSignoff) {
+            assignSctaskForSignOff(sctaskNumber);
+
             String additionMessage = buildSignOffAdditionMessage(
                     report.scanUrl, newScanName, report.scanToolProfileUrl, cleanProfile, attachmentUrl, pdfFileName);
             String closureMessage = additionMessage.replace("[code]", "").replace("[/code]", "").trim();
@@ -663,6 +709,10 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
             ObjectNode closePayload = objectMapper.createObjectNode();
             closePayload.put("u_number", sctaskNumber);
             closePayload.put("u_action", "closeSctask");
+            String snowUser = config.getSnowSignoffAutoUserId();
+            if (snowUser != null && !snowUser.trim().isEmpty()) {
+                closePayload.put("u_assigned_to", snowUser.trim());
+            }
             closePayload.put("u_additional_comments", additionMessage);
             closePayload.put("u_closure_message", closureMessage);
             closePayload.put("u_state", 3); // CLOSED_COMPLETE
@@ -673,6 +723,30 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
 
         } else {
             executePendingBlock(sctaskNumber, reviewCommentsHtml);
+        }
+    }
+
+    /**
+     * Assigns the open SCTASK to the configured automation user and transitions state to WORK_IN_PROGRESS ("2").
+     */
+    public JsonNode assignSctaskForSignOff(String sctaskNumber) {
+        String snowUser = config.getSnowSignoffAutoUserId();
+        if (snowUser == null || snowUser.trim().isEmpty()) {
+            return null;
+        }
+        ObjectNode assignPayload = objectMapper.createObjectNode();
+        assignPayload.put("u_number", sctaskNumber);
+        assignPayload.put("u_assigned_to", snowUser.trim());
+        assignPayload.put("u_state", "2"); // WORK_IN_PROGRESS
+        assignPayload.put("u_work_notes", "Ticket assigned to " + snowUser.trim() + " and moved to Work In Progress for automated sign-off");
+
+        try {
+            JsonNode assignResp = snowService.updateScTask(assignPayload);
+            logger.info("ServiceNow assignSctask response for {}: {}", sctaskNumber, assignResp);
+            return assignResp;
+        } catch (Exception ex) {
+            logger.warn("Failed to assign SCTASK {} to {} with state 2: {}", sctaskNumber, snowUser, ex.getMessage());
+            return null;
         }
     }
 
@@ -734,6 +808,8 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
                 boolean canAutoSignoff = "Sign-Off".equalsIgnoreCase(reportStatus) && isSignoffRequest && config.isAutoSignoffEnabled();
 
                 if (canAutoSignoff) {
+                    assignSctaskForSignOff(sctaskNumber);
+
                     // Checkmarx Sign-Off Block
                     String additionMessage = buildCheckmarxSignOffAdditionMessage(profileName, branchName, ritmNumber);
                     String closureMessage = additionMessage.replace("[code]", "").replace("[/code]", "").trim();
@@ -741,6 +817,10 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
                     ObjectNode closePayload = objectMapper.createObjectNode();
                     closePayload.put("u_number", sctaskNumber);
                     closePayload.put("u_action", "closeSctask");
+                    String snowUser = config.getSnowSignoffAutoUserId();
+                    if (snowUser != null && !snowUser.trim().isEmpty()) {
+                        closePayload.put("u_assigned_to", snowUser.trim());
+                    }
                     closePayload.put("u_additional_comments", additionMessage);
                     closePayload.put("u_closure_message", closureMessage);
                     closePayload.put("u_state", 3); // CLOSED_COMPLETE

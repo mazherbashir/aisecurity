@@ -968,13 +968,17 @@ public class SnowService {
         }
 
         // 3. application_version
-        String appVersion = getFirstNonEmptyText(input, "application_version", "applicationVersion", "version",
-                "buildId");
-        if (appVersion == null && reportDto != null && reportDto.overview != null) {
-            appVersion = reportDto.overview.buildId;
-        }
+        String appVersion = getFirstNonEmptyText(input, "application_version", "applicationVersion", "version");
         if (appVersion != null && !appVersion.trim().isEmpty()) {
-            body.put("application_version", appVersion.trim());
+            body.put("application_version", com.crs_reivew_api.scheduler.TicketScheduler.sanitizeVersion(appVersion));
+        } else {
+            String fallbackBuildId = getFirstNonEmptyText(input, "buildId");
+            if (fallbackBuildId == null && reportDto != null && reportDto.overview != null) {
+                fallbackBuildId = reportDto.overview.buildId;
+            }
+            if (fallbackBuildId != null && !fallbackBuildId.trim().isEmpty()) {
+                body.put("application_version", fallbackBuildId.trim());
+            }
         }
 
         // 4. scan_name
@@ -1030,14 +1034,31 @@ public class SnowService {
             body.put("exposure", exposure.trim());
         }
 
+        // 11. remediation_plan_number
+        String rpNumber = getFirstNonEmptyText(input, "remediation_plan_number", "remediationPlanNumber",
+                "remediation_plan_id", "remediationPlanId", "rp_number", "rpNumber", "rp_id", "rpId",
+                "remediation_plan", "remediationPlan");
+        if (rpNumber != null && !rpNumber.trim().isEmpty()) {
+            body.put("remediation_plan_number", rpNumber.trim());
+        }
+
         // Include any additional custom keys from input JSON if present and
-        // non-null/non-empty
+        // non-null/non-empty (excluding recognized aliases)
         if (input != null && input.isObject()) {
+            java.util.Set<String> knownAliasKeys = java.util.Set.of(
+                    "remediationPlanNumber", "remediationPlanId", "remediation_plan_id",
+                    "rp_number", "rpNumber", "rp_id", "rpId", "remediation_plan", "remediationPlan",
+                    "assessmentFindings", "findings", "dateOfAssessedScan", "scanDate",
+                    "applicationVersion", "version", "buildId", "scanName", "scanToolProfileUrl",
+                    "applicationProfileUrl", "profileUrl", "scanUrl", "signOffReason", "reason",
+                    "mitigationProposalsReviewed", "mitigationsReviewed", "dataClassification"
+            );
             input.fields().forEachRemaining(entry -> {
-                if (!body.has(entry.getKey()) && entry.getValue() != null && !entry.getValue().isNull()) {
+                String key = entry.getKey();
+                if (!body.has(key) && !knownAliasKeys.contains(key) && entry.getValue() != null && !entry.getValue().isNull()) {
                     String textVal = entry.getValue().asText("").trim();
                     if (!textVal.isEmpty()) {
-                        body.set(entry.getKey(), entry.getValue());
+                        body.set(key, entry.getValue());
                     }
                 }
             });

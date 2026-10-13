@@ -383,6 +383,16 @@ public class SnowController {
             } else {
                 signoffType = "no_flaw";
             }
+        } else {
+            String candidateRp = getFirstNonEmptyText(payload,
+                    "remediation_plan_number", "remediationPlanNumber",
+                    "remediation_plan_id", "remediationPlanId",
+                    "rp_number", "rpNumber",
+                    "rp_id", "rpId",
+                    "remediation_plan", "remediationPlan");
+            if (candidateRp != null && !candidateRp.trim().isEmpty()) {
+                signoffType = "with_plan";
+            }
         }
 
         if (sctaskNumber == null || sctaskNumber.trim().isEmpty()) {
@@ -403,7 +413,12 @@ public class SnowController {
         boolean isRp = isRpSignoff(signoffType);
 
         if (isRp) {
-            String rawRpId = getFirstNonEmptyText(payload, "remediationPlanId", "remediation_plan_id", "rpNumber", "rp_number", "remediationPlanNumber");
+            String rawRpId = getFirstNonEmptyText(payload,
+                    "remediation_plan_number", "remediationPlanNumber",
+                    "remediation_plan_id", "remediationPlanId",
+                    "rp_number", "rpNumber",
+                    "rp_id", "rpId",
+                    "remediation_plan", "remediationPlan");
             try {
                 remediationPlanId = validateRemediationPlanId(rawRpId);
             } catch (IllegalArgumentException ex) {
@@ -522,7 +537,11 @@ public class SnowController {
             }
 
             // Execute Veracode Sign-Off Block
-            String formattedAppVersion = ticketScheduler.sanitizeApplicationVersion(ritmDto != null ? ritmDto.getApplicationVersion() : null);
+            String rawAppVersion = getFirstNonEmptyText(payload, "applicationVersion", "application_version", "version", "appVersion");
+            if (rawAppVersion == null && ritmDto != null) {
+                rawAppVersion = ritmDto.getApplicationVersion();
+            }
+            String formattedAppVersion = ticketScheduler.sanitizeApplicationVersion(rawAppVersion);
             String rawSubmittedDate = (report.overview != null && report.overview.submittedDate != null) ? report.overview.submittedDate : LocalDate.now().toString();
             String submittedDate = ticketScheduler.extractDateOnly(rawSubmittedDate);
             String newScanName = submittedDate + " " + formattedAppVersion + " APR " + (ritmNumber != null ? ritmNumber : "");
@@ -564,6 +583,9 @@ public class SnowController {
             if (report.scanUrl != null) ritmVarsNode.put("scan_url", report.scanUrl);
             ritmVarsNode.put("sign_off_reason", isRp ? "with_plan" : "no_flaw");
             ritmVarsNode.put("mitigation_proposals_reviewed", mitigationProposalsReviewed);
+            if (isRp && remediationPlanId != null && !remediationPlanId.trim().isEmpty()) {
+                ritmVarsNode.put("remediation_plan_number", remediationPlanId.trim());
+            }
 
             String policyName = (report.overview != null && report.overview.policyName != null) ? report.overview.policyName : "";
             ritmVarsNode.put("data_classification", ticketScheduler.parseDataClassification(policyName));
@@ -616,15 +638,20 @@ public class SnowController {
 
             JsonNode closeResp = snowService.updateScTask(closePayload);
 
-            return ResponseEntity.ok(Map.of(
-                    "status", "success",
-                    "message", "Veracode " + (isRp ? "Remediation Plan " : "") + "Sign-Off completed successfully.",
-                    "sctaskNumber", sctaskNumber,
-                    "ritmNumber", (ritmNumber != null ? ritmNumber : ""),
-                    "signoffType", (isRp ? "with_plan" : "no_flaw"),
-                    "mitigationProposalsReviewed", mitigationProposalsReviewed,
-                    "snowResponse", closeResp
-            ));
+            Map<String, Object> respMap = new LinkedHashMap<>();
+            respMap.put("status", "success");
+            respMap.put("message", "Veracode " + (isRp ? "Remediation Plan " : "") + "Sign-Off completed successfully.");
+            respMap.put("sctaskNumber", sctaskNumber);
+            respMap.put("ritmNumber", (ritmNumber != null ? ritmNumber : ""));
+            respMap.put("signoffType", (isRp ? "with_plan" : "no_flaw"));
+            if (isRp && remediationPlanId != null) {
+                respMap.put("remediationPlanNumber", remediationPlanId);
+                respMap.put("remediation_plan_number", remediationPlanId);
+            }
+            respMap.put("mitigationProposalsReviewed", mitigationProposalsReviewed);
+            respMap.put("snowResponse", closeResp);
+
+            return ResponseEntity.ok(respMap);
 
         } else {
             // Checkmarx / Non-Veracode tool
@@ -657,8 +684,18 @@ public class SnowController {
                 // Update RITM Variables & Close SCTASK
                 ObjectNode ritmVarsNode = objectMapper.createObjectNode();
                 if (report != null && report.assessmentFindings != null) ritmVarsNode.put("assessment_findings", report.assessmentFindings);
+                String rawCmAppVersion = getFirstNonEmptyText(payload, "applicationVersion", "application_version", "version", "appVersion");
+                if (rawCmAppVersion == null && ritmDto != null) {
+                    rawCmAppVersion = ritmDto.getApplicationVersion();
+                }
+                if (rawCmAppVersion != null && !rawCmAppVersion.trim().isEmpty()) {
+                    ritmVarsNode.put("application_version", ticketScheduler.sanitizeApplicationVersion(rawCmAppVersion));
+                }
                 ritmVarsNode.put("sign_off_reason", isRp ? "with_plan" : "no_flaw");
                 ritmVarsNode.put("mitigation_proposals_reviewed", mitigationProposalsReviewed);
+                if (isRp && remediationPlanId != null && !remediationPlanId.trim().isEmpty()) {
+                    ritmVarsNode.put("remediation_plan_number", remediationPlanId.trim());
+                }
 
                 snowService.updateRitmVariables(ritmNumber, ritmVarsNode, report);
 
@@ -689,15 +726,20 @@ public class SnowController {
 
                 JsonNode closeResp = snowService.updateScTask(closePayload);
 
-                return ResponseEntity.ok(Map.of(
-                        "status", "success",
-                        "message", "Checkmarx " + (isRp ? "Remediation Plan " : "") + "Sign-Off completed successfully.",
-                        "sctaskNumber", sctaskNumber,
-                        "ritmNumber", (ritmNumber != null ? ritmNumber : ""),
-                        "signoffType", (isRp ? "with_plan" : "no_flaw"),
-                        "mitigationProposalsReviewed", mitigationProposalsReviewed,
-                        "snowResponse", closeResp
-                ));
+                Map<String, Object> respMap = new LinkedHashMap<>();
+                respMap.put("status", "success");
+                respMap.put("message", "Checkmarx " + (isRp ? "Remediation Plan " : "") + "Sign-Off completed successfully.");
+                respMap.put("sctaskNumber", sctaskNumber);
+                respMap.put("ritmNumber", (ritmNumber != null ? ritmNumber : ""));
+                respMap.put("signoffType", (isRp ? "with_plan" : "no_flaw"));
+                if (isRp && remediationPlanId != null) {
+                    respMap.put("remediationPlanNumber", remediationPlanId);
+                    respMap.put("remediation_plan_number", remediationPlanId);
+                }
+                respMap.put("mitigationProposalsReviewed", mitigationProposalsReviewed);
+                respMap.put("snowResponse", closeResp);
+
+                return ResponseEntity.ok(respMap);
             }
 
             return ResponseEntity.badRequest().body(Map.of("status", "error", "message", "Checkmarx service is not available"));
@@ -998,6 +1040,8 @@ public class SnowController {
         status.put("maxMemoryEntries", veracodeConfig.getSnowSchedulerMaxMemoryEntries());
         status.put("postSchedulerToSnow", veracodeConfig.isPostSchedulerToSnow());
         status.put("autoSignoffEnabled", veracodeConfig.isAutoSignoffEnabled());
+        status.put("signoffAutoUserId", veracodeConfig.getSnowSignoffAutoUserId());
+        status.put("signoffAutoUserName", veracodeConfig.getSnowSignoffAutoUserName());
         return ResponseEntity.ok(status);
     }
 

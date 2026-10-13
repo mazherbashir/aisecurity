@@ -116,7 +116,11 @@ public class VeracodeConfig {
     @Value("${crs.snow.auto-signoff-enabled:true}")
     private boolean autoSignoffEnabled = true;
 
-    private String snowApiKey;
+    @Value("${crs.snow.signoff-autouserid:${crs.snow.signoff-auto-user-id:${signoff-autouserid:Us_svc_codereviewsr_01}}}")
+    private String snowSignoffAutoUserId = "Us_svc_codereviewsr_01";
+
+    @Value("${crs.snow.signoff-autousername:${crs.snow.signoff-auto-user-name:${Signoff-autoUserName:${signoff-autousername:Code Review Services Service Account}}}}")
+    private String snowSignoffAutoUserName = "Code Review Services Service Account";
 
     public boolean isAutoSignoffEnabled() {
         return autoSignoffEnabled;
@@ -124,6 +128,22 @@ public class VeracodeConfig {
 
     public void setAutoSignoffEnabled(boolean autoSignoffEnabled) {
         this.autoSignoffEnabled = autoSignoffEnabled;
+    }
+
+    public String getSnowSignoffAutoUserId() {
+        return snowSignoffAutoUserId;
+    }
+
+    public void setSnowSignoffAutoUserId(String snowSignoffAutoUserId) {
+        this.snowSignoffAutoUserId = snowSignoffAutoUserId;
+    }
+
+    public String getSnowSignoffAutoUserName() {
+        return snowSignoffAutoUserName;
+    }
+
+    public void setSnowSignoffAutoUserName(String snowSignoffAutoUserName) {
+        this.snowSignoffAutoUserName = snowSignoffAutoUserName;
     }
 
     public String getCheckmarxApiKey() {
