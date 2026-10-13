@@ -122,6 +122,8 @@ public class VeracodeConfig {
     @Value("${crs.snow.signoff-autousername:${crs.snow.signoff-auto-user-name:${Signoff-autoUserName:${signoff-autousername:Code Review Services Service Account}}}}")
     private String snowSignoffAutoUserName = "Code Review Services Service Account";
 
+    private String snowApiKey;
+
     public boolean isAutoSignoffEnabled() {
         return autoSignoffEnabled;
     }
