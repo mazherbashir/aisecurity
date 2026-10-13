@@ -199,8 +199,54 @@ public class TicketScheduler {
 
     /**
      * Helper method to clean and deduplicate application profile names (removes "Application:" and duplicate values).
+     * For Veracode:
+     * - If there is a pipe '|', removes the pipe and takes the first part.
+     * - If there is a slash '/', takes the first part before the slash.
      */
     public String cleanVeracodeProfileName(String raw) {
+        if (raw == null || raw.trim().isEmpty()) {
+            return "";
+        }
+        String text = raw.trim();
+
+        if (text.toLowerCase().startsWith("application:")) {
+            text = text.substring("application:".length()).trim();
+        } else {
+            text = text.replaceAll("(?i)\\bapplication:\\b", "").trim();
+        }
+
+        // Check for pipe '|': take the first part
+        int pipeIdx = text.indexOf('|');
+        if (pipeIdx != -1) {
+            text = text.substring(0, pipeIdx).trim();
+        }
+
+        // For Veracode only: check for slash '/': take the first part
+        int slashIdx = text.indexOf('/');
+        if (slashIdx != -1) {
+            text = text.substring(0, slashIdx).trim();
+        }
+
+        String[] parts = text.split("[,\\s]+");
+        List<String> uniqueParts = new ArrayList<>();
+        for (String part : parts) {
+            String p = part.trim();
+            if (!p.isEmpty() && !uniqueParts.contains(p)) {
+                uniqueParts.add(p);
+            }
+        }
+
+        if (uniqueParts.isEmpty()) {
+            return text;
+        }
+
+        return String.join(" ", uniqueParts);
+    }
+
+    /**
+     * Cleans and deduplicates Checkmarx profile names without stripping slashes '/'.
+     */
+    public String cleanCheckmarxProfileName(String raw) {
         if (raw == null || raw.trim().isEmpty()) {
             return "";
         }
@@ -229,20 +275,48 @@ public class TicketScheduler {
     }
 
     /**
-     * Parses profile name and branch name for non-Veracode tools (e.g. "USA-DEV-SOLUTION BRANCH:MASTER").
+     * Parses profile name and branch name for non-Veracode tools (e.g. Checkmarx).
+     * If there is a pipe '|', removes it, uses the first part as profileName and second part as branchName.
+     * If there is 'BRANCH:', uses part before as profileName and part after as branchName.
+     * Note: '/' is NOT removed for Checkmarx as it can be part of project name or branch name.
      */
     public String[] parseNonVeracodeProfileAndBranch(String raw) {
         if (raw == null || raw.trim().isEmpty()) {
             return new String[] {"", null};
         }
-        String cleaned = cleanVeracodeProfileName(raw);
-        int branchIdx = cleaned.toUpperCase().indexOf("BRANCH:");
-        if (branchIdx != -1) {
-            String profileName = cleaned.substring(0, branchIdx).trim();
-            String branchName = cleaned.substring(branchIdx + "BRANCH:".length()).trim();
-            return new String[] { profileName, branchName };
+        String text = raw.trim();
+        if (text.toLowerCase().startsWith("application:")) {
+            text = text.substring("application:".length()).trim();
+        } else {
+            text = text.replaceAll("(?i)\\bapplication:\\b", "").trim();
         }
-        return new String[] { cleaned, null };
+
+        String profilePart = text;
+        String branchPart = null;
+
+        int pipeIdx = text.indexOf('|');
+        if (pipeIdx != -1) {
+            profilePart = text.substring(0, pipeIdx).trim();
+            branchPart = text.substring(pipeIdx + 1).trim();
+        } else {
+            int branchIdx = text.toUpperCase().indexOf("BRANCH:");
+            if (branchIdx != -1) {
+                profilePart = text.substring(0, branchIdx).trim();
+                branchPart = text.substring(branchIdx + "BRANCH:".length()).trim();
+            }
+        }
+
+        if (branchPart != null) {
+            if (branchPart.toUpperCase().startsWith("BRANCH:")) {
+                branchPart = branchPart.substring("BRANCH:".length()).trim();
+            }
+            if (branchPart.isEmpty()) {
+                branchPart = null;
+            }
+        }
+
+        String cleanedProfile = cleanCheckmarxProfileName(profilePart);
+        return new String[] { cleanedProfile, branchPart };
     }
 
     private static final Pattern MULTI_PART_VERSION =
@@ -615,9 +689,15 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
             report = veracodeService.getFinalReport(cleanProfile, null, null, true, true, aiModelToUse, reviewProposalWithAi);
             reviewCommentsHtml = (report != null) ? report.reviewCommentsHtml : null;
         } catch (Exception e) {
-            logger.warn("Veracode profile '{}' not found or error occurred for SCTASK {}: {}. Generating profile missing notification.",
-                    cleanProfile, sctaskNumber, e.getMessage());
-            reviewCommentsHtml = buildMissingVeracodeProfileHtml(cleanProfile, ritmNumber);
+            if (isBuildIdError(e)) {
+                logger.warn("Veracode build ID missing or failed for profile '{}' for SCTASK {}: {}. Generating Policy Scan Required notification.",
+                        cleanProfile, sctaskNumber, e.getMessage());
+                reviewCommentsHtml = buildPolicyScanRequiredHtml();
+            } else {
+                logger.warn("Veracode profile '{}' not found or error occurred for SCTASK {}: {}. Generating profile missing notification.",
+                        cleanProfile, sctaskNumber, e.getMessage());
+                reviewCommentsHtml = buildMissingVeracodeProfileHtml(cleanProfile, ritmNumber);
+            }
         }
 
         if (reviewCommentsHtml != null && !reviewCommentsHtml.trim().isEmpty()) {
@@ -625,14 +705,8 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
         }
 
         if (report == null) {
-            // Missing profile case: post notification comment to ServiceNow SCTASK if comments posting enabled
-            if (config.isPostSchedulerCommentsToSnow()) {
-                ObjectNode updatePayload = objectMapper.createObjectNode();
-                updatePayload.put("u_number", sctaskNumber);
-                updatePayload.put("u_action", "Add Comment");
-                updatePayload.put("u_additional_comments", ensureCodeTags(reviewCommentsHtml));
-                snowService.updateScTask(updatePayload);
-            }
+            // Missing profile or build ID error case: post notification comment to ServiceNow SCTASK if comments posting enabled
+            executePendingBlock(sctaskNumber, ensureCodeTags(reviewCommentsHtml));
             return;
         }
 
@@ -1046,6 +1120,62 @@ If more assistance is needed, please schedule a consultation call by selecting t
 For more information about CRS, please see the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/GBL-IFS-NIS-Application-Security/SitePages/Code-Review-Services.aspx">CRS SharePoint</a>.
 [/code]
 """.formatted(safeProfile, safeRitm);
+    }
+
+    /**
+     * Checks if an exception caught during Veracode processing indicates a missing or failed Build ID.
+     */
+    public boolean isBuildIdError(Throwable t) {
+        Throwable curr = t;
+        while (curr != null) {
+            String msg = curr.getMessage();
+            if (msg != null) {
+                String lower = msg.toLowerCase();
+                if (lower.contains("failed to get build id") || lower.contains("no builds found")) {
+                    return true;
+                }
+            }
+            curr = curr.getCause();
+        }
+        return false;
+    }
+
+    /**
+     * Builds the formatted HTML notification template when a Veracode build ID is missing or failed (Policy Scan Required).
+     */
+    public String buildPolicyScanRequiredHtml() {
+        return """
+[code]
+<style>
+    .bg-gray {background-color: gray; color: white;}
+    .bg-green {background-color: green; color: white;}
+    .info, .bg-dodgerblue {background-color: dodgerblue; color: black;}
+    .verylow, .bg-yellowgreen {background-color: yellowgreen; color: black;}
+    .low, .bg-gold {background-color: gold; color: black;}
+    .medium, .bg-darkorange {background-color: darkorange; color: black;}
+    .high, .bg-red {background-color: red; color: white;}
+    .veryhigh, .bg-darkred {background-color: darkred; color: white;}
+    .heading {border-radius: 5px; display: inline-block; font-weight: bold;
+        padding: 5px 25px; text-transform: uppercase;}
+    .highlight {padding: 2px 5px 5px;}
+    .rounded {border-radius: 15px; display: inline-block; font-weight: bold;
+        margin: 1px; padding: 2px 7.5px; text-align: center;}
+    .minwidth {min-width: 50px;}
+</style>
+<h3 class="heading bg-red">Policy Scan Required</h3><br/>
+Unable to retrieve a valid Build ID for this application.<br/><br/>
+This may occur if:
+<ul>
+<li>No scan has been uploaded for the application.</li>
+<li>A scan is currently running or processing.</li>
+<li>The most recent scan has not completed successfully.</li>
+<li>No policy scan is available for review.</li>
+</ul>
+Code Review Services can only perform sign-off activities against a completed full application policy scan.<br/><br/>
+If a full scan of all application modules has been completed in a sandbox, the sandbox scan can be promoted to a policy scan without running a new scan:
+<a target="_blank" href="https://docs.veracode.com/r/t_promote_sandbox">Promote Sandbox to Policy Scan</a>.<br/><br/>
+Once a completed policy scan is available, please update the ticket and we will continue the review. If there are no new scans requiring assessment, please let us know.[/code]
+""";
     }
 
     /**
