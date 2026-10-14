@@ -680,20 +680,19 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
         }
 
         boolean isMarRequest = isMarRequestReason(requestReason);
-        boolean reviewProposalWithAi = true;
+        boolean isSignoffRequest = isSignoffRequestReason(requestReason);
+        boolean isApplicableRequest = isMarRequest || isSignoffRequest || requestReason == null;
+        boolean reviewProposal = config.isReviewProposal();
+        boolean reviewProposalWithAi = false;
         String aiModelToUse = null;
 
-        if (isMarRequest) {
-            boolean reviewProposal = config.isReviewProposal();
-            logger.info("Detected Mitigation Approval Review request for SCTASK {}. reviewProposal flag = {}", sctaskNumber, reviewProposal);
-            if (reviewProposal) {
-                aiModelToUse = config.getReviewProposalAiModel();
-                reviewProposalWithAi = true;
-                logger.info("Mitigation proposal review is ENABLED with AI model '{}' for SCTASK {}", aiModelToUse, sctaskNumber);
-            } else {
-                reviewProposalWithAi = false;
-                logger.info("Mitigation proposal review is DISABLED (reviewProposal=false). Updating review comments without AI proposal review for SCTASK {}", sctaskNumber);
-            }
+        if (reviewProposal && isApplicableRequest) {
+            aiModelToUse = config.getReviewProposalAiModel();
+            reviewProposalWithAi = true;
+            logger.info("Proposal review with AI is ENABLED with AI model '{}' for SCTASK {} (Request Reason: '{}')", aiModelToUse, sctaskNumber, requestReason);
+        } else {
+            logger.info("Proposal review with AI is DISABLED (reviewProposal={}, isApplicableRequest={}) for SCTASK {} (Request Reason: '{}')",
+                    reviewProposal, isApplicableRequest, sctaskNumber, requestReason);
         }
 
         VeracodeReportDTO report = null;
@@ -727,7 +726,6 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
 
         // 5. Post SCTASK Status Update (Sign-Off vs Pending)
         String reportStatus = (report.status != null) ? report.status : "Pending";
-        boolean isSignoffRequest = isSignoffRequestReason(requestReason);
 
         if (!isSignoffRequest && "Sign-Off".equalsIgnoreCase(reportStatus)) {
             logger.info("JSON status is 'Sign-Off', but Request Reason ('{}') is NOT Sign-Off for SCTASK {}. Qualifying only for Pending status block.",
@@ -923,20 +921,19 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
         }
 
         boolean isMarRequest = isMarRequestReason(requestReason);
-        boolean reviewProposalWithAi = true;
+        boolean isSignoffRequest = isSignoffRequestReason(requestReason);
+        boolean isApplicableRequest = isMarRequest || isSignoffRequest || requestReason == null;
+        boolean reviewProposal = config.isReviewProposal();
+        boolean reviewProposalWithAi = false;
         String aiModelToUse = null;
 
-        if (isMarRequest) {
-            boolean reviewProposal = config.isReviewProposal();
-            logger.info("Detected Checkmarx MAR request for SCTASK {}. reviewProposal flag = {}", sctaskNumber, reviewProposal);
-            if (reviewProposal) {
-                aiModelToUse = config.getReviewProposalAiModel();
-                reviewProposalWithAi = true;
-                logger.info("Checkmarx mitigation proposal review is ENABLED with AI model '{}' for SCTASK {}", aiModelToUse, sctaskNumber);
-            } else {
-                reviewProposalWithAi = false;
-                logger.info("Checkmarx mitigation proposal review is DISABLED (reviewProposal=false). Updating review comments without AI proposal review for SCTASK {}", sctaskNumber);
-            }
+        if (reviewProposal && isApplicableRequest) {
+            aiModelToUse = config.getReviewProposalAiModel();
+            reviewProposalWithAi = true;
+            logger.info("Checkmarx proposal review with AI is ENABLED with AI model '{}' for SCTASK {} (Request Reason: '{}')", aiModelToUse, sctaskNumber, requestReason);
+        } else {
+            logger.info("Checkmarx proposal review with AI is DISABLED (reviewProposal={}, isApplicableRequest={}) for SCTASK {} (Request Reason: '{}')",
+                    reviewProposal, isApplicableRequest, sctaskNumber, requestReason);
         }
 
         if (checkmarxService != null) {
@@ -963,7 +960,6 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
             }
 
             String reportStatus = (report.status != null) ? report.status : "Pending";
-            boolean isSignoffRequest = isSignoffRequestReason(requestReason);
             boolean hasOpenVulns = hasMediumOrAboveVulnerabilities(report);
 
             if (!isSignoffRequest && "Sign-Off".equalsIgnoreCase(reportStatus)) {

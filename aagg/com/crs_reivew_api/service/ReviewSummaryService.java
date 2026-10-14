@@ -174,11 +174,6 @@ public class ReviewSummaryService {
         String rawHtml = html.toString();
         return rawHtml.replaceAll("\r\n", "\n")
                       .replaceAll("\r", "\n")
-                      .replaceAll("\n", " ")
-                      .replaceAll("\\s+", " ")
-                      .replaceAll("> <", "><")
-                      .replaceAll("\\[code\\] ", "[code]")
-                      .replaceAll(" \\[\\/code\\]", "[/code]")
                       .trim();
     }
 
@@ -282,6 +277,140 @@ public class ReviewSummaryService {
 """, severityClass, displayedSeverity, flawContent, bgClass, label, count, fixByDate);
     }
 
+    private static class SeverityInfo {
+        final String name;
+        final int count;
+        final String cssClass;
+        SeverityInfo(String name, int count, String cssClass) {
+            this.name = name;
+            this.count = count;
+            this.cssClass = cssClass;
+        }
+    }
+
+    public Map<String, Integer> getScaSeverityCounts(VeracodeReportDTO dto) {
+        Map<String, Integer> sevCounts = new LinkedHashMap<>();
+        sevCounts.put("Very High", 0);
+        sevCounts.put("High", 0);
+        sevCounts.put("Medium", 0);
+        sevCounts.put("Low", 0);
+        sevCounts.put("Information", 0);
+
+        if (dto.scaDetails != null && !dto.scaDetails.isEmpty()) {
+            Pattern p = Pattern.compile("(?i)(Very\\s*High|VeryHigh|Critical|High|Medium|Low|Information|Info):\\s*(\\d+)");
+            for (VeracodeReportDTO.ScaDetailDTO detail : dto.scaDetails) {
+                if (detail.severityCounts != null) {
+                    Matcher m = p.matcher(detail.severityCounts);
+                    while (m.find()) {
+                        String raw = m.group(1).trim().replaceAll("\\s+", "").toLowerCase();
+                        String norm = "Medium";
+                        if (raw.equals("veryhigh") || raw.equals("critical")) norm = "Very High";
+                        else if (raw.equals("high")) norm = "High";
+                        else if (raw.equals("medium")) norm = "Medium";
+                        else if (raw.equals("low")) norm = "Low";
+                        else if (raw.equals("information") || raw.equals("info")) norm = "Information";
+
+                        int cnt = Integer.parseInt(m.group(2));
+                        sevCounts.put(norm, sevCounts.get(norm) + cnt);
+                    }
+                }
+            }
+        }
+
+        int totalFromDetails = sevCounts.values().stream().mapToInt(Integer::intValue).sum();
+        if (totalFromDetails == 0 && dto.scaSummary != null && dto.scaSummary.breakdown != null && !dto.scaSummary.breakdown.isEmpty()) {
+            for (Map.Entry<String, VeracodeReportDTO.SeverityBreakdownDTO> entry : dto.scaSummary.breakdown.entrySet()) {
+                String raw = entry.getKey() != null ? entry.getKey().trim().replaceAll("\\s+", "").toLowerCase() : "";
+                String norm = "Medium";
+                if (raw.equals("veryhigh") || raw.equals("critical")) norm = "Very High";
+                else if (raw.equals("high")) norm = "High";
+                else if (raw.equals("medium")) norm = "Medium";
+                else if (raw.equals("low")) norm = "Low";
+                else if (raw.equals("information") || raw.equals("info")) norm = "Information";
+
+                int val = entry.getValue() != null ? entry.getValue().total : 0;
+                sevCounts.put(norm, sevCounts.get(norm) + val);
+            }
+        }
+
+        return sevCounts;
+    }
+
+    public int getHighestSeverityRank(String severityCounts) {
+        if (severityCounts == null || severityCounts.trim().isEmpty()) {
+            return 99;
+        }
+        String s = severityCounts.toLowerCase().replaceAll("\\s+", "");
+        if (s.contains("veryhigh") || s.contains("critical")) return 1;
+        if (s.contains("high")) return 2;
+        if (s.contains("medium")) return 3;
+        if (s.contains("low")) return 4;
+        if (s.contains("info") || s.contains("information")) return 5;
+        return 99;
+    }
+
+    public String formatSecurityFindingsCell(String severityCounts, boolean isCheckmarx) {
+        if (severityCounts == null || severityCounts.trim().isEmpty()) {
+            return "None";
+        }
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        counts.put("Very High", 0);
+        counts.put("High", 0);
+        counts.put("Medium", 0);
+        counts.put("Low", 0);
+        counts.put("Information", 0);
+
+        Pattern p = Pattern.compile("(?i)(Very\\s*High|VeryHigh|Critical|High|Medium|Low|Information|Info):\\s*(\\d+)");
+        Matcher m = p.matcher(severityCounts);
+        boolean foundAny = false;
+        while (m.find()) {
+            foundAny = true;
+            String raw = m.group(1).trim().replaceAll("\\s+", "").toLowerCase();
+            String norm = "Medium";
+            if (raw.equals("veryhigh") || raw.equals("critical")) norm = "Very High";
+            else if (raw.equals("high")) norm = "High";
+            else if (raw.equals("medium")) norm = "Medium";
+            else if (raw.equals("low")) norm = "Low";
+            else if (raw.equals("information") || raw.equals("info")) norm = "Information";
+
+            int cnt = Integer.parseInt(m.group(2));
+            counts.put(norm, counts.get(norm) + cnt);
+        }
+
+        if (!foundAny) {
+            return safe(severityCounts);
+        }
+
+        List<String> rendered = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+            if (entry.getValue() > 0) {
+                String sev = entry.getKey();
+                int count = entry.getValue();
+                String displayedSev = sev;
+                String sevClass = sev.toLowerCase().replaceAll("\\s+", "");
+                if ("Very High".equals(sev)) {
+                    if (isCheckmarx) {
+                        displayedSev = "Critical";
+                        sevClass = "critical";
+                    } else {
+                        displayedSev = "Very High";
+                        sevClass = "veryhigh";
+                    }
+                } else if ("Information".equals(sev)) {
+                    displayedSev = "Info";
+                    sevClass = "info";
+                }
+                rendered.add(String.format("<span class=\"crs-rounded minwidth %s\">%s</span>: %d", sevClass, displayedSev, count));
+            }
+        }
+
+        return rendered.isEmpty() ? "None" : String.join("<br/>", rendered);
+    }
+
+    private String safe(String val, String fallback) {
+        return (val == null || val.trim().isEmpty()) ? fallback : val.trim();
+    }
+
     private String buildScaSection(VeracodeReportDTO dto) {
         if (dto.scaSummary == null || (dto.scaSummary.vulnerabilities == 0 && (dto.scaDetails == null || dto.scaDetails.isEmpty()))) {
             return "";
@@ -317,8 +446,50 @@ Code Review Services recommends upgrading the third-party component with a vulne
 <br/>
 """, nodeMsgUsed, javaMsgUsed, requestMsgUsed);
 
+        boolean isCheckmarx = dto.overview != null && "checkmarx".equalsIgnoreCase(dto.overview.scanType);
+        Map<String, Integer> sevCounts = getScaSeverityCounts(dto);
+
+        List<SeverityInfo> activeSeverities = new ArrayList<>();
+        if (sevCounts.get("Very High") > 0) {
+            activeSeverities.add(new SeverityInfo(isCheckmarx ? "Critical" : "Very High", sevCounts.get("Very High"), isCheckmarx ? "critical" : "veryhigh"));
+        }
+        if (sevCounts.get("High") > 0) {
+            activeSeverities.add(new SeverityInfo("High", sevCounts.get("High"), "high"));
+        }
+        if (sevCounts.get("Medium") > 0) {
+            activeSeverities.add(new SeverityInfo("Medium", sevCounts.get("Medium"), "medium"));
+        }
+        if (sevCounts.get("Low") > 0) {
+            activeSeverities.add(new SeverityInfo("Low", sevCounts.get("Low"), "low"));
+        }
+        if (sevCounts.get("Information") > 0) {
+            activeSeverities.add(new SeverityInfo("Info", sevCounts.get("Information"), "info"));
+        }
+
+        String vulnerabilitySentencePart = "";
+        if (!activeSeverities.isEmpty()) {
+            List<String> descriptions = new ArrayList<>();
+            for (SeverityInfo s : activeSeverities) {
+                descriptions.add(String.format("%d <span class=\"crs-rounded %s\">%s</span>", s.count, s.cssClass, s.name));
+            }
+            if (descriptions.size() > 1) {
+                String allButLast = String.join(", ", descriptions.subList(0, descriptions.size() - 1));
+                String last = descriptions.get(descriptions.size() - 1);
+                vulnerabilitySentencePart = allButLast + " and " + last;
+            } else {
+                vulnerabilitySentencePart = descriptions.get(0);
+            }
+        } else {
+            vulnerabilitySentencePart = String.valueOf(vulnerabilities);
+        }
+
+        StringBuilder listItems = new StringBuilder();
+        for (SeverityInfo s : activeSeverities) {
+            listItems.append(String.format("        <li><span class=\"crs-rounded minwidth %s\">%s</span>: %d</li>\n", s.cssClass, s.name, s.count));
+        }
+
         if (vulnerabilities == 0) {
-            scaHtml.append("""
+            scaHtml.append(String.format("""
 <h3 class="heading bg-green">Third-party Components</h3><br/>
 A review of the third-party components in the Software Composition Analysis was performed. There are no identified vulnerabilities in the Software Composition Analysis of the third-party components.<br/>
 <h4>Third-Party Component Summary</h4>
@@ -329,20 +500,20 @@ A review of the third-party components in the Software Composition Analysis was 
     </ul></li>
 </ul>
 <br/>
-""".formatted(totalPackages));
+""", totalPackages));
         } else {
-            scaHtml.append("""
+            scaHtml.append(String.format("""
 <h3 class="heading bg-red">Third-party Components</h3><br/>
-A review of the third-party components in the Software Composition Analysis was performed. There are %d vulnerabilities that affect %d third-party components.<br/>
+A review of the third-party components in the Software Composition Analysis was performed. There are %s severity vulnerabilities that affect %d third-party components.<br/>
 <h4>Third-Party Component Summary</h4>
 <ul>
     <li>Components: %d</li>
     <li>Vulnerable Components: %d</li>
-    <li>Vulnerabilities: %d</li>
+    <li>Vulnerabilities: %d<ul>
+%s    </ul></li>
 </ul>
 <br/>
-%s
-""".formatted(vulnerabilities, vulnerablePackages, totalPackages, vulnerablePackages, vulnerabilities, remediationGuidance));
+%s""", vulnerabilitySentencePart, vulnerablePackages, totalPackages, vulnerablePackages, vulnerabilities, listItems.toString(), remediationGuidance));
         }
 
         // Render SCA Detail Table
@@ -355,13 +526,19 @@ A review of the third-party components in the Software Composition Analysis was 
         }
         scaHtml.append(header);
 
-        if (dto.scaDetails != null) {
-            for (VeracodeReportDTO.ScaDetailDTO detail : dto.scaDetails) {
-                String safeVerHtml = dto.scaSafeVersionEnabled ? String.format("<td>%s</td>", safe(detail.safeVersion)) : "";
+        if (dto.scaDetails != null && !dto.scaDetails.isEmpty()) {
+            List<VeracodeReportDTO.ScaDetailDTO> sortedDetails = new ArrayList<>(dto.scaDetails);
+            sortedDetails.sort(Comparator.comparingInt(d -> getHighestSeverityRank(d.severityCounts)));
+
+            for (VeracodeReportDTO.ScaDetailDTO detail : sortedDetails) {
+                String safeVer = (detail.safeVersion != null && !detail.safeVersion.trim().isEmpty()) ? detail.safeVersion.trim() : "N/A";
+                String safeVerHtml = dto.scaSafeVersionEnabled ? String.format("          <td>%s</td>\n", safe(safeVer)) : "";
                 String cveLinks = "";
                 if (detail.cveList != null && !detail.cveList.isEmpty()) {
                     cveLinks = Arrays.stream(detail.cveList.split(","))
-                            .map(cve -> String.format("<a target=\"_blank\" href=\"http://web.nvd.nist.gov/view/vuln/detail?vulnId=%s\">%s</a>", cve.trim(), cve.trim()))
+                            .map(String::trim)
+                            .filter(cve -> !cve.isEmpty())
+                            .map(cve -> String.format("<a target=\"_blank\" href=\"http://web.nvd.nist.gov/view/vuln/detail?vulnId=%s\">%s</a>", cve, cve))
                             .collect(Collectors.joining("</div><div>"));
                 }
 
@@ -382,17 +559,19 @@ A review of the third-party components in the Software Composition Analysis was 
                     }
                 }
 
+                String severityHtml = formatSecurityFindingsCell(detail.severityCounts, isCheckmarx);
+                String fixByDate = (detail.remediation_due_date != null && !detail.remediation_due_date.trim().isEmpty()) ? detail.remediation_due_date.trim() : "N/A";
+
                 scaHtml.append(String.format("""
       <tr>
           <td>%s</td>
           <td>%s</td>
-          %s
-          <td>%s</td>
+%s          <td>%s</td>
           <td>%s</td>
           <td><div class="top_row"><div>%s</div></div></td>
           <td><span class="crs-rounded minwidth %s">%s</span></td>
       </tr>
-""", safe(detail.packageName), safe(detail.version), safeVerHtml, safe(detail.severityCounts), safe(detail.remediation_due_date), cveLinks, bgClass, label));
+""", safe(detail.packageName), safe(detail.version), safeVerHtml, severityHtml, safe(fixByDate), cveLinks, bgClass, label));
             }
         }
 
