@@ -739,15 +739,19 @@ public class SnowController {
                 }
                 String cleanDate = ticketScheduler.extractDateOnly(rawGenDate);
 
+                String actualBranch = (report != null && report.overview != null && report.overview.scanName != null && !report.overview.scanName.trim().isEmpty())
+                        ? report.overview.scanName.trim()
+                        : branchName;
+
                 // Download Checkmarx PDF report and locate corresponding JSON report
                 java.nio.file.Path pdfPath = null;
                 try {
-                    pdfPath = checkmarxService.downloadPdfReport(profileName, branchName);
+                    pdfPath = checkmarxService.downloadPdfReport(profileName, actualBranch);
                 } catch (Exception ex) {
                     logger.warn("Failed to download Checkmarx PDF report for {}: {}", profileName, ex.getMessage());
                 }
 
-                java.nio.file.Path jsonPath = checkmarxService.findReportJsonFile(profileName, branchName, report);
+                java.nio.file.Path jsonPath = checkmarxService.findReportJsonFile(profileName, actualBranch, report);
 
                 // Build ZIP folder name and create ZIP archive
                 String zipFolderName = ticketScheduler.buildCheckmarxZipFolderName(profileName, cleanDate, formattedAppVersion, ritmNumber);

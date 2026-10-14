@@ -106,8 +106,18 @@ public class CheckmarxService {
                 throw new RuntimeException("Error: Project ID not found for application: " + applicationName);
             }
 
-            // 3. Get Last Scan ID
-            String scanId = getLastScanId(token, projectId, branchName);
+            // 3. Get Last Scan ID (try specified branch first, fallback to latest project scan)
+            String scanId = null;
+            try {
+                scanId = getLastScanId(token, projectId, branchName);
+            } catch (Exception ex) {
+                if (branchName != null && !branchName.trim().isEmpty() && !"null".equalsIgnoreCase(branchName.trim())) {
+                    System.out.println("Warning: Could not find scan for branch '" + branchName + "'. Retrying without branch to retrieve latest project scan...");
+                    scanId = getLastScanId(token, projectId, null);
+                } else {
+                    throw ex;
+                }
+            }
             if (scanId == null) {
                 String branchMsg = (branchName != null && !branchName.trim().isEmpty() && !"null".equalsIgnoreCase(branchName.trim()))
                         ? (" for branch: " + branchName) : "";
@@ -947,7 +957,17 @@ public class CheckmarxService {
         if (projectId == null) {
             throw new RuntimeException("Error: Project ID not found for application: " + applicationName);
         }
-        String scanId = getLastScanId(token, projectId, branchName);
+        String scanId = null;
+        try {
+            scanId = getLastScanId(token, projectId, branchName);
+        } catch (Exception ex) {
+            if (branchName != null && !branchName.trim().isEmpty() && !"null".equalsIgnoreCase(branchName.trim())) {
+                System.out.println("Warning: Could not find scan for branch '" + branchName + "'. Retrying without branch to retrieve latest project scan for PDF download...");
+                scanId = getLastScanId(token, projectId, null);
+            } else {
+                throw ex;
+            }
+        }
         if (scanId == null) {
             String branchMsg = (branchName != null && !branchName.trim().isEmpty() && !"null".equalsIgnoreCase(branchName.trim()))
                     ? (" for branch: " + branchName) : "";

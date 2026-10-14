@@ -7,6 +7,7 @@ import com.crs_reivew_api.dto.SnowRitmDTO;
 import com.crs_reivew_api.dto.SnowScTaskDTO;
 import com.crs_reivew_api.dto.VeracodeReportDTO;
 import com.crs_reivew_api.service.CheckmarxService;
+import com.crs_reivew_api.service.ReviewSummaryService;
 import com.crs_reivew_api.service.SnowService;
 import com.crs_reivew_api.service.VeracodeService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -63,6 +64,7 @@ import java.util.regex.Pattern;
 public class TicketScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(TicketScheduler.class);
+    private static final Pattern SCAN_NAME_RITM_PATTERN = Pattern.compile("(?i)(?:^|[^a-zA-Z0-9])(RITM\\d+)[\\s\\)\\]\\.]*$");
 
     private final SnowService snowService;
     private final VeracodeService veracodeService;
@@ -72,6 +74,9 @@ public class TicketScheduler {
     
     @Autowired(required = false)
     private CheckmarxService checkmarxService;
+
+    @Autowired(required = false)
+    private ReviewSummaryService reviewSummaryService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -94,6 +99,14 @@ public class TicketScheduler {
 
     public void setCheckmarxService(CheckmarxService checkmarxService) {
         this.checkmarxService = checkmarxService;
+    }
+
+    public ReviewSummaryService getReviewSummaryService() {
+        return reviewSummaryService;
+    }
+
+    public void setReviewSummaryService(ReviewSummaryService reviewSummaryService) {
+        this.reviewSummaryService = reviewSummaryService;
     }
 
     /**
@@ -331,6 +344,19 @@ public class TicketScheduler {
 
         String cleanedProfile = cleanCheckmarxProfileName(profilePart);
         return new String[] { cleanedProfile, branchPart };
+    }
+
+    /**
+     * Checks if a string plausibly represents a git branch name (e.g. "merge", "master", "main", "dev")
+     * rather than a version number (e.g. "v1.0.0", "2.10.0.2") or empty/placeholder string.
+     */
+    public boolean isLikelyBranchName(String str) {
+        if (str == null || str.trim().isEmpty()) return false;
+        String s = str.trim().toLowerCase();
+        if (s.equals("n/a") || s.equals("na") || s.equals("none") || s.equals("null")) return false;
+        // If it starts with 'v' followed by digits and dots (like v1.0.0, v2.1) or pure numbers/dots, it's a version, not branch
+        if (s.matches("^v?\\d+(\\.\\d+)+.*$") || s.matches("^v?\\d+$")) return false;
+        return true;
     }
 
     private static final Pattern MULTI_PART_VERSION =
@@ -727,12 +753,24 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
         // 5. Post SCTASK Status Update (Sign-Off vs Pending)
         String reportStatus = (report.status != null) ? report.status : "Pending";
 
-        if (!isSignoffRequest && "Sign-Off".equalsIgnoreCase(reportStatus)) {
-            logger.info("JSON status is 'Sign-Off', but Request Reason ('{}') is NOT Sign-Off for SCTASK {}. Qualifying only for Pending status block.",
-                    requestReason, sctaskNumber);
+        if (!isSignoffRequest && isSignOffStatus(reportStatus)) {
+            logger.info("JSON status is '{}', but Request Reason ('{}') is NOT Sign-Off for SCTASK {}. Qualifying only for Pending status block.",
+                    reportStatus, requestReason, sctaskNumber);
         }
 
-        boolean canAutoSignoff = "Sign-Off".equalsIgnoreCase(reportStatus) && isSignoffRequest && config.isAutoSignoffEnabled();
+        // Check if report status is Sign-Off but scanName belongs to an older RITM sign-off
+        String scanName = (report.overview != null) ? report.overview.scanName : null;
+        String scanRitm = extractRitmFromScanName(scanName);
+        if (isSignOffStatus(reportStatus) && scanRitm != null && (ritmNumber == null || !scanRitm.equalsIgnoreCase(ritmNumber.trim()))) {
+            logger.warn("JSON status is '{}', but scanName '{}' ends with RITM '{}' which does not match processing RITM '{}' for SCTASK {}. Generating New Policy Scan Required notification.",
+                    reportStatus, scanName, scanRitm, ritmNumber, sctaskNumber);
+            String newPolicyScanRequiredHtml = buildNewPolicyScanRequiredHtml(report.overview);
+            saveAutoLogFile(ritmNumber, newPolicyScanRequiredHtml);
+            executePendingBlock(sctaskNumber, ensureCodeTags(newPolicyScanRequiredHtml), true);
+            return;
+        }
+
+        boolean canAutoSignoff = isSignOffStatus(reportStatus) && isSignoffRequest && config.isAutoSignoffEnabled();
 
         if (canAutoSignoff) {
             assignSctaskForSignOff(sctaskNumber);
@@ -857,6 +895,10 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
      * Evaluates crs.snow.post-scheduler-comments-to-snow and crs.snow.comments.status-update.
      */
     public void executePendingBlock(String sctaskNumber, String reviewCommentsHtml) {
+        executePendingBlock(sctaskNumber, reviewCommentsHtml, false);
+    }
+
+    public void executePendingBlock(String sctaskNumber, String reviewCommentsHtml, boolean forcePendingState) {
         if (!config.isPostSchedulerCommentsToSnow()) {
             logger.info("postSchedulerCommentsToSnow is false. Skipping ServiceNow comments posting for SCTASK {}.", sctaskNumber);
             return;
@@ -866,11 +908,13 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
         pendingPayload.put("u_number", sctaskNumber);
         pendingPayload.put("u_additional_comments", reviewCommentsHtml != null ? reviewCommentsHtml : "");
 
-        if (config.isCommentsStatusUpdate()) {
+        if (forcePendingState || config.isCommentsStatusUpdate()) {
             pendingPayload.put("u_action", "setReviewComments");
             String status = config.getCommentsStatus();
             String resolvedCode = com.crs_reivew_api.util.SnowSctaskStatusMap.resolveStatusToStateCode(status != null ? status : "Pending");
-            if (resolvedCode != null) {
+            if (forcePendingState) {
+                pendingPayload.put("u_state", -5);
+            } else if (resolvedCode != null) {
                 try {
                     pendingPayload.put("u_state", Integer.parseInt(resolvedCode));
                 } catch (NumberFormatException e) {
@@ -885,7 +929,7 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
                 pendingPayload.put("u_assigned_to", userId.trim());
             }
 
-            if ("-5".equals(resolvedCode) || "pending".equalsIgnoreCase(status)) {
+            if (forcePendingState || "-5".equals(resolvedCode) || "pending".equalsIgnoreCase(status)) {
                 pendingPayload.put("u_pending_reason", "Awaiting Customer Response");
                 pendingPayload.put("u_end_pending", calculateWorkingDaysAhead(2));
             }
@@ -910,7 +954,9 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
     void processNonVeracodeTask(String sctaskNumber, String ritmNumber, String scaTool, String rawAppProfileName, String appVersion, String requestReason) {
         String[] profileAndBranch = parseNonVeracodeProfileAndBranch(rawAppProfileName);
         String profileName = profileAndBranch[0];
-        String branchName = (profileAndBranch[1] != null && !profileAndBranch[1].trim().isEmpty()) ? profileAndBranch[1].trim() : appVersion;
+        String branchName = (profileAndBranch[1] != null && !profileAndBranch[1].trim().isEmpty())
+                ? profileAndBranch[1].trim()
+                : (isLikelyBranchName(appVersion) ? appVersion.trim() : null);
 
         logger.info("Processing Non-Veracode ({}) task for SCTASK: {}, RITM: {}, Profile: '{}', Branch: '{}', Version: '{}', Request Reason: '{}'",
                 scaTool, sctaskNumber, ritmNumber, profileName, branchName, appVersion, requestReason);
@@ -978,14 +1024,18 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
                 String cleanDate = extractDateOnly(rawGenDate);
                 String formattedVersion = sanitizeApplicationVersion(appVersion);
 
+                String actualBranch = (report.overview != null && report.overview.scanName != null && !report.overview.scanName.trim().isEmpty())
+                        ? report.overview.scanName.trim()
+                        : (branchName != null ? branchName : "");
+
                 Path pdfPath = null;
                 try {
-                    pdfPath = checkmarxService.downloadPdfReport(profileName, branchName);
+                    pdfPath = checkmarxService.downloadPdfReport(profileName, actualBranch);
                 } catch (Exception ex) {
                     logger.warn("Could not download Checkmarx PDF report for {}: {}", profileName, ex.getMessage());
                 }
 
-                Path jsonPath = checkmarxService.findReportJsonFile(profileName, branchName, report);
+                Path jsonPath = checkmarxService.findReportJsonFile(profileName, actualBranch, report);
                 String zipFolderName = buildCheckmarxZipFolderName(profileName, cleanDate, formattedVersion, ritmNumber);
                 String zipFileName = zipFolderName + ".zip";
                 String attachmentUrl = "";
@@ -1016,7 +1066,7 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
                         if (report.assessmentFindings != null) ritmVarsNode.put("assessment_findings", report.assessmentFindings);
                         ritmVarsNode.put("date_of_assessed_scan", cleanDate);
                         ritmVarsNode.put("application_version", formattedVersion);
-                        ritmVarsNode.put("scan_name", branchName != null ? branchName : "");
+                        ritmVarsNode.put("scan_name", actualBranch);
                         ritmVarsNode.put("scan_tool_profile_url", profileUrl);
                         ritmVarsNode.put("application_profile_url", profileUrl);
                         if (report.scanUrl != null) ritmVarsNode.put("scan_url", report.scanUrl);
@@ -1381,6 +1431,41 @@ If a full scan of all application modules has been completed in a sandbox, the s
 <a target="_blank" href="https://docs.veracode.com/r/t_promote_sandbox">Promote Sandbox to Policy Scan</a>.<br/><br/>
 Once a completed policy scan is available, please update the ticket and we will continue the review. If there are no new scans requiring assessment, please let us know.[/code]
 """;
+    }
+
+    /**
+     * Extracts a trailing RITM number from a scan name (e.g. '2026-10-14 1.0.0 APR RITM0012345' -> 'RITM0012345').
+     * Returns null if the scan name does not end with a valid RITM number.
+     */
+    public String extractRitmFromScanName(String scanName) {
+        if (scanName == null || scanName.trim().isEmpty()) {
+            return null;
+        }
+        Matcher matcher = SCAN_NAME_RITM_PATTERN.matcher(scanName.trim());
+        if (matcher.find()) {
+            return matcher.group(1).toUpperCase();
+        }
+        return null;
+    }
+
+    /**
+     * Checks if a status string represents a Sign-Off status (e.g. 'Sign-Off', 'Signoff', 'Siganoff').
+     */
+    public boolean isSignOffStatus(String status) {
+        if (status == null) return false;
+        String clean = status.trim().toLowerCase().replaceAll("[^a-z]", "");
+        return clean.equals("signoff") || clean.equals("siganoff");
+    }
+
+    /**
+     * Builds the formatted HTML notification template when a scan was previously signed off
+     * for an older ticket (scanName ends with a different RITM number than the one being processed).
+     */
+    public String buildNewPolicyScanRequiredHtml(VeracodeReportDTO.ScanOverviewDTO overview) {
+        if (reviewSummaryService != null) {
+            return reviewSummaryService.buildNewPolicyScanRequiredHtml(overview);
+        }
+        return new ReviewSummaryService(config).buildNewPolicyScanRequiredHtml(overview);
     }
 
     /**

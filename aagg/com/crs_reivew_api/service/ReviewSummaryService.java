@@ -35,7 +35,7 @@ public class ReviewSummaryService {
     .heading {border-radius: 5px; display: inline-block; font-weight: bold;
         padding: 5px 25px; text-transform: uppercase;}
     .highlight {padding: 2px 5px 5px;}
-    .crs-rounded {border-radius: 15px; display: inline-block; font-weight: bold;
+    .crs-rounded, .rounded {border-radius: 15px; display: inline-block; font-weight: bold;
         margin: 1px; padding: 2px 7.5px; text-align: center;}
     .minwidth {min-width: 50px;}
     .textbold {font-weight: bold; font-size: 1.2em;color: red;}
@@ -95,29 +95,7 @@ public class ReviewSummaryService {
         html.append(HEADER_STYLE);
 
         // Build Main Header
-        String accountId = safe(dto.overview.accountId);
-        String appId = safe(dto.overview.appId);
-        String buildId = safe(dto.overview.buildId);
-        String analysisId = safe(dto.overview.analysisId);
-        String unitId = safe(dto.overview.staticAnalysisUnitId);
-        String sandboxId = safe(dto.overview.sandboxId);
-        String scanName = safe(dto.overview.scanName);
-        String profileName = safe(dto.overview.applicationName);
-
-        String mainHeader;
-        if ("checkmarx".equalsIgnoreCase(dto.overview.scanType)) {
-            String scanUrl = (!sandboxId.isEmpty()) ? sandboxId : "https://us.ast.checkmarx.net/";
-            String appUrl = (!appId.isEmpty()) ? "https://us.ast.checkmarx.net/projects/" + appId : "https://us.ast.checkmarx.net/";
-            mainHeader = String.format(
-                "Code Review Services (CRS) has assessed your latest policy-level scan <code><a target=\"_blank\" href=\"%s\">%s</a></code> of the <code><a target=\"_blank\" href=\"%s\">%s</a></code> application for quality and completeness and reviewed the open findings and available mitigation proposals. If more assistance is needed, please schedule a consultation call by selecting the <i><b>Remediation Consultation</b></i> option from the appointment calendar. For more help, refer to the <i><b>Scheduling Consultations</b></i> section, as detailed in the <a class=\"crs-rounded bg-gray\" target=\"_blank\" href=\"https://pwceur.sharepoint.com/:w:/r/sites/GBL-IFS-NIS-Application-Security/AppReadiness/CRS%%20Documents/Client-Facing%%20Documentation/CRS%%20Process%%20Overview.docx?d=w60b17b59a86342efa122e0767f68490f\">CRS Process Overview</a> document.<br/>\n<hr/>\n",
-                scanUrl, scanName, appUrl, profileName
-            );
-        } else {
-            mainHeader = String.format(
-                "Code Review Services (CRS) has assessed your latest policy-level scan <code><a target=\"_blank\" href=\"https://analysiscenter.veracode.com/auth/index.jsp#StaticOverview:%s:%s:%s:%s:%s::::%s\">%s</a></code> of the <code><a target=\"_blank\" href=\"https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:%s:%s:%s\">%s</a></code> application for quality and completeness and reviewed the open findings and available mitigation proposals. If more assistance is needed, please schedule a consultation call by selecting the <i><b>Remediation Consultation</b></i> option from the appointment calendar. For more help, refer to the <i><b>Scheduling Consultations</b></i> section, as detailed in the <a class=\"crs-rounded bg-gray\" target=\"_blank\" href=\"https://pwceur.sharepoint.com/:w:/r/sites/GBL-IFS-NIS-Application-Security/AppReadiness/CRS%%20Documents/Client-Facing%%20Documentation/CRS%%20Process%%20Overview.docx?d=w60b17b59a86342efa122e0767f68490f\">CRS Process Overview</a> document.<br/>\n<hr/>\n",
-                accountId, appId, buildId, analysisId, unitId, sandboxId, scanName, accountId, appId, buildId, profileName
-            );
-        }
+        String mainHeader = buildMainHeader(dto.overview);
         html.append(mainHeader);
 
         // Check Scan Too Old Notice
@@ -703,6 +681,81 @@ Confirm if the file(s) below are required for production, and <b>if so, unminify
             }
         }
         return set;
+    }
+
+    public String encodeCheckmarxBranch(String branch) {
+        if (branch == null || branch.trim().isEmpty()) {
+            return "";
+        }
+        String clean = branch.trim();
+        try {
+            clean = java.net.URLDecoder.decode(clean, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception ignored) {}
+        return java.net.URLEncoder.encode(clean, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
+    public String buildCheckmarxProfileUrl(String appId, String branch) {
+        String safeAppId = (appId != null && !appId.trim().isEmpty()) ? appId.trim() : "---";
+        String encodedBranch = encodeCheckmarxBranch(branch);
+        return String.format("https://us.ast.checkmarx.net/projects/%s/overview?branch=%s", safeAppId, encodedBranch);
+    }
+
+    public String buildMainHeader(VeracodeReportDTO.ScanOverviewDTO overview) {
+        if (overview == null) {
+            return "";
+        }
+        String accountId = safe(overview.accountId);
+        String appId = safe(overview.appId);
+        String buildId = safe(overview.buildId);
+        String analysisId = safe(overview.analysisId);
+        String unitId = safe(overview.staticAnalysisUnitId);
+        String sandboxId = safe(overview.sandboxId);
+        String scanName = safe(overview.scanName);
+        String profileName = safe(overview.applicationName);
+
+        if ("checkmarx".equalsIgnoreCase(overview.scanType)) {
+            String encodedBranch = encodeCheckmarxBranch(scanName);
+            String profileUrl = !appId.isEmpty()
+                    ? String.format("https://us.ast.checkmarx.net/projects/%s/overview?branch=%s", appId, encodedBranch)
+                    : "https://us.ast.checkmarx.net/";
+            String viewerLink = (!sandboxId.isEmpty()) ? sandboxId : profileUrl;
+
+            return String.format("""
+Code Review Services (CRS) has assessed your latest scan <code><a target="_blank" href="%s">%s</a></code> (SAST) of the <code><a target="_blank" href="%s">%s</a></code> application from branch <code class="crs-rounded bg-gray">%s</code> for quality and completeness and reviewed the open findings and available mitigation proposals. Please take a look at those findings in the comments below. If more assistance is needed, please schedule a consultation call by selecting the <i><b>Remediation Consultation</b></i> option from the appointment calendar. For more help, refer to the <i><b>Scheduling Consultations</b></i> section, as detailed in the <a class="crs-rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/:w:/r/sites/GBL-IFS-NIS-Application-Security/AppReadiness/CRS%%20Documents/Client-Facing%%20Documentation/CRS%%20Process%%20Overview.docx?d=w60b17b59a86342efa122e0767f68490f">CRS Process Overview</a> document.<br/>
+<hr/>
+""", viewerLink, appId, profileUrl, profileName, scanName);
+        } else {
+            return String.format(
+                "Code Review Services (CRS) has assessed your latest policy-level scan <code><a target=\"_blank\" href=\"https://analysiscenter.veracode.com/auth/index.jsp#StaticOverview:%s:%s:%s:%s:%s::::%s\">%s</a></code> of the <code><a target=\"_blank\" href=\"https://analysiscenter.veracode.com/auth/index.jsp#HomeAppProfile:%s:%s:%s\">%s</a></code> application for quality and completeness and reviewed the open findings and available mitigation proposals. If more assistance is needed, please schedule a consultation call by selecting the <i><b>Remediation Consultation</b></i> option from the appointment calendar. For more help, refer to the <i><b>Scheduling Consultations</b></i> section, as detailed in the <a class=\"crs-rounded bg-gray\" target=\"_blank\" href=\"https://pwceur.sharepoint.com/:w:/r/sites/GBL-IFS-NIS-Application-Security/AppReadiness/CRS%%20Documents/Client-Facing%%20Documentation/CRS%%20Process%%20Overview.docx?d=w60b17b59a86342efa122e0767f68490f\">CRS Process Overview</a> document.<br/>\n<hr/>\n",
+                accountId, appId, buildId, analysisId, unitId, sandboxId, scanName, accountId, appId, buildId, profileName
+            );
+        }
+    }
+
+    /**
+     * Builds the formatted HTML notification template when a scan was previously signed off
+     * for an older ticket (scanName ends with a different RITM number).
+     */
+    public String buildNewPolicyScanRequiredHtml(VeracodeReportDTO.ScanOverviewDTO overview) {
+        StringBuilder html = new StringBuilder();
+        html.append(HEADER_STYLE);
+        if (overview != null) {
+            String header = buildMainHeader(overview);
+            html.append(header);
+            if (!header.endsWith("<hr/>\n") && !header.endsWith("<hr/>")) {
+                html.append("<hr/>\n");
+            }
+        }
+        html.append("""
+<h3 class="heading bg-red">New Policy Scan Required</h3></br>
+There is no new policy scan to review since the last sign-off assessment.<br/>
+<br/>
+Please note that Code Review Services will only take action on full application policy scans. If a new full scan of all of the modules in the application has been completed in the sandbox, the <a target="_blank" href="https://docs.veracode.com/r/t_promote_sandbox">sandbox scan can be promoted to a policy scan</a> without the need to run a new scan.<br/>
+<br/>
+If there are no new scans that need to be assessed for sign-off, please let us know.
+""");
+        html.append(FOOTER_MSG);
+        return html.toString();
     }
 
     private String safe(String val) {
