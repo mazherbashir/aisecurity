@@ -78,6 +78,9 @@ public class TicketScheduler {
     @Autowired(required = false)
     private ReviewSummaryService reviewSummaryService;
 
+    @Autowired(required = false)
+    private com.crs_reivew_api.statistics.service.SchedulerMetricsService metricsService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public TicketScheduler(
@@ -109,6 +112,14 @@ public class TicketScheduler {
         this.reviewSummaryService = reviewSummaryService;
     }
 
+    public com.crs_reivew_api.statistics.service.SchedulerMetricsService getMetricsService() {
+        return metricsService;
+    }
+
+    public void setMetricsService(com.crs_reivew_api.statistics.service.SchedulerMetricsService metricsService) {
+        this.metricsService = metricsService;
+    }
+
     /**
      * Scheduled job running inside the Spring Boot server process.
      * Repetition delay is controlled via crs.snow.scheduler.delay-ms (default 5 minutes / 300000ms).
@@ -120,7 +131,13 @@ public class TicketScheduler {
             return;
         }
 
+        if (metricsService != null) {
+            metricsService.startPolling();
+        }
+
         logger.info("Starting ServiceNow SCTASK Scheduler run...");
+        int processedCount = 0;
+        int skippedCount = 0;
         try {
             JsonNode rootNode = fetchOpenTicketsFromServiceNow();
             if (rootNode == null || !rootNode.has("result") || !rootNode.get("result").isArray()) {
@@ -131,9 +148,6 @@ public class TicketScheduler {
             JsonNode tasksArray = rootNode.get("result");
             int totalCount = tasksArray.size();
             logger.info("Retrieved {} open catalog task(s) from ServiceNow.", totalCount);
-
-            int processedCount = 0;
-            int skippedCount = 0;
 
             for (JsonNode item : tasksArray) {
                 SnowScTaskDTO scTaskDto = snowService.extractScTaskDto(item);
@@ -149,6 +163,10 @@ public class TicketScheduler {
                     logger.debug("SCTASK {} is already processed (in TaskMemory LRU). Skipping.", sctaskNumber);
                     skippedCount++;
                     continue;
+                }
+
+                if (metricsService != null) {
+                    metricsService.startProcessingTicket(sctaskNumber, ritmNumber);
                 }
 
                 logger.info("Processing new SCTASK: {} (Associated RITM: {})", sctaskNumber, ritmNumber);
@@ -167,12 +185,18 @@ public class TicketScheduler {
                 String appVersion = (ritmDto != null) ? ritmDto.getApplicationVersion() : null;
                 String requestReason = (ritmDto != null) ? ritmDto.getRequestReason() : null;
 
-                if (scaTool != null && scaTool.toLowerCase().contains("veracode")) {
-                    logger.info("Detected Veracode SCA Tool for SCTASK {} (RITM: {}). Raw Profile: '{}', Version: '{}', Request Reason: '{}'", sctaskNumber, ritmNumber, appProfileName, appVersion, requestReason);
-                    processVeracodeTask(sctaskNumber, ritmNumber, appProfileName, appVersion, requestReason);
-                } else {
-                    logger.info("Detected Non-Veracode SCA Tool ('{}') for SCTASK {} (RITM: {}). Considering as Checkmarx. Raw Profile: '{}', Version: '{}', Request Reason: '{}'", scaTool, sctaskNumber, ritmNumber, appProfileName, appVersion, requestReason);
-                    processNonVeracodeTask(sctaskNumber, ritmNumber, scaTool != null ? scaTool : "Checkmarx", appProfileName, appVersion, requestReason);
+                try {
+                    if (scaTool != null && scaTool.toLowerCase().contains("veracode")) {
+                        logger.info("Detected Veracode SCA Tool for SCTASK {} (RITM: {}). Raw Profile: '{}', Version: '{}', Request Reason: '{}'", sctaskNumber, ritmNumber, appProfileName, appVersion, requestReason);
+                        processVeracodeTask(sctaskNumber, ritmNumber, appProfileName, appVersion, requestReason);
+                    } else {
+                        logger.info("Detected Non-Veracode SCA Tool ('{}') for SCTASK {} (RITM: {}). Considering as Checkmarx. Raw Profile: '{}', Version: '{}', Request Reason: '{}'", scaTool, sctaskNumber, ritmNumber, appProfileName, appVersion, requestReason);
+                        processNonVeracodeTask(sctaskNumber, ritmNumber, scaTool != null ? scaTool : "Checkmarx", appProfileName, appVersion, requestReason);
+                    }
+                } finally {
+                    if (metricsService != null) {
+                        metricsService.clearCurrentTicket();
+                    }
                 }
 
                 // Call generic placeholder processTicket method
@@ -191,6 +215,10 @@ public class TicketScheduler {
 
         } catch (Exception e) {
             logger.error("Error occurred during ServiceNow SCTASK Scheduler run: {}", e.getMessage(), e);
+        } finally {
+            if (metricsService != null) {
+                metricsService.finishPolling(processedCount, skippedCount);
+            }
         }
     }
 
@@ -695,6 +723,7 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
     }
 
     void processVeracodeTask(String sctaskNumber, String ritmNumber, String rawAppProfileName, String rawAppVersion, String requestReason) {
+        long startTime = System.currentTimeMillis();
         String cleanProfile = cleanVeracodeProfileName(rawAppProfileName);
         String formattedAppVersion = sanitizeApplicationVersion(rawAppVersion);
         logger.info("Processing Veracode task for SCTASK: {}, RITM: {}, Cleaned Profile: '{}', Sanitized Version: '{}', Request Reason: '{}'",
@@ -702,6 +731,10 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
 
         if (cleanProfile == null || cleanProfile.isEmpty()) {
             logger.warn("Cleaned Application Profile Name is empty for SCTASK {}", sctaskNumber);
+            if (metricsService != null) {
+                metricsService.recordTicketResult(sctaskNumber, ritmNumber, "VERACODE", requestReason,
+                        "ERROR", "FAILED", "PROFILE_NOT_FOUND", System.currentTimeMillis() - startTime);
+            }
             return;
         }
 
@@ -723,16 +756,19 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
 
         VeracodeReportDTO report = null;
         String reviewCommentsHtml = null;
+        String veracodeErrorType = null;
 
         try {
             report = veracodeService.getFinalReport(cleanProfile, null, null, true, true, aiModelToUse, reviewProposalWithAi);
             reviewCommentsHtml = (report != null) ? report.reviewCommentsHtml : null;
         } catch (Exception e) {
             if (isBuildIdError(e)) {
+                veracodeErrorType = "SCAN_NOT_FOUND";
                 logger.warn("Veracode build ID missing or failed for profile '{}' for SCTASK {}: {}. Generating Policy Scan Required notification.",
                         cleanProfile, sctaskNumber, e.getMessage());
                 reviewCommentsHtml = buildPolicyScanRequiredHtml();
             } else {
+                veracodeErrorType = "PROFILE_NOT_FOUND";
                 logger.warn("Veracode profile '{}' not found or error occurred for SCTASK {}: {}. Generating profile missing notification.",
                         cleanProfile, sctaskNumber, e.getMessage());
                 reviewCommentsHtml = buildMissingVeracodeProfileHtml(cleanProfile, ritmNumber);
@@ -746,6 +782,11 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
         if (report == null) {
             // Missing profile or build ID error case: post notification comment to ServiceNow SCTASK if comments posting enabled
             executePendingBlock(sctaskNumber, ensureCodeTags(reviewCommentsHtml));
+            if (metricsService != null) {
+                metricsService.recordTicketResult(sctaskNumber, ritmNumber, "VERACODE", requestReason,
+                        veracodeErrorType != null ? veracodeErrorType : "ERROR", "FAILED",
+                        veracodeErrorType != null ? veracodeErrorType : "SCAN_NOT_FOUND", System.currentTimeMillis() - startTime);
+            }
             return;
         }
 
@@ -767,6 +808,10 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
             String newPolicyScanRequiredHtml = buildNewPolicyScanRequiredHtml(report.overview);
             saveAutoLogFile(ritmNumber, newPolicyScanRequiredHtml);
             executePendingBlock(sctaskNumber, ensureCodeTags(newPolicyScanRequiredHtml), true);
+            if (metricsService != null) {
+                metricsService.recordTicketResult(sctaskNumber, ritmNumber, "VERACODE", requestReason,
+                        "RESCAN_REQUIRED", "PENDING", "RESCAN_REQUIRED", System.currentTimeMillis() - startTime);
+            }
             return;
         }
 
@@ -859,10 +904,20 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
             JsonNode closeResp = snowService.updateScTask(closePayload);
             logger.info("ServiceNow closeSctask response for {}: {}", sctaskNumber, closeResp);
 
+            if (metricsService != null) {
+                metricsService.recordTicketResult(sctaskNumber, ritmNumber, "VERACODE", requestReason,
+                        "CLEAN_SIGNOFF", "SUCCESS", null, System.currentTimeMillis() - startTime);
+            }
+
         } else {
             logger.info("Report status is '{}' (not eligible for auto sign-off). PDF report download and attachment upload are skipped for SCTASK {} (only performed for Sign-Off). Executing pending comments block.",
                     reportStatus, sctaskNumber);
             executePendingBlock(sctaskNumber, reviewCommentsHtml);
+            if (metricsService != null) {
+                String action = isMarRequest ? "MITIGATION_REVIEW" : "COMMENTS_ADDED";
+                metricsService.recordTicketResult(sctaskNumber, ritmNumber, "VERACODE", requestReason,
+                        action, "PENDING", null, System.currentTimeMillis() - startTime);
+            }
         }
     }
 
@@ -952,6 +1007,7 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
     }
 
     void processNonVeracodeTask(String sctaskNumber, String ritmNumber, String scaTool, String rawAppProfileName, String appVersion, String requestReason) {
+        long startTime = System.currentTimeMillis();
         String[] profileAndBranch = parseNonVeracodeProfileAndBranch(rawAppProfileName);
         String profileName = profileAndBranch[0];
         String branchName = (profileAndBranch[1] != null && !profileAndBranch[1].trim().isEmpty())
@@ -963,6 +1019,10 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
 
         if (profileName == null || profileName.isEmpty()) {
             logger.warn("Profile name is empty after cleaning for Checkmarx SCTASK {}. Skipping.", sctaskNumber);
+            if (metricsService != null) {
+                metricsService.recordTicketResult(sctaskNumber, ritmNumber, scaTool != null ? scaTool : "Checkmarx", requestReason,
+                        "ERROR", "FAILED", "PROFILE_NOT_FOUND", System.currentTimeMillis() - startTime);
+            }
             return;
         }
 
@@ -1001,6 +1061,10 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
                 logger.warn("Checkmarx report could not be retrieved for SCTASK {} / Profile '{}'", sctaskNumber, profileName);
                 if (reviewCommentsHtml != null && !reviewCommentsHtml.trim().isEmpty()) {
                     executePendingBlock(sctaskNumber, ensureCodeTags(reviewCommentsHtml));
+                }
+                if (metricsService != null) {
+                    metricsService.recordTicketResult(sctaskNumber, ritmNumber, scaTool != null ? scaTool : "Checkmarx", requestReason,
+                            "ERROR", "FAILED", "SCAN_NOT_FOUND", System.currentTimeMillis() - startTime);
                 }
                 return;
             }
@@ -1095,11 +1159,21 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
 
                 JsonNode closeResp = snowService.updateScTask(closePayload);
                 logger.info("ServiceNow Checkmarx closeSctask response for {}: {}", sctaskNumber, closeResp);
+
+                if (metricsService != null) {
+                    metricsService.recordTicketResult(sctaskNumber, ritmNumber, scaTool != null ? scaTool : "Checkmarx", requestReason,
+                            "CLEAN_SIGNOFF", "SUCCESS", null, System.currentTimeMillis() - startTime);
+                }
             } else {
                 logger.info("Checkmarx report status is '{}' (hasOpenVulns={}, isSignoffRequest={}, autoSignoffCheckmarxEnabled={}). PDF download and attachment upload are skipped for SCTASK {} (only performed for Sign-Off). Executing pending comments block.",
                         reportStatus, hasOpenVulns, isSignoffRequest, config.isAutoSignoffCheckmarxEnabled(), sctaskNumber);
                 // Shared Pending Block
                 executePendingBlock(sctaskNumber, reviewCommentsHtml);
+                if (metricsService != null) {
+                    String action = isMarRequest ? "MITIGATION_REVIEW" : "COMMENTS_ADDED";
+                    metricsService.recordTicketResult(sctaskNumber, ritmNumber, scaTool != null ? scaTool : "Checkmarx", requestReason,
+                            action, "PENDING", null, System.currentTimeMillis() - startTime);
+                }
             }
         }
     }
