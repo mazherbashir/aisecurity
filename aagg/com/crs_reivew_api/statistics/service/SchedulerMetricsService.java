@@ -67,6 +67,8 @@ public class SchedulerMetricsService {
             if (created) {
                 logger.info("Initialized scheduler database directory: {}", dbDir.getAbsolutePath());
             }
+        }
+
         // Fail-safe auto-recovery: if H2 database is empty, restore from backup log
         restoreFromBackupIfEmpty();
 
