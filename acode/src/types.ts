@@ -58,3 +58,19 @@ export interface AggregatedGroup {
 export type ToolName = 'Veracode' | 'Checkmarx';
 
 export type AIProvider = string;
+
+export interface DuplicateTicketItem {
+  sctask: string;
+  ritm: string;
+  state: string;
+  title: string;
+  owner: string;
+}
+
+export interface DuplicateTicketsResponse {
+  sctask: string;
+  ritm: string;
+  applicationProfileName: string;
+  duplicateCount: number;
+  duplicates: DuplicateTicketItem[];
+}

@@ -95,6 +95,21 @@ public class VeracodeConfig {
     @Value("${crs.snow.sctask-update-endpoint:/now/import/u_generic_catalog_task_update}")
     private String snowSctaskUpdateEndpoint = "/now/import/u_generic_catalog_task_update";
 
+    @Value("${crs.snow.check-duplicate-requests:true}")
+    private boolean checkDuplicateRequests = true;
+
+    @Value("${crs.snow.sctask-cat-item:6382512ddb59bf40dbf414a05b96194e}")
+    private String snowSctaskCatItem = "6382512ddb59bf40dbf414a05b96194e";
+
+    @Value("${crs.snow.sctask-assignment-group:0af08aab1b8704d09b6165b9bd4bcbdf}")
+    private String snowSctaskAssignmentGroup = "0af08aab1b8704d09b6165b9bd4bcbdf";
+
+    @Value("${crs.snow.sctask-app-profile-variable-sysid:e1147a86dbdb8854dbf414a05b96198f}")
+    private String snowSctaskAppProfileVariableSysId = "e1147a86dbdb8854dbf414a05b96198f";
+
+    @Value("${crs.snow.duplicate-request-limit:10}")
+    private int snowDuplicateRequestLimit = 10;
+
     @Value("${crs.snow.scheduler.enabled:true}")
     private boolean snowSchedulerEnabled = true;
 
@@ -247,6 +262,46 @@ public class VeracodeConfig {
 
     public void setSnowSctaskUpdateEndpoint(String snowSctaskUpdateEndpoint) {
         this.snowSctaskUpdateEndpoint = snowSctaskUpdateEndpoint;
+    }
+
+    public boolean isCheckDuplicateRequests() {
+        return checkDuplicateRequests;
+    }
+
+    public void setCheckDuplicateRequests(boolean checkDuplicateRequests) {
+        this.checkDuplicateRequests = checkDuplicateRequests;
+    }
+
+    public String getSnowSctaskCatItem() {
+        return snowSctaskCatItem;
+    }
+
+    public void setSnowSctaskCatItem(String snowSctaskCatItem) {
+        this.snowSctaskCatItem = snowSctaskCatItem;
+    }
+
+    public String getSnowSctaskAssignmentGroup() {
+        return snowSctaskAssignmentGroup;
+    }
+
+    public void setSnowSctaskAssignmentGroup(String snowSctaskAssignmentGroup) {
+        this.snowSctaskAssignmentGroup = snowSctaskAssignmentGroup;
+    }
+
+    public String getSnowSctaskAppProfileVariableSysId() {
+        return snowSctaskAppProfileVariableSysId;
+    }
+
+    public void setSnowSctaskAppProfileVariableSysId(String snowSctaskAppProfileVariableSysId) {
+        this.snowSctaskAppProfileVariableSysId = snowSctaskAppProfileVariableSysId;
+    }
+
+    public int getSnowDuplicateRequestLimit() {
+        return snowDuplicateRequestLimit;
+    }
+
+    public void setSnowDuplicateRequestLimit(int snowDuplicateRequestLimit) {
+        this.snowDuplicateRequestLimit = snowDuplicateRequestLimit;
     }
 
     public boolean isSnowSchedulerEnabled() {

@@ -43,6 +43,7 @@ import {
   Info,
   Archive,
   ArchiveX,
+  CopyCheck,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -66,6 +67,7 @@ import { getAIResponseForComment } from "./services/aiService";
 import { GroupRow } from "./components/GroupRow";
 import { SnowIntakeScreen } from "./components/SnowIntakeScreen";
 import { SchedulerDashboardScreen } from "./components/SchedulerDashboardScreen";
+import { DuplicateTicketsModal } from "./components/DuplicateTicketsModal";
 import { CWE_BASE_URL } from "./constants";
 import { getEndpoint } from "./config";
 import { extractCveCodes, getCveNvdUrl } from "./lib/cveUtils";
@@ -1138,6 +1140,7 @@ ${scaSec}`;
   const [isSubmittingCloseTicket, setIsSubmittingCloseTicket] = useState(false);
   const [copiedCloseTicketComments, setCopiedCloseTicketComments] = useState(false);
   const [copiedInvalidProfileComments, setCopiedInvalidProfileComments] = useState(false);
+  const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
 
   const getCloseTicketCommentsToSend = (
     option: "no_response" | "duplicate_signoff" | "duplicate_mar",
@@ -1892,6 +1895,18 @@ ${scaSec}`;
             ) : (
               <Copy size={14} />
             )}
+          </button>
+
+          {/* 6b. Check Duplicate Tickets in ServiceNow (Beside Copy icon) */}
+          <button
+            id="btn-check-duplicate-tickets"
+            type="button"
+            onClick={() => setIsDuplicateModalOpen(true)}
+            className="toolbar-icon-btn check-duplicates-btn flex items-center justify-center p-2 rounded-lg border text-amber-300 font-bold bg-amber-950/50 hover:bg-amber-900/60 border-amber-500/40 shadow-sm shadow-amber-950/20 transition-all active:scale-95 cursor-pointer"
+            title="Check Duplicate Tickets in ServiceNow"
+            aria-label="Check Duplicate Tickets in ServiceNow"
+          >
+            <CopyCheck size={14} className="stroke-[2.5]" />
           </button>
 
           {/* 7. Close Ticket as Closed Incomplete or Closed skipped */}
@@ -4004,6 +4019,14 @@ ${scaSec}`;
             </motion.div>
           </div>
         )}
+
+        {/* 5. Check Duplicate Tickets in ServiceNow Modal */}
+        <DuplicateTicketsModal
+          isOpen={isDuplicateModalOpen}
+          onClose={() => setIsDuplicateModalOpen(false)}
+          initialSctask={closeTicketNumber || sctaskNumber || autoSctaskNumber || autoRpSctaskNumber || marSctaskNumber || invalidProfileSctask || "SCTASK30824068"}
+          applicationProfileName={profileName || overview?.profileName || "MYS-TAX-MyCTax_MY_Desktop"}
+        />
       </AnimatePresence>
     </div>
   );
@@ -4217,6 +4240,32 @@ export default function App() {
   const [isServerOnline, setIsServerOnline] = useState(false);
   const [showSnowScreen, setShowSnowScreen] = useState(false);
   const [showSchedulerDashboard, setShowSchedulerDashboard] = useState(false);
+  const [schedulerEnabled, setSchedulerEnabled] = useState<boolean>(true);
+
+  // Sync URL hash / query with Dashboard and SNOW screen
+  useEffect(() => {
+    const handleUrlNav = () => {
+      const hash = (window.location.hash || "").toLowerCase();
+      const search = (window.location.search || "").toLowerCase();
+      if (schedulerEnabled && (hash === '#dashboard' || hash === '#scheduler' || search.includes('view=dashboard') || search.includes('tab=scheduler'))) {
+        setShowSchedulerDashboard(true);
+        setShowSnowScreen(false);
+      } else if (hash === '#snow' || hash === '#intake' || search.includes('view=snow') || search.includes('tab=intake')) {
+        setShowSnowScreen(true);
+        setShowSchedulerDashboard(false);
+      } else if (!schedulerEnabled && (hash === '#dashboard' || hash === '#scheduler')) {
+        setShowSchedulerDashboard(false);
+      }
+    };
+    handleUrlNav();
+    window.addEventListener('hashchange', handleUrlNav);
+    window.addEventListener('popstate', handleUrlNav);
+    return () => {
+      window.removeEventListener('hashchange', handleUrlNav);
+      window.removeEventListener('popstate', handleUrlNav);
+    };
+  }, [schedulerEnabled]);
+
   const [branch, setBranch] = useState<string>("");
   const [selectedTier, setSelectedTier] = useState<string>("tier-1");
   const [configTiers, setConfigTiers] = useState<string[]>(["tier-1", "tier-2", "tier-3a", "tier-3b"]);
@@ -4482,6 +4531,27 @@ export default function App() {
           "Ruby": ["rubygems", "RUBY"],
           "Python": ["pip", "pypi", "PYTHON"]
         },
+        "Scheduler": data["Scheduler"] ? {
+          enabled: data["Scheduler"].enabled ?? true,
+          delayMs: data["Scheduler"].delayMs ?? 300000,
+          maxMemoryEntries: data["Scheduler"].maxMemoryEntries ?? 100,
+          readFromLocalFile: data["Scheduler"].readFromLocalFile ?? true,
+          localFilePath: data["Scheduler"].localFilePath || "logs/snow/open_tickets.json",
+          historyFilePath: data["Scheduler"].historyFilePath || "logs/cache/sctask-history.txt",
+          autoSignoffEnabled: data["Scheduler"].autoSignoffEnabled ?? true,
+          autoSignoffCheckmarxEnabled: data["Scheduler"].autoSignoffCheckmarxEnabled ?? false,
+          checkDuplicateRequests: data["Scheduler"].checkDuplicateRequests ?? true
+        } : {
+          enabled: true,
+          delayMs: 300000,
+          maxMemoryEntries: 100,
+          readFromLocalFile: true,
+          localFilePath: "logs/snow/open_tickets.json",
+          historyFilePath: "logs/cache/sctask-history.txt",
+          autoSignoffEnabled: true,
+          autoSignoffCheckmarxEnabled: false,
+          checkDuplicateRequests: true
+        },
         "Checkmarx": data["Checkmarx"] || {
           "authUrl": "https://us.iam.checkmarx.net/auth/realms/pwc-tax/protocol/openid-connect/token",
           "apiUrl": "https://us.ast.checkmarx.net/api",
@@ -4494,6 +4564,16 @@ export default function App() {
       setInitialFullConfig(JSON.parse(JSON.stringify(normalizedData)));
       
       // Update local states that derive from config (excluding prompt/engine selections which should remain independent)
+      if (normalizedData["Scheduler"]) {
+        const isSchedEnabled = normalizedData["Scheduler"].enabled !== false;
+        setSchedulerEnabled(isSchedEnabled);
+        if (!isSchedEnabled && showSchedulerDashboard) {
+          setShowSchedulerDashboard(false);
+          if (window.location.hash === '#dashboard' || window.location.hash === '#scheduler') {
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+          }
+        }
+      }
       if (normalizedData["System"]) {
         setConfigScanValidityDays(normalizedData["System"].scanValidityDays || 90);
         if (normalizedData["System"].safeSCAVERSION) {
@@ -4531,6 +4611,16 @@ export default function App() {
         setSuccessMessage("Configuration updated successfully");
         
         // Update local derived states
+        if (fullConfig["Scheduler"]) {
+          const isSchedEnabled = fullConfig["Scheduler"].enabled !== false;
+          setSchedulerEnabled(isSchedEnabled);
+          if (!isSchedEnabled && showSchedulerDashboard) {
+            setShowSchedulerDashboard(false);
+            if (window.location.hash === '#dashboard' || window.location.hash === '#scheduler') {
+              window.history.replaceState(null, '', window.location.pathname + window.location.search);
+            }
+          }
+        }
         if (fullConfig["System"]) {
           setConfigScanValidityDays(fullConfig["System"].scanValidityDays || 90);
           if (fullConfig["System"].safeSCAVERSION && fullConfig["System"].safeSCAVERSION.scaSafeVersionEnabled !== undefined) {
@@ -4613,6 +4703,11 @@ export default function App() {
         }
         if (data.intakeRequest !== undefined) {
           setConfigIntakeRequest(data.intakeRequest);
+        }
+        if (data.Scheduler && data.Scheduler.enabled !== undefined) {
+          setSchedulerEnabled(data.Scheduler.enabled !== false);
+        } else if (data.schedulerEnabled !== undefined) {
+          setSchedulerEnabled(data.schedulerEnabled !== false);
         }
       })
       .catch((err) => {
@@ -6397,33 +6492,40 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="flex flex-col flex-shrink-0">
-                  <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold mb-1 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                    SCHEDULER
-                  </span>
-                  <button
-                    type="button"
-                    id="scheduler-dashboard-nav-btn"
-                    onClick={() => {
-                      const nextVal = !showSchedulerDashboard;
-                      setShowSchedulerDashboard(nextVal);
-                      if (nextVal) {
-                        setShowSnowScreen(false);
-                        setSelectedTools([]);
-                      }
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 shadow-lg active:scale-95 cursor-pointer ${
-                      showSchedulerDashboard
-                        ? "bg-emerald-600 border-emerald-400 text-white shadow-lg shadow-emerald-900/50 ring-2 ring-emerald-500/30"
-                        : "bg-emerald-950/40 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/50 hover:border-emerald-400"
-                    }`}
-                    title="Real-Time Scheduler Dashboard & Live Feed"
-                  >
-                    <Activity size={13} className={showSchedulerDashboard ? "text-white" : "text-emerald-400 animate-pulse"} />
-                    <span>Dashboard</span>
-                  </button>
-                </div>
+                {schedulerEnabled && (
+                  <div className="flex flex-col flex-shrink-0">
+                    <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold mb-1 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                      SCHEDULER
+                    </span>
+                    <button
+                      type="button"
+                      id="scheduler-dashboard-nav-btn"
+                      onClick={() => {
+                        const nextVal = !showSchedulerDashboard;
+                        setShowSchedulerDashboard(nextVal);
+                        if (nextVal) {
+                          setShowSnowScreen(false);
+                          setSelectedTools([]);
+                          window.location.hash = 'dashboard';
+                        } else {
+                          if (window.location.hash === '#dashboard' || window.location.hash === '#scheduler') {
+                            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+                          }
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 shadow-lg active:scale-95 cursor-pointer ${
+                        showSchedulerDashboard
+                          ? "bg-emerald-600 border-emerald-400 text-white shadow-lg shadow-emerald-900/50 ring-2 ring-emerald-500/30"
+                          : "bg-emerald-950/40 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/50 hover:border-emerald-400"
+                      }`}
+                      title="Real-Time Scheduler Dashboard & Live Feed"
+                    >
+                      <Activity size={13} className={showSchedulerDashboard ? "text-white" : "text-emerald-400 animate-pulse"} />
+                      <span>Dashboard</span>
+                    </button>
+                  </div>
+                )}
 
                 <div className="flex flex-col flex-shrink-0">
                   <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
@@ -6602,7 +6704,12 @@ export default function App() {
           {showSnowScreen ? (
             <SnowIntakeScreen onClose={() => setShowSnowScreen(false)} />
           ) : showSchedulerDashboard ? (
-            <SchedulerDashboardScreen onClose={() => setShowSchedulerDashboard(false)} />
+            <SchedulerDashboardScreen onClose={() => {
+              setShowSchedulerDashboard(false);
+              if (window.location.hash === '#dashboard' || window.location.hash === '#scheduler') {
+                window.history.replaceState(null, '', window.location.pathname + window.location.search);
+              }
+            }} />
           ) : !resultsLoaded ? (
             <div className="col-span-12 flex items-center justify-center">
               <div className="text-center space-y-4 max-w-md">
@@ -6617,18 +6724,21 @@ export default function App() {
                   initialize the vulnerability audit workflow.
                 </p>
                 <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowSchedulerDashboard(true);
-                      setShowSnowScreen(false);
-                      setSelectedTools([]);
-                    }}
-                    className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-900/40 border border-emerald-400 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
-                  >
-                    <Activity size={15} className="animate-pulse" />
-                    <span>Open Real-Time Scheduler Dashboard</span>
-                  </button>
+                  {schedulerEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSchedulerDashboard(true);
+                        setShowSnowScreen(false);
+                        setSelectedTools([]);
+                        window.location.hash = 'dashboard';
+                      }}
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-900/40 border border-emerald-400 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
+                    >
+                      <Activity size={15} className="animate-pulse" />
+                      <span>Open Real-Time Scheduler Dashboard</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -8022,7 +8132,7 @@ export default function App() {
                 </div>
 
                 <div className="flex gap-2 p-3 border-b border-slate-800 bg-slate-900/30 overflow-x-auto scrollbar-hide">
-                  {["SAST&SCA Prompts", "System", "AiEngine", "SecondaryAudit", "Compliance", "Exclusions", "Architecture Mapping", "Checkmarx", "Intake"].filter(tab => {
+                  {["SAST&SCA Prompts", "Scheduler", "System", "AiEngine", "SecondaryAudit", "Compliance", "Exclusions", "Architecture Mapping", "Checkmarx", "Intake"].filter(tab => {
                     if (tab === "SecondaryAudit") {
                       return fullConfig["System"]?.secondaryAuditEnabled;
                     }
@@ -8075,6 +8185,168 @@ export default function App() {
                             })}
                             className="w-full h-48 bento-input font-mono text-xs leading-relaxed"
                           />
+                        </section>
+                      </div>
+                    )}
+
+                    {/* Scheduler Tab */}
+                    {settingsTab === "Scheduler" && fullConfig["Scheduler"] && (
+                      <div className="space-y-6">
+                        <section className="space-y-1">
+                          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                            Real-Time Background Scheduler Configuration
+                          </h3>
+                          <p className="text-xs text-slate-500">
+                            Configure automatic ticket processing, auto-signoff behavior, duplicate detection, and file cache paths.
+                          </p>
+                        </section>
+
+                        {/* Master Toggle Card */}
+                        <div className={`p-4 rounded-xl border transition-all flex items-center justify-between ${
+                          fullConfig["Scheduler"].enabled 
+                            ? "bg-emerald-950/20 border-emerald-500/40 shadow-sm shadow-emerald-950/30" 
+                            : "bg-slate-900 border-slate-800"
+                        }`}>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black uppercase text-slate-200 tracking-wider">
+                                Scheduler & Dashboard Enabled
+                              </span>
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                fullConfig["Scheduler"].enabled
+                                  ? "bg-emerald-500 text-slate-950"
+                                  : "bg-slate-800 text-slate-400"
+                              }`}>
+                                {fullConfig["Scheduler"].enabled ? "ACTIVE" : "DISABLED"}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400">
+                              When enabled, the background scheduler evaluates tickets and the Dashboard button is displayed in the navigation bar and landing screen.
+                            </p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={!!fullConfig["Scheduler"].enabled}
+                            onChange={(e) => {
+                              const next = { ...fullConfig };
+                              next["Scheduler"].enabled = e.target.checked;
+                              setFullConfig(next);
+                            }}
+                            className="w-5 h-5 rounded bg-slate-950 border-slate-700 text-emerald-500 cursor-pointer"
+                          />
+                        </div>
+
+                        {/* Toggles Grid */}
+                        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                          {[
+                            { key: 'autoSignoffEnabled', label: 'Auto Sign-off Veracode', desc: 'Automatically approve clean scans in Veracode' },
+                            { key: 'autoSignoffCheckmarxEnabled', label: 'Auto Sign-off Checkmarx', desc: 'Automatically approve clean scans in Checkmarx' },
+                            { key: 'checkDuplicateRequests', label: 'Check Duplicates', desc: 'Verify for active duplicate requests before signoff' },
+                            { key: 'readFromLocalFile', label: 'Read From Local File', desc: 'Read ticket queue from local JSON file instead of live API' },
+                          ].map((opt) => (
+                            <label
+                              key={opt.key}
+                              className="flex flex-col justify-between p-4 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-850/50 transition-all cursor-pointer"
+                            >
+                              <div className="space-y-1 mb-3">
+                                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wide block">
+                                  {opt.label}
+                                </span>
+                                <span className="text-[9px] text-slate-500 leading-tight block">
+                                  {opt.desc}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center pt-2 border-t border-slate-800/60">
+                                <span className={`text-[10px] font-black uppercase ${
+                                  fullConfig["Scheduler"][opt.key] ? "text-emerald-400" : "text-slate-500"
+                                }`}>
+                                  {fullConfig["Scheduler"][opt.key] ? "ENABLED" : "DISABLED"}
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  checked={!!fullConfig["Scheduler"][opt.key]}
+                                  onChange={(e) => {
+                                    const next = { ...fullConfig };
+                                    next["Scheduler"][opt.key] = e.target.checked;
+                                    setFullConfig(next);
+                                  }}
+                                  className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-emerald-500 cursor-pointer"
+                                />
+                              </div>
+                            </label>
+                          ))}
+                        </section>
+
+                        {/* Timing and Path Inputs */}
+                        <section className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                          <div className="space-y-2 p-4 bg-slate-900/60 border border-slate-800 rounded-xl">
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                              Polling Interval (ms)
+                            </label>
+                            <input
+                              type="number"
+                              value={fullConfig["Scheduler"].delayMs ?? 300000}
+                              onChange={(e) => {
+                                const next = { ...fullConfig };
+                                next["Scheduler"].delayMs = parseInt(e.target.value) || 0;
+                                setFullConfig(next);
+                              }}
+                              className="w-full bento-input font-mono text-xs px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200"
+                            />
+                            <p className="text-[9px] text-slate-500">Delay between scheduler evaluation cycles (default: 300000 ms = 5 min).</p>
+                          </div>
+
+                          <div className="space-y-2 p-4 bg-slate-900/60 border border-slate-800 rounded-xl">
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                              Max Memory Entries
+                            </label>
+                            <input
+                              type="number"
+                              value={fullConfig["Scheduler"].maxMemoryEntries ?? 100}
+                              onChange={(e) => {
+                                const next = { ...fullConfig };
+                                next["Scheduler"].maxMemoryEntries = parseInt(e.target.value) || 0;
+                                setFullConfig(next);
+                              }}
+                              className="w-full bento-input font-mono text-xs px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200"
+                            />
+                            <p className="text-[9px] text-slate-500">Maximum execution history entries retained in server memory.</p>
+                          </div>
+
+                          <div className="space-y-2 p-4 bg-slate-900/60 border border-slate-800 rounded-xl">
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                              Local File Path (Open Tickets)
+                            </label>
+                            <input
+                              type="text"
+                              value={fullConfig["Scheduler"].localFilePath || ""}
+                              onChange={(e) => {
+                                const next = { ...fullConfig };
+                                next["Scheduler"].localFilePath = e.target.value;
+                                setFullConfig(next);
+                              }}
+                              className="w-full bento-input font-mono text-xs px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200"
+                            />
+                            <p className="text-[9px] text-slate-500">Path to mock or cached open tickets JSON file.</p>
+                          </div>
+
+                          <div className="space-y-2 p-4 bg-slate-900/60 border border-slate-800 rounded-xl">
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                              History File Cache Path
+                            </label>
+                            <input
+                              type="text"
+                              value={fullConfig["Scheduler"].historyFilePath || ""}
+                              onChange={(e) => {
+                                const next = { ...fullConfig };
+                                next["Scheduler"].historyFilePath = e.target.value;
+                                setFullConfig(next);
+                              }}
+                              className="w-full bento-input font-mono text-xs px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200"
+                            />
+                            <p className="text-[9px] text-slate-500">Path to processed SCTASK history log file.</p>
+                          </div>
                         </section>
                       </div>
                     )}

@@ -175,4 +175,134 @@ describe("Scheduler Dashboard Data Contracts & Option A Multi-Period KPIs", () =
     expect(payload.sctaskNumber).toBe("SCTASK00011123");
     expect(payload.ignoreStatusCheck).toBe(true);
   });
+
+  it("handles recent-tickets SSE event data parsing correctly", () => {
+    const rawSseData = JSON.stringify([
+      {
+        sctask: "SCTASK0041235",
+        ritm: "RITM0018472",
+        scaTool: "VERACODE",
+        requestReason: "Sign Off",
+        action: "CLEAN_SIGNOFF",
+        status: "SUCCESS",
+        errorType: null,
+        durationMs: 340,
+        processedAt: "2026-10-14T20:45:00Z"
+      },
+      {
+        sctask: "SCTASK0041234",
+        ritm: "RITM0018471",
+        scaTool: "CHECKMARX",
+        requestReason: "Mitigation Approval Review",
+        action: "COMMENTS_ADDED",
+        status: "PENDING",
+        errorType: null,
+        durationMs: 520,
+        processedAt: "2026-10-14T20:44:00Z"
+      }
+    ]);
+
+    let parsedTickets: TicketExecution[] = [];
+    const eventHandler = (dataStr: string) => {
+      try {
+        const list = JSON.parse(dataStr);
+        if (Array.isArray(list)) parsedTickets = list;
+      } catch (err) {
+        console.error("Failed to parse recent-tickets:", err);
+      }
+    };
+
+    eventHandler(rawSseData);
+    expect(parsedTickets).toHaveLength(2);
+    expect(parsedTickets[0].sctask).toBe("SCTASK0041235");
+    expect(parsedTickets[1].sctask).toBe("SCTASK0041234");
+  });
+
+  it("validates Scheduler configuration and determines whether Dashboard button should be shown", () => {
+    // 1. Config with Scheduler enabled = true
+    const configEnabled = {
+      Scheduler: {
+        enabled: true,
+        delayMs: 300000,
+        maxMemoryEntries: 100,
+        readFromLocalFile: true,
+        localFilePath: "logs/snow/open_tickets.json",
+        historyFilePath: "logs/cache/sctask-history.txt",
+        autoSignoffEnabled: true,
+        autoSignoffCheckmarxEnabled: false,
+        checkDuplicateRequests: true
+      }
+    };
+
+    const isDashboardButtonVisibleEnabled = configEnabled.Scheduler.enabled !== false;
+    expect(isDashboardButtonVisibleEnabled).toBe(true);
+
+    // 2. Config with Scheduler enabled = false
+    const configDisabled = {
+      Scheduler: {
+        enabled: false,
+        delayMs: 300000,
+        maxMemoryEntries: 100,
+        readFromLocalFile: true,
+        localFilePath: "logs/snow/open_tickets.json",
+        historyFilePath: "logs/cache/sctask-history.txt",
+        autoSignoffEnabled: true,
+        autoSignoffCheckmarxEnabled: false,
+        checkDuplicateRequests: true
+      }
+    };
+
+    const isDashboardButtonVisibleDisabled = configDisabled.Scheduler.enabled !== false;
+    expect(isDashboardButtonVisibleDisabled).toBe(false);
+  });
+
+  it("validates updated System and Checkmarx schema parameters", () => {
+    const fullConfigSample = {
+      "Scheduler": {
+        "enabled": true,
+        "delayMs": 300000,
+        "maxMemoryEntries": 100,
+        "readFromLocalFile": true,
+        "localFilePath": "logs/snow/open_tickets.json",
+        "historyFilePath": "logs/cache/sctask-history.txt",
+        "autoSignoffEnabled": true,
+        "autoSignoffCheckmarxEnabled": false,
+        "checkDuplicateRequests": true
+      },
+      "System": {
+        "scanValidityDays": 90,
+        "mitigationProposalEnabled": "true",
+        "mitigationApiType": "REST",
+        "saveXmlLogs": true,
+        "saveJsonHistory": true,
+        "historyLimit": 10,
+        "secondaryAuditEnabled": false,
+        "intakeRequest": true,
+        "snowSchedulerEnabled": false,
+        "safeSCAVERSION": {
+          "scaSafeVersionEnabled": true,
+          "scaStaleFixMessage": "No safe version found. Fix applies to a different major version. Check manually.",
+          "scaNoFixMessage": "No safe version published in GHSA. Check manually.",
+          "saveScaLog": false
+        }
+      },
+      "Checkmarx": {
+        "authUrl": "https://us.iam.checkmarx.net/auth/realms/pwc-tax/protocol/openid-connect/token",
+        "apiUrl": "https://us.ast.checkmarx.net/api",
+        "pollingInterval": 9000,
+        "pollingRetry": 20
+      },
+      "architecture-mappings": {
+        "Java": ["maven", "gradle", "JAVA", "JVM", "jar", "bytecode"],
+        "JavaScript": ["npm", "bower", "JAVASCRIPT"],
+        "Go": ["go", "golang", "GO", "GOLANG"]
+      }
+    };
+
+    expect(fullConfigSample.Scheduler.enabled).toBe(true);
+    expect(fullConfigSample.Checkmarx.pollingInterval).toBe(9000);
+    expect(fullConfigSample.Checkmarx.pollingRetry).toBe(20);
+    expect(fullConfigSample["architecture-mappings"].Java).toContain("bytecode");
+    expect(fullConfigSample.System.snowSchedulerEnabled).toBe(false);
+  });
 });

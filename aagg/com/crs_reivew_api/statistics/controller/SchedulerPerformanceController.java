@@ -53,6 +53,10 @@ public class SchedulerPerformanceController {
             emitter.send(SseEmitter.event()
                     .name("kpi-update")
                     .data(metricsService.getTodayKpi()));
+
+            emitter.send(SseEmitter.event()
+                    .name("recent-tickets")
+                    .data(metricsService.getRecentTickets(20)));
         } catch (IOException e) {
             logger.debug("Client disconnected immediately on initial SSE handshake: {}", e.getMessage());
         }

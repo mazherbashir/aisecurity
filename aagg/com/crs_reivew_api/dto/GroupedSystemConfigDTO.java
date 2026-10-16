@@ -30,6 +30,9 @@ public class GroupedSystemConfigDTO {
     @JsonProperty("Intake")
     private IntakeSettings intake;
 
+    @JsonProperty("Scheduler")
+    private SchedulerSettings scheduler;
+
     @JsonProperty("architecture-mappings")
     private Map<String, List<String>> architectureMappings;
 
@@ -60,6 +63,9 @@ public class GroupedSystemConfigDTO {
     public IntakeSettings getIntake() { return intake; }
     public void setIntake(IntakeSettings intake) { this.intake = intake; }
 
+    public SchedulerSettings getScheduler() { return scheduler; }
+    public void setScheduler(SchedulerSettings scheduler) { this.scheduler = scheduler; }
+
     // Nested Classes
     public static class SastAndScaPrompts {
         private String sastPrompt;
@@ -81,6 +87,7 @@ public class GroupedSystemConfigDTO {
         private Integer historyLimit;
         private Boolean secondaryAuditEnabled;
         private Boolean intakeRequest;
+        private Boolean snowSchedulerEnabled;
 
         @JsonProperty("safeSCAVERSION")
         private SafeScaVersionSettings safeScaVersion;
@@ -108,6 +115,9 @@ public class GroupedSystemConfigDTO {
 
         public Boolean getIntakeRequest() { return intakeRequest; }
         public void setIntakeRequest(Boolean intakeRequest) { this.intakeRequest = intakeRequest; }
+
+        public Boolean getSnowSchedulerEnabled() { return snowSchedulerEnabled; }
+        public void setSnowSchedulerEnabled(Boolean snowSchedulerEnabled) { this.snowSchedulerEnabled = snowSchedulerEnabled; }
 
         public SafeScaVersionSettings getSafeScaVersion() { return safeScaVersion; }
         public void setSafeScaVersion(SafeScaVersionSettings safeScaVersion) { this.safeScaVersion = safeScaVersion; }
@@ -248,5 +258,44 @@ public class GroupedSystemConfigDTO {
 
         public String getGcaasRestBaseURL() { return gcaasRestBaseURL; }
         public void setGcaasRestBaseURL(String gcaasRestBaseURL) { this.gcaasRestBaseURL = gcaasRestBaseURL; }
+    }
+
+    public static class SchedulerSettings {
+        private Boolean enabled;
+        private Long delayMs;
+        private Integer maxMemoryEntries;
+        private Boolean readFromLocalFile;
+        private String localFilePath;
+        private String historyFilePath;
+        private Boolean autoSignoffEnabled;
+        private Boolean autoSignoffCheckmarxEnabled;
+        private Boolean checkDuplicateRequests;
+
+        public Boolean getEnabled() { return enabled; }
+        public void setEnabled(Boolean enabled) { this.enabled = enabled; }
+
+        public Long getDelayMs() { return delayMs; }
+        public void setDelayMs(Long delayMs) { this.delayMs = delayMs; }
+
+        public Integer getMaxMemoryEntries() { return maxMemoryEntries; }
+        public void setMaxMemoryEntries(Integer maxMemoryEntries) { this.maxMemoryEntries = maxMemoryEntries; }
+
+        public Boolean getReadFromLocalFile() { return readFromLocalFile; }
+        public void setReadFromLocalFile(Boolean readFromLocalFile) { this.readFromLocalFile = readFromLocalFile; }
+
+        public String getLocalFilePath() { return localFilePath; }
+        public void setLocalFilePath(String localFilePath) { this.localFilePath = localFilePath; }
+
+        public String getHistoryFilePath() { return historyFilePath; }
+        public void setHistoryFilePath(String historyFilePath) { this.historyFilePath = historyFilePath; }
+
+        public Boolean getAutoSignoffEnabled() { return autoSignoffEnabled; }
+        public void setAutoSignoffEnabled(Boolean autoSignoffEnabled) { this.autoSignoffEnabled = autoSignoffEnabled; }
+
+        public Boolean getAutoSignoffCheckmarxEnabled() { return autoSignoffCheckmarxEnabled; }
+        public void setAutoSignoffCheckmarxEnabled(Boolean autoSignoffCheckmarxEnabled) { this.autoSignoffCheckmarxEnabled = autoSignoffCheckmarxEnabled; }
+
+        public Boolean getCheckDuplicateRequests() { return checkDuplicateRequests; }
+        public void setCheckDuplicateRequests(Boolean checkDuplicateRequests) { this.checkDuplicateRequests = checkDuplicateRequests; }
     }
 }

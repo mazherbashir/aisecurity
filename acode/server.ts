@@ -211,15 +211,27 @@ async function startServer() {
              "sastPrompt" : "I’m providing information on a First Party Finding for an application in JSON format.\n\nDefinitions:\n- cwe id: The CWE ID of the finding\n- mitigation information: Actions taken by the application team (may be empty)\n\nYour task:\n1. Determine if this is a real security issue.\n2. Determine if the mitigation sufficiently reduces the risk.\n3. If not mitigated, clearly state why.\n\nInstructions (STRICT):\n- Start with: \"Proposal Approved\" or \"Proposal Rejected\"\n- Provide ONLY ONE short paragraph\n- Maximum 4–5 sentences\n- Maximum 120 words\n- No repetition, no extra explanation\n- Keep reasoning concise and direct\n- Follow Zero-Trust principles in evaluation but don't repeat it in para.\n\nDo not provide bullet points, headings, or long explanations.",
              "scaPrompt" : "I’m providing information on a Third Party (SCA) Finding in JSON format.\n\nDefinitions:\n- name: Vulnerable component name\n- cve id: CVE identifier\n- mitigation information: Actions taken by the application team (may be empty)\n\nYour task:\n1. Identify if a non-vulnerable version exists\n2. Identify if mitigation without upgrade is possible\n3. Assess if the finding could be a false positive\n4. Enforce strict security governance (Zero-Trust)\n\nSTRICT GOVERNANCE RULES:\n- If the vulnerability is still reported by the SCA tool → DO NOT accept false positive claim\n- If the source of the dependency is unclear → REJECT and require investigation\n- Always require validation with Veracode (or tool owner) before closure\n- Never approve based solely on assumption\n\nOUTPUT INSTRUCTIONS (STRICT):\n- Start with ONLY ONE of:\n  \"Proposal Approved\" OR \"Proposal Rejected\" OR \"Check Manually\"\n- Provide ONE paragraph only\n- Maximum 6 sentences\n- Maximum 150 words\n- Keep reasoning concise and direct\n- Do NOT explain CWE background\n- Avoid repetition and filler text\n\nCVE HANDLING:\n- If you are confident about the CVE → include a short reference link:"
            },
-           "System" : {
+           "Scheduler": {
+             "enabled": true,
+             "delayMs": 300000,
+             "maxMemoryEntries": 100,
+             "readFromLocalFile": true,
+             "localFilePath": "logs/snow/open_tickets.json",
+             "historyFilePath": "logs/cache/sctask-history.txt",
+             "autoSignoffEnabled": true,
+             "autoSignoffCheckmarxEnabled": false,
+             "checkDuplicateRequests": true
+           },
+        "System" : {
              "scanValidityDays" : 90,
-             "intakeRequest": true,
-             "mitigationProposalEnabled" : true,
+             "mitigationProposalEnabled" : "true",
              "mitigationApiType" : "REST",
              "saveXmlLogs" : true,
              "saveJsonHistory" : true,
              "historyLimit" : 10,
              "secondaryAuditEnabled" : false,
+             "intakeRequest": true,
+             "snowSchedulerEnabled": false,
              "safeSCAVERSION" : {
                "scaSafeVersionEnabled" : true,
                "scaStaleFixMessage" : "No safe version found. Fix applies to a different major version. Check manually.",
@@ -273,19 +285,15 @@ async function startServer() {
              "tierDropDown" : [ "tier-1", "tier-2", "tier-3a", "tier-3b", "tier-4" ]
            },
            "architecture-mappings" : {
-             "Java" : [ "maven", "gradle", "JAVA", "JVM" ],
+             "Java" : [ "maven", "gradle", "JAVA", "JVM", "jar", "bytecode" ],
              "JavaScript" : [ "npm", "bower", "JAVASCRIPT" ],
-             "Go" : [ "go", "golang", "GO", "GOLANG" ],
-             "PHP" : [ "composer", "PHP", "Packagist" ],
-             "NET" : [ "nuget", "CIL32", "MSIL" ],
-             "Ruby" : [ "rubygems", "RUBY" ],
-             "Python" : [ "pip", "pypi", "PYTHON" ]
+             "Go" : [ "go", "golang", "GO", "GOLANG" ]
            },
            "Checkmarx": {
              "authUrl": "https://us.iam.checkmarx.net/auth/realms/pwc-tax/protocol/openid-connect/token",
              "apiUrl": "https://us.ast.checkmarx.net/api",
-             "pollingInterval": 5000,
-             "pollingRetry": 15
+             "pollingInterval": 9000,
+             "pollingRetry": 20
            },
            "Intake": {
              "gcaasRestEndpointRemediation": "/snow/utils/open_remediation_requests",
@@ -304,7 +312,16 @@ async function startServer() {
     }
 
     try {
-      const response = await fetchWithTimeout('http://127.0.0.1:8081/api/config/prompts', {}, 1500);
+      let response = await fetchWithTimeout('http://localhost:8080/api/config/prompts', {}, 1500).catch(() => null);
+      if (!response || !response.ok) {
+        response = await fetchWithTimeout('http://127.0.0.1:8080/api/config/prompts', {}, 1500).catch(() => null);
+      }
+      if (!response || !response.ok) {
+        response = await fetchWithTimeout('http://127.0.0.1:8081/api/config/prompts', {}, 1500).catch(() => null);
+      }
+      if (!response || !response.ok) {
+        throw new Error('Service at localhost:8080 and 127.0.0.1:8081 returned error');
+      }
       if (!response.ok) {
         throw new Error(`Service at 127.0.0.1:8081 returned ${response.status}: ${response.statusText}`);
       }
@@ -329,6 +346,20 @@ async function startServer() {
           sharedServiceMaxTokens: 1000
         };
       }
+
+      if (data && !data["Scheduler"]) {
+        data["Scheduler"] = {
+          enabled: true,
+          delayMs: 300000,
+          maxMemoryEntries: 100,
+          readFromLocalFile: true,
+          localFilePath: "logs/snow/open_tickets.json",
+          historyFilePath: "logs/cache/sctask-history.txt",
+          autoSignoffEnabled: true,
+          autoSignoffCheckmarxEnabled: false,
+          checkDuplicateRequests: true
+        };
+      }
       
       res.json(data);
     } catch (error) {
@@ -339,21 +370,39 @@ async function startServer() {
           "sastPrompt" : "I’m providing information on a First Party Finding for an application in JSON format.\n\nDefinitions:\n- cwe id: The CWE ID of the finding\n- mitigation information: Actions taken by the application team (may be empty)\n\nYour task:\n1. Determine if this is a real security issue.\n2. Determine if the mitigation sufficiently reduces the risk.\n3. If not mitigated, clearly state why.\n\nInstructions (STRICT):\n- Start with: \"Proposal Approved\" or \"Proposal Rejected\"\n- Provide ONLY ONE short paragraph\n- Maximum 4–5 sentences\n- Maximum 120 words\n- No repetition, no extra explanation\n- Keep reasoning concise and direct\n- Follow Zero-Trust principles in evaluation but don't repeat it in para.\n\nDo not provide bullet points, headings, or long explanations.",
           "scaPrompt" : "I’m providing information on a Third Party (SCA) Finding in JSON format.\n\nDefinitions:\n- name: Vulnerable component name\n- cve id: CVE identifier\n- mitigation information: Actions taken by the application team (may be empty)\n\nYour task:\n1. Identify if a non-vulnerable version exists\n2. Identify if mitigation without upgrade is possible\n3. Assess if the finding could be a false positive\n4. Enforce strict security governance (Zero-Trust)\n\nSTRICT GOVERNANCE RULES:\n- If the vulnerability is still reported by the SCA tool → DO NOT accept false positive claim\n- If the source of the dependency is unclear → REJECT and require investigation\n- Always require validation with Veracode (or tool owner) before closure\n- Never approve based solely on assumption\n\nOUTPUT INSTRUCTIONS (STRICT):\n- Start with ONLY ONE of:\n  \"Proposal Approved\" OR \"Proposal Rejected\" OR \"Check Manually\"\n- Provide ONE paragraph only\n- Maximum 6 sentences\n- Maximum 150 words\n- Keep reasoning concise and direct\n- Do NOT explain CWE background\n- Avoid repetition and filler text\n\nCVE HANDLING:\n- If you are confident about the CVE → include a short reference link:"
         },
+        "Scheduler": {
+          "enabled": true,
+          "delayMs": 300000,
+          "maxMemoryEntries": 100,
+          "readFromLocalFile": true,
+          "localFilePath": "logs/snow/open_tickets.json",
+          "historyFilePath": "logs/cache/sctask-history.txt",
+          "autoSignoffEnabled": true,
+          "autoSignoffCheckmarxEnabled": false,
+          "checkDuplicateRequests": true
+        },
         "System" : {
           "scanValidityDays" : 90,
-          "mitigationProposalEnabled" : true,
+          "mitigationProposalEnabled" : "true",
           "mitigationApiType" : "REST",
           "saveXmlLogs" : true,
           "saveJsonHistory" : true,
           "historyLimit" : 10,
           "secondaryAuditEnabled" : false,
           "intakeRequest": true,
+          "snowSchedulerEnabled": false,
           "safeSCAVERSION" : {
             "scaSafeVersionEnabled" : true,
             "scaStaleFixMessage" : "No safe version found. Fix applies to a different major version. Check manually.",
             "scaNoFixMessage" : "No safe version published in GHSA. Check manually.",
             "saveScaLog" : false
           }
+        },
+        "Checkmarx": {
+          "authUrl": "https://us.iam.checkmarx.net/auth/realms/pwc-tax/protocol/openid-connect/token",
+          "apiUrl": "https://us.ast.checkmarx.net/api",
+          "pollingInterval": 9000,
+          "pollingRetry": 20
         },
         "AiEngine" : {
           "aiEngines" : [ "Gemini", "azure.gpt-4o" ],
@@ -362,16 +411,53 @@ async function startServer() {
           "sharedServiceRole" : "user",
           "sharedServiceMaxTokens" : 1000
         },
-        "Checkmarx": {
-          "authUrl": "https://us.iam.checkmarx.net/auth/realms/pwc-tax/protocol/openid-connect/token",
-          "apiUrl": "https://us.ast.checkmarx.net/api",
-          "pollingInterval": 5000,
-          "pollingRetry": 15
+        "SecondaryAudit" : {
+          "auditorModel" : "gpt-4o-mini",
+          "sharedAuditorEndpoint" : "https://genai-sharedservice-americas.pwcinternal.com/v1/chat/completions",
+          "sharedAuditorMaxTokens" : 1000,
+          "sharedAuditorRole" : "user",
+          "auditorPrompt" : "You are a Senior Security QA Auditor acting as a secondary verification layer. Your job is to strictly review the output generated by a primary evaluation model against the original input data.\n\nYou will be provided with two sets of data:\n1. [Original Request Data]: The raw vulnerability JSON payload.\n2. [Phase 1 Output]: The text response generated by the primary model.\n\nYour task is to independently verify the quality, accuracy, and constraint compliance of the Phase 1 Output.\n\n### CRITERIA FOR EVALUATION\n1. Accuracy Check: Did Phase 1 correctly interpret the vulnerability description and user comments? (e.g., If the user comments proved the value is a non-secret UI lookup GUID, did Phase 1 correctly identify it as a false positive?)\n2. Constraint Compliance Check: Did Phase 1 strictly adhere to its formatting boundaries?\n   - Does it start exactly with \"Proposal Approved\" or \"Proposal Rejected\"?\n   - Is it written as exactly ONE paragraph?\n   - Is it under 120 words and free of bullet points or headings?\n\n### OUTPUT FORMAT\nYou must output your audit evaluation strictly using the following Markdown template. Do not add conversational intro text or metadata.\n\n### Second Look Assessment\n- **Validation Verdict:** [Agree / Disagree with Phase 1 Verdict]\n- **Rule Compliance:** [Pass / Fail - state if formatting limits were met]\n- **Critique:** [2-3 sentences explaining your reasoning regarding the technical accuracy and compliance of Phase 1]",
+          "fallbackText" : "Proposal Rejected please perform a Manual Review as The Evaluator and Auditor model has contradiction!"
+        },
+        "Exclusions" : {
+          "ignoredModules" : [ "Microsoft", "Azure", "System", "AspNetCore", "Newtonsoft", "EntityFramework", "NLog", "Log4Net", "AutoMapper", "AppInsights", "UnitTesting", "BouncyCastle", "Serilog", "Dapper", "OpenXml", "Serialization", "OpenXmlPowerTools", "GemBox", "SharpDocx", "Quartz", "sni.dll", "VeracodeJavaAPI.jar", ".test.dll", ".Tests.dll", ".map", "_nodemodule_", "fsmonitor-watchman.sample" ],
+          "includedModules" : [ "veracodegen.htmla.pya", "pwc.", ".zip", ".war", "snapshot.jar", "0.jar", "pwc", "release.jar", "app_", ".bca", ".gz", "-service.jar", "-advancer.jar" ],
+          "ignoredEcosystems" : [ "so" ],
+          "noScaArchitectures" : [ "Apex", "TSQL" ]
+        },
+        "Compliance" : {
+          "tierMappings" : {
+            "External" : {
+              "Confidential" : "tier-1",
+              "HighlyConfidential" : "tier-1",
+              "Internal" : "tier-2",
+              "Public" : "tier-2"
+            },
+            "Internal" : {
+              "Confidential" : "tier-3b",
+              "HighlyConfidential" : "tier-3a",
+              "Internal" : "tier-3b",
+              "Public" : "tier-3b"
+            }
+          },
+          "gracePeriods" : {
+            "tier-4" : { "VeryHigh" : 60, "High" : 60, "Medium" : 90, "Low" : 180 },
+            "tier-3b" : { "VeryHigh" : 60, "High" : 60, "Medium" : 90, "Low" : 180 },
+            "tier-3a" : { "VeryHigh" : 30, "High" : 30, "Medium" : 60, "Low" : 180 },
+            "tier-2" : { "VeryHigh" : 10, "High" : 10, "Medium" : 30, "Low" : 180 },
+            "tier-1" : { "VeryHigh" : 10, "High" : 10, "Medium" : 30, "Low" : 180 }
+          },
+          "tierDropDown" : [ "tier-1", "tier-2", "tier-3a", "tier-3b", "tier-4" ]
         },
         "Intake": {
           "gcaasRestEndpointRemediation": "/snow/utils/open_remediation_requests",
           "gcaasRestEndpointIntake": "/snow/utils/open_intake_requests",
           "gcaasRestBaseURL": "https://hosted-apps-we-stage.np-pwclabs.pwcglb.com/api/687da848-9b88-48ce-8d71-d276e6d682f6/crs-rest-api-toolkit-chris-fastapi-staging-test-backend"
+        },
+        "architecture-mappings" : {
+          "Java" : [ "maven", "gradle", "JAVA", "JVM", "jar", "bytecode" ],
+          "JavaScript" : [ "npm", "bower", "JAVASCRIPT" ],
+          "Go" : [ "go", "golang", "GO", "GOLANG" ]
         }
       };
       res.json(devMemFullConfig || fallbackConfig);
@@ -392,6 +478,9 @@ async function startServer() {
             sca: config["SAST&SCA Prompts"].scaPrompt || "" 
           };
         }
+        if (config["Scheduler"] && config["Scheduler"].enabled !== undefined) {
+          schedulerStatusStore.schedulerEnabled = Boolean(config["Scheduler"].enabled);
+        }
         res.json({ success: true });
       } catch (error) {
         console.error('Error writing local configuration:', error);
@@ -410,6 +499,9 @@ async function startServer() {
         throw new Error(`Service at 127.0.0.1:8081 returned ${response.status}: ${response.statusText}`);
       }
       const data = await response.json();
+      if (req.body && req.body["Scheduler"] && req.body["Scheduler"].enabled !== undefined) {
+        schedulerStatusStore.schedulerEnabled = Boolean(req.body["Scheduler"].enabled);
+      }
       res.json(data);
     } catch (error) {
       console.log('[ServiceNow] Failed to save configuration to reporting service, saving to memory:', (error as Error).message);
@@ -420,6 +512,9 @@ async function startServer() {
           sast: config["SAST&SCA Prompts"].sastPrompt || "", 
           sca: config["SAST&SCA Prompts"].scaPrompt || "" 
         };
+      }
+      if (config["Scheduler"] && config["Scheduler"].enabled !== undefined) {
+        schedulerStatusStore.schedulerEnabled = Boolean(config["Scheduler"].enabled);
       }
       res.json({ success: true, remark: "saved to offline mock memory" });
     }
@@ -1532,7 +1627,85 @@ startxref
         u_number: taskNum,
         u_state: state,
         u_additional_comments: comments,
-        u_work_notes: workNotes
+        u_workNotes: workNotes
+      });
+    }
+  });
+
+  // GET /api/snow/duplicates?sctask=SCTASK30824068
+  app.get("/api/snow/duplicates", async (req, res) => {
+    const sctask = (req.query.sctask as string || "SCTASK30824068").trim();
+    console.log(`[ServiceNow] Checking duplicate tickets for SCTASK: ${sctask}`);
+
+    // Upstream targets
+    const primaryUrl = `http://localhost:8080/api/snow/duplicates?sctask=${encodeURIComponent(sctask)}`;
+    const fallbackUrls = [
+      `http://127.0.0.1:8080/api/snow/duplicates?sctask=${encodeURIComponent(sctask)}`,
+      `http://127.0.0.1:8081/api/snow/duplicates?sctask=${encodeURIComponent(sctask)}`
+    ];
+
+    const urlsToTry = [primaryUrl, ...fallbackUrls];
+    let proxied = false;
+
+    for (const targetUrl of urlsToTry) {
+      try {
+        console.log(`[ServiceNow] Forwarding duplicates check to: ${targetUrl}`);
+        const response = await fetchWithTimeout(targetUrl, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        }, 4000);
+
+        if (response.ok) {
+          const data = await response.json();
+          res.json(data);
+          proxied = true;
+          console.log(`[ServiceNow] Successfully retrieved duplicate tickets from: ${targetUrl}`);
+          break;
+        } else {
+          console.log(`[ServiceNow] ${targetUrl} returned status: ${response.status}`);
+        }
+      } catch (err: any) {
+        console.log(`[ServiceNow] Connection to ${targetUrl} failed: ${err.message}`);
+      }
+    }
+
+    if (!proxied) {
+      console.log(`[ServiceNow] Upstream services unavailable; returning simulated duplicate data for ${sctask}.`);
+      const lower = sctask.toLowerCase();
+      const isZero = lower.includes("zero") || lower.includes("clean") || lower.includes("none") || lower.includes("nodup") || sctask === "SCTASK00000000";
+
+      if (isZero) {
+        return res.json({
+          sctask: sctask,
+          ritm: "RITM0012345",
+          applicationProfileName: "MYS-TAX-MyCTax_MY_Desktop",
+          duplicateCount: 0,
+          duplicates: []
+        });
+      }
+
+      // Default: Return duplicate found structure as specified in prompt
+      res.json({
+        sctask: sctask,
+        ritm: "RITM0012345",
+        applicationProfileName: "MYS-TAX-MyCTax_MY_Desktop",
+        duplicateCount: 2,
+        duplicates: [
+          {
+            sctask: "SCTASK30821000",
+            ritm: "RITM0012000",
+            state: "Work in Progress",
+            title: "CRS Static Code Review",
+            owner: "John Doe"
+          },
+          {
+            sctask: "SCTASK30819999",
+            ritm: "RITM0011999",
+            state: "Open",
+            title: "CRS Security Scan",
+            owner: "Unassigned"
+          }
+        ]
       });
     }
   });
@@ -1857,6 +2030,7 @@ startxref
             // Broadcast events
             broadcastSchedulerSse('ticket-complete', newTicket);
             broadcastSchedulerSse('kpi-update', dailyKpisStore);
+            broadcastSchedulerSse('recent-tickets', recentTicketsStore.slice(0, 50));
 
             // Return to IDLE state
             schedulerStatusStore.state = 'IDLE';
@@ -1884,9 +2058,10 @@ startxref
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders?.();
 
-    // Immediately push current status + today's KPIs upon connection
+    // Immediately push current status + today's KPIs + recent tickets upon connection
     res.write(`event: scheduler-status\ndata: ${JSON.stringify(schedulerStatusStore)}\n\n`);
     res.write(`event: kpi-update\ndata: ${JSON.stringify(dailyKpisStore)}\n\n`);
+    res.write(`event: recent-tickets\ndata: ${JSON.stringify(recentTicketsStore.slice(0, 50))}\n\n`);
 
     sseSubscribers.add(res);
 

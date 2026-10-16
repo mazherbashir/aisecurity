@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
-  Trash2,
   ExternalLink,
   Search,
   Filter,
@@ -36,9 +35,7 @@ export const SchedulerDashboardScreen: React.FC<SchedulerDashboardScreenProps> =
     kpis,
     tickets,
     isConnected,
-    isResetting,
     error,
-    resetDatabase,
     refetch,
   } = useSchedulerDashboard();
 
@@ -46,7 +43,6 @@ export const SchedulerDashboardScreen: React.FC<SchedulerDashboardScreenProps> =
   const [toolFilter, setToolFilter] = useState<'ALL' | 'VERACODE' | 'CHECKMARX'>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'SUCCESS' | 'PENDING' | 'FAILED' | 'SKIPPED'>('ALL');
   const [actionFilter, setActionFilter] = useState<'ALL' | 'CLEAN_SIGNOFF' | 'COMMENTS_ADDED' | 'MITIGATION_REVIEW' | 'ERROR'>('ALL');
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Format countdown mm:ss
   const formatCountdown = (seconds: number | undefined) => {
@@ -221,7 +217,7 @@ export const SchedulerDashboardScreen: React.FC<SchedulerDashboardScreenProps> =
             <span className="mt-1 font-mono text-xs font-bold text-slate-200 truncate">
               {status?.currentTicket ? (
                 <a
-                  href={`https://pwcnetwork.service-now.com/sc_req_item.do?sysparm_query=number=${status.currentTicket}`}
+                  href={`https://pwcnetwork.service-now.com/nav_to.do?uri=sc_task.do?sysparm_query=number=${status.currentTicket}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sky-400 hover:underline inline-flex items-center gap-1"
@@ -532,16 +528,6 @@ export const SchedulerDashboardScreen: React.FC<SchedulerDashboardScreenProps> =
               <option value="MITIGATION_REVIEW">MITIGATION REVIEW</option>
               <option value="ERROR">ERRORS</option>
             </select>
-
-            {/* Reset Database Button */}
-            <button
-              onClick={() => setShowResetConfirm(true)}
-              className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:text-rose-300 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer ml-auto sm:ml-0"
-              title="Reset today's statistics & clear execution feed"
-            >
-              <Trash2 size={12} />
-              Reset Data
-            </button>
           </div>
         </div>
 
@@ -563,7 +549,7 @@ export const SchedulerDashboardScreen: React.FC<SchedulerDashboardScreenProps> =
             <tbody className="divide-y divide-slate-800/60 font-sans">
               <AnimatePresence initial={false}>
                 {filteredTickets.map((ticket, index) => {
-                  const sctaskLink = `https://pwcnetwork.service-now.com/sc_req_item.do?sysparm_query=number=${ticket.sctask}`;
+                  const sctaskLink = `https://pwcnetwork.service-now.com/nav_to.do?uri=sc_task.do?sysparm_query=number=${ticket.sctask}`;
                   const ritmLink = `https://pwcnetwork.service-now.com/sc_req_item.do?sysparm_query=number=${ticket.ritm}`;
                   const isCheckmarx = ticket.scaTool?.toUpperCase() === 'CHECKMARX';
 
@@ -707,59 +693,6 @@ export const SchedulerDashboardScreen: React.FC<SchedulerDashboardScreenProps> =
         </div>
       </div>
 
-      {/* 4. RESET CONFIRMATION MODAL */}
-      <AnimatePresence>
-        {showResetConfirm && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-md bg-slate-900 border border-rose-500/30 rounded-2xl p-6 shadow-2xl flex flex-col gap-4 text-left"
-            >
-              <div className="flex items-center gap-3 text-rose-400">
-                <div className="p-2 bg-rose-500/10 rounded-xl border border-rose-500/20">
-                  <AlertTriangle size={24} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black uppercase tracking-wider text-slate-100">
-                    Reset Scheduler Statistics?
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    This will reset today's KPI counters and clear the execution feed back to zero.
-                  </p>
-                </div>
-              </div>
-
-              <p className="text-xs text-slate-400 font-sans leading-relaxed">
-                This triggers <code className="font-mono text-rose-400">POST /api/scheduler/reset</code> on the Spring Boot backend service.
-              </p>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowResetConfirm(false)}
-                  disabled={isResetting}
-                  className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-white transition-all cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await resetDatabase();
-                    setShowResetConfirm(false);
-                  }}
-                  disabled={isResetting}
-                  className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-black uppercase tracking-wider rounded-lg transition-all shadow-lg shadow-rose-900/40 cursor-pointer disabled:opacity-50"
-                >
-                  {isResetting ? 'Resetting...' : 'Confirm Reset'}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };

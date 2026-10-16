@@ -229,6 +229,10 @@ public class ConfigService {
                     veracodeConfig.setIntakeRequest(payload.getSystem().getIntakeRequest());
                     updates.put("veracode.api.intake-request", String.valueOf(payload.getSystem().getIntakeRequest()));
                 }
+                if (payload.getSystem().getSnowSchedulerEnabled() != null) {
+                    veracodeConfig.setSnowSchedulerEnabled(payload.getSystem().getSnowSchedulerEnabled());
+                    updates.put("crs.snow.scheduler.enabled", String.valueOf(payload.getSystem().getSnowSchedulerEnabled()));
+                }
                 if (payload.getSystem().getSafeScaVersion() != null) {
                     if (payload.getSystem().getSafeScaVersion().getScaSafeVersionEnabled() != null) {
                         veracodeConfig.setScaSafeVersionEnabled(payload.getSystem().getSafeScaVersion().getScaSafeVersionEnabled());
@@ -325,6 +329,40 @@ public class ConfigService {
                 if (payload.getIntake().getGcaasRestBaseURL() != null) {
                     veracodeConfig.setGcaasRestBaseURL(payload.getIntake().getGcaasRestBaseURL());
                     updates.put("veracode.api.gcaas-rest-baseURL", payload.getIntake().getGcaasRestBaseURL());
+                }
+            }
+            if (payload.getScheduler() != null) {
+                if (payload.getScheduler().getEnabled() != null) {
+                    veracodeConfig.setSnowSchedulerEnabled(payload.getScheduler().getEnabled());
+                    updates.put("crs.snow.scheduler.enabled", String.valueOf(payload.getScheduler().getEnabled()));
+                }
+                if (payload.getScheduler().getDelayMs() != null) {
+                    veracodeConfig.setSnowSchedulerDelayMs(payload.getScheduler().getDelayMs());
+                    updates.put("crs.snow.scheduler.delay-ms", String.valueOf(payload.getScheduler().getDelayMs()));
+                }
+                if (payload.getScheduler().getMaxMemoryEntries() != null) {
+                    veracodeConfig.setSnowSchedulerMaxMemoryEntries(payload.getScheduler().getMaxMemoryEntries());
+                    updates.put("crs.snow.scheduler.max-memory-entries", String.valueOf(payload.getScheduler().getMaxMemoryEntries()));
+                }
+                if (payload.getScheduler().getReadFromLocalFile() != null) {
+                    veracodeConfig.setSnowSchedulerReadFromLocalFile(payload.getScheduler().getReadFromLocalFile());
+                    updates.put("crs.snow.scheduler.read-from-local-file", String.valueOf(payload.getScheduler().getReadFromLocalFile()));
+                }
+                if (payload.getScheduler().getLocalFilePath() != null) {
+                    veracodeConfig.setSnowSchedulerLocalFilePath(payload.getScheduler().getLocalFilePath());
+                    updates.put("crs.snow.scheduler.local-file-path", payload.getScheduler().getLocalFilePath());
+                }
+                if (payload.getScheduler().getAutoSignoffEnabled() != null) {
+                    veracodeConfig.setAutoSignoffEnabled(payload.getScheduler().getAutoSignoffEnabled());
+                    updates.put("crs.snow.auto-signoff-enabled", String.valueOf(payload.getScheduler().getAutoSignoffEnabled()));
+                }
+                if (payload.getScheduler().getAutoSignoffCheckmarxEnabled() != null) {
+                    veracodeConfig.setAutoSignoffCheckmarxEnabled(payload.getScheduler().getAutoSignoffCheckmarxEnabled());
+                    updates.put("crs.snow.auto.signoff-checkmars-enable", String.valueOf(payload.getScheduler().getAutoSignoffCheckmarxEnabled()));
+                }
+                if (payload.getScheduler().getCheckDuplicateRequests() != null) {
+                    veracodeConfig.setCheckDuplicateRequests(payload.getScheduler().getCheckDuplicateRequests());
+                    updates.put("crs.snow.check-duplicate-requests", String.valueOf(payload.getScheduler().getCheckDuplicateRequests()));
                 }
             }
         }
@@ -431,6 +469,7 @@ public class ConfigService {
         system.put("historyLimit", veracodeConfig.getHistoryLimit());
         system.put("secondaryAuditEnabled", veracodeConfig.isSecondaryAuditEnabled());
         system.put("intakeRequest", veracodeConfig.isIntakeRequest());
+        system.put("snowSchedulerEnabled", veracodeConfig.isSnowSchedulerEnabled());
 
         // Nested safeSCAVERSION under System
         java.util.Map<String, Object> safeScaVersion = new java.util.HashMap<>();
@@ -514,6 +553,19 @@ public class ConfigService {
         intake.put("gcaasRestBaseURL", veracodeConfig.getGcaasRestBaseURL());
         config.put("Intake", intake);
 
+        // Group 9: Scheduler Settings
+        java.util.Map<String, Object> schedulerMap = new java.util.HashMap<>();
+        schedulerMap.put("enabled", veracodeConfig.isSnowSchedulerEnabled());
+        schedulerMap.put("delayMs", veracodeConfig.getSnowSchedulerDelayMs());
+        schedulerMap.put("maxMemoryEntries", veracodeConfig.getSnowSchedulerMaxMemoryEntries());
+        schedulerMap.put("readFromLocalFile", veracodeConfig.isSnowSchedulerReadFromLocalFile());
+        schedulerMap.put("localFilePath", veracodeConfig.getSnowSchedulerLocalFilePath());
+        schedulerMap.put("historyFilePath", veracodeConfig.getSnowSchedulerHistoryFilePath());
+        schedulerMap.put("autoSignoffEnabled", veracodeConfig.isAutoSignoffEnabled());
+        schedulerMap.put("autoSignoffCheckmarxEnabled", veracodeConfig.isAutoSignoffCheckmarxEnabled());
+        schedulerMap.put("checkDuplicateRequests", veracodeConfig.isCheckDuplicateRequests());
+        config.put("Scheduler", schedulerMap);
+
         return config;
     }
 
@@ -536,6 +588,7 @@ public class ConfigService {
         system.setHistoryLimit(veracodeConfig.getHistoryLimit());
         system.setSecondaryAuditEnabled(veracodeConfig.isSecondaryAuditEnabled());
         system.setIntakeRequest(veracodeConfig.isIntakeRequest());
+        system.setSnowSchedulerEnabled(veracodeConfig.isSnowSchedulerEnabled());
 
         // safeSCAVERSION under System
         GroupedSystemConfigDTO.SafeScaVersionSettings safeSca = new GroupedSystemConfigDTO.SafeScaVersionSettings();
@@ -617,6 +670,19 @@ public class ConfigService {
         intake.setGcaasRestEndpointIntake(veracodeConfig.getGcaasRestEndpointIntake());
         intake.setGcaasRestBaseURL(veracodeConfig.getGcaasRestBaseURL());
         dto.setIntake(intake);
+
+        // Scheduler Settings
+        GroupedSystemConfigDTO.SchedulerSettings scheduler = new GroupedSystemConfigDTO.SchedulerSettings();
+        scheduler.setEnabled(veracodeConfig.isSnowSchedulerEnabled());
+        scheduler.setDelayMs(veracodeConfig.getSnowSchedulerDelayMs());
+        scheduler.setMaxMemoryEntries(veracodeConfig.getSnowSchedulerMaxMemoryEntries());
+        scheduler.setReadFromLocalFile(veracodeConfig.isSnowSchedulerReadFromLocalFile());
+        scheduler.setLocalFilePath(veracodeConfig.getSnowSchedulerLocalFilePath());
+        scheduler.setHistoryFilePath(veracodeConfig.getSnowSchedulerHistoryFilePath());
+        scheduler.setAutoSignoffEnabled(veracodeConfig.isAutoSignoffEnabled());
+        scheduler.setAutoSignoffCheckmarxEnabled(veracodeConfig.isAutoSignoffCheckmarxEnabled());
+        scheduler.setCheckDuplicateRequests(veracodeConfig.isCheckDuplicateRequests());
+        dto.setScheduler(scheduler);
 
         return dto;
     }

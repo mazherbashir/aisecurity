@@ -1,6 +1,7 @@
 package com.crs_reivew_api.controller;
 
 import com.crs_reivew_api.config.VeracodeConfig;
+import com.crs_reivew_api.dto.SnowDuplicateTaskDTO;
 import com.crs_reivew_api.dto.SnowRitmDTO;
 import com.crs_reivew_api.dto.SnowScTaskDTO;
 import com.crs_reivew_api.dto.VeracodeReportDTO;
@@ -1338,5 +1339,139 @@ public class SnowController {
             }
         }
         return null;
+    }
+
+    /**
+     * UI Endpoint: Check for open duplicate review requests in ServiceNow.
+     * Takes ONLY the SCTASK number.
+     *
+     * Example usage from UI:
+     * - GET /api/snow/duplicates?sctask=SCTASK30824068
+     * - GET /api/snow/duplicates/SCTASK30824068
+     */
+    @GetMapping(value = {"/duplicates", "/duplicate", "/duplicates/{sctaskNumber}", "/sctask/{sctaskNumber}/duplicates"}, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> getDuplicates(
+            @PathVariable(value = "sctaskNumber", required = false) String pathTask,
+            @RequestParam(value = "sctask", required = false) String queryTask,
+            @RequestParam(value = "number", required = false) String numberParam,
+            @RequestParam(value = "appName", required = false) String appNameParam) {
+
+        String sctask = (pathTask != null && !pathTask.trim().isEmpty()) ? pathTask.trim()
+                : ((queryTask != null && !queryTask.trim().isEmpty()) ? queryTask.trim()
+                : ((numberParam != null && !numberParam.trim().isEmpty()) ? numberParam.trim() : null));
+
+        Map<String, Object> resp = new LinkedHashMap<>();
+
+        // If direct appName is provided without sctask
+        if (sctask == null && appNameParam != null && !appNameParam.trim().isEmpty()) {
+            String appName = appNameParam.trim();
+            resp.put("applicationProfileName", appName);
+            List<SnowDuplicateTaskDTO> duplicates = snowService.findDuplicateTasks(null, appName);
+            resp.put("duplicateCount", duplicates.size());
+            resp.put("duplicates", duplicates);
+            return ResponseEntity.ok(resp);
+        }
+
+        if (sctask == null) {
+            resp.put("error", "SCTASK parameter is required (e.g. /api/snow/duplicates?sctask=SCTASK30824068)");
+            return ResponseEntity.badRequest().body(resp);
+        }
+
+        resp.put("sctask", sctask);
+
+        // Step 1 - GET SCTASK
+        SnowScTaskDTO scTask = snowService.getScTaskDetails(sctask);
+        if (scTask == null) {
+            resp.put("error", "SCTASK " + sctask + " not found in ServiceNow");
+            return ResponseEntity.status(404).body(resp);
+        }
+
+        String ritmNumber = scTask.getRequestItemNumber();
+        resp.put("ritm", ritmNumber);
+
+        if (ritmNumber == null || ritmNumber.trim().isEmpty()) {
+            resp.put("duplicateCount", 0);
+            resp.put("duplicates", List.of());
+            resp.put("message", "RITM not found for " + sctask);
+            return ResponseEntity.ok(resp);
+        }
+
+        // Step 2 & 3 - GET RITM -> Extract Application Profile Name
+        SnowRitmDTO ritm = snowService.getRitmDetails(ritmNumber.trim());
+        String appName = (ritm != null) ? ritm.getApplicationProfileName() : null;
+        resp.put("applicationProfileName", appName);
+
+        if (appName == null || appName.trim().isEmpty()) {
+            resp.put("duplicateCount", 0);
+            resp.put("duplicates", List.of());
+            resp.put("message", "Application Profile Name not found in " + ritmNumber);
+            return ResponseEntity.ok(resp);
+        }
+
+        // Step 4 - Find Duplicates
+        List<SnowDuplicateTaskDTO> duplicates = snowService.findDuplicateTasks(sctask, appName.trim());
+        resp.put("duplicateCount", duplicates.size());
+        resp.put("duplicates", duplicates);
+
+        return ResponseEntity.ok(resp);
+    }
+
+    /**
+     * UI Endpoint: Manually trigger duplicate evaluation and ServiceNow Pending update for an SCTASK.
+     * Useful for UI operator action buttons to resolve duplicates on demand.
+     *
+     * Example: POST /api/snow/sctask/SCTASK30824068/markDuplicate
+     */
+    @PostMapping(value = "/sctask/{sctaskNumber}/markDuplicate", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> markDuplicateTask(
+            @PathVariable("sctaskNumber") String sctaskNumber) {
+
+        Map<String, Object> resp = new LinkedHashMap<>();
+        if (sctaskNumber == null || sctaskNumber.trim().isEmpty()) {
+            resp.put("error", "SCTASK number is required");
+            return ResponseEntity.badRequest().body(resp);
+        }
+
+        String cleanTask = sctaskNumber.trim();
+        resp.put("sctask", cleanTask);
+
+        SnowScTaskDTO scTask = snowService.getScTaskDetails(cleanTask);
+        if (scTask == null) {
+            resp.put("error", "SCTASK " + cleanTask + " not found in ServiceNow");
+            return ResponseEntity.status(404).body(resp);
+        }
+
+        String ritmNumber = scTask.getRequestItemNumber();
+        resp.put("ritm", ritmNumber);
+
+        SnowRitmDTO ritm = (ritmNumber != null) ? snowService.getRitmDetails(ritmNumber.trim()) : null;
+        String appName = (ritm != null) ? ritm.getApplicationProfileName() : null;
+        resp.put("applicationProfileName", appName);
+
+        if (appName == null || appName.trim().isEmpty()) {
+            resp.put("success", false);
+            resp.put("error", "Application Profile Name not found in ticket " + cleanTask);
+            return ResponseEntity.badRequest().body(resp);
+        }
+
+        List<SnowDuplicateTaskDTO> duplicates = snowService.findDuplicateTasks(cleanTask, appName.trim());
+        resp.put("duplicateCount", duplicates.size());
+        resp.put("duplicates", duplicates);
+
+        if (duplicates.isEmpty()) {
+            resp.put("success", false);
+            resp.put("message", "No duplicate open tasks found for profile '" + appName + "'");
+            return ResponseEntity.ok(resp);
+        }
+
+        // Build HTML notification, save log, and update ServiceNow to Pending
+        String duplicateHtml = ticketScheduler.buildDuplicateRequestHtml(cleanTask, ritmNumber, appName.trim(), duplicates);
+        ticketScheduler.saveAutoLogFile(ritmNumber, duplicateHtml);
+        ticketScheduler.executePendingBlock(cleanTask, ticketScheduler.ensureCodeTags(duplicateHtml), true);
+
+        resp.put("success", true);
+        resp.put("status", "Pending");
+        resp.put("message", "Ticket " + cleanTask + " updated to Pending with duplicate request notification.");
+        return ResponseEntity.ok(resp);
     }
 }

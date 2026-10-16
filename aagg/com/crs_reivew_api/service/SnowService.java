@@ -1,6 +1,7 @@
 package com.crs_reivew_api.service;
 
 import com.crs_reivew_api.config.VeracodeConfig;
+import com.crs_reivew_api.dto.SnowDuplicateTaskDTO;
 import com.crs_reivew_api.dto.SnowRitmDTO;
 import com.crs_reivew_api.dto.SnowScTaskDTO;
 import com.crs_reivew_api.dto.SnowScTaskUpdateRequestDTO;
@@ -58,6 +59,8 @@ import java.util.Map;
 public class SnowService {
 
     private static final Logger logger = LoggerFactory.getLogger(SnowService.class);
+    private static final java.util.regex.Pattern APP_PROFILE_NAME_REGEX =
+            java.util.regex.Pattern.compile("(?i)Application\\s*Profile\\s*Name\\s*[:=]\\s*([^\\r\\n]+)");
 
     private final VeracodeConfig veracodeConfig;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -359,7 +362,7 @@ public class SnowService {
         Map<String, String> vars = parseVariablesString(varStr);
         dto.variables = vars;
 
-        dto.applicationProfileName = getVar(vars, "Application Profile Name", "applicationProfileName");
+        dto.applicationProfileName = extractApplicationProfileName(varStr, vars);
         dto.scaTool = getVar(vars, "Scan Code Analysis (SCA) Tool", "SCA Tool", "scaTool");
         dto.applicationTechnology = getVar(vars, "Application/technology to be reviewed", "applicationTechnology");
         dto.applicationVersion = getVar(vars, "Application Version", "applicationVersion");
@@ -528,6 +531,179 @@ public class SnowService {
             }
         }
         dto.requestItemNumber = ritmNum;
+
+        return dto;
+    }
+
+    /**
+     * Robustly extracts the Application Profile Name from u_variables_string and parsed variables.
+     * Uses JSON parsing and regex pattern fallback matching PowerShell Step 3.
+     */
+    public String extractApplicationProfileName(String varStr, Map<String, String> vars) {
+        String appName = getVar(vars, "Application Profile Name", "applicationProfileName", "ApplicationProfileName");
+        if (appName != null && !appName.trim().isEmpty()) {
+            return appName.trim();
+        }
+
+        // Try JSON parsing
+        if (varStr != null && varStr.trim().startsWith("{")) {
+            try {
+                JsonNode json = objectMapper.readTree(varStr);
+                if (json.hasNonNull("Application Profile Name")) {
+                    return json.get("Application Profile Name").asText().trim();
+                }
+                if (json.hasNonNull("ApplicationProfileName")) {
+                    return json.get("ApplicationProfileName").asText().trim();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        // Fallback regex matching Application Profile Name [:=] value
+        if (varStr != null) {
+            java.util.regex.Matcher m = APP_PROFILE_NAME_REGEX.matcher(varStr);
+            if (m.find()) {
+                return m.group(1).trim();
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Queries ServiceNow sc_task table for open duplicate tasks matching the same Application Profile Name.
+     * Excludes the specified sctaskNumber (if provided).
+     *
+     * @param excludeSctask SCTASK number to exclude from duplicate search
+     * @param appProfileName Application profile name to search for
+     * @return List of matching SnowDuplicateTaskDTO items
+     */
+    public List<SnowDuplicateTaskDTO> findDuplicateTasks(String excludeSctask, String appProfileName) {
+        List<SnowDuplicateTaskDTO> list = new ArrayList<>();
+        if (appProfileName == null || appProfileName.trim().isEmpty()) {
+            logger.debug("Cannot search for duplicate requests: appProfileName is empty.");
+            return list;
+        }
+
+        String catItem = veracodeConfig.getSnowSctaskCatItem();
+        String assignmentGroup = veracodeConfig.getSnowSctaskAssignmentGroup();
+        String profileVarSysId = veracodeConfig.getSnowSctaskAppProfileVariableSysId();
+        int limit = veracodeConfig.getSnowDuplicateRequestLimit() > 0 ? veracodeConfig.getSnowDuplicateRequestLimit() : 10;
+
+        StringBuilder query = new StringBuilder();
+        if (excludeSctask != null && !excludeSctask.trim().isEmpty()) {
+            query.append("number!=").append(excludeSctask.trim()).append("^");
+        }
+        if (catItem != null && !catItem.trim().isEmpty()) {
+            query.append("request_item.cat_item=").append(catItem.trim()).append("^");
+        }
+        if (assignmentGroup != null && !assignmentGroup.trim().isEmpty()) {
+            query.append("assignment_group=").append(assignmentGroup.trim()).append("^");
+        }
+        query.append("stateNOT IN3,4,7^");
+        query.append("variables.").append(profileVarSysId).append("=").append(appProfileName.trim());
+
+        String fields = "number,state,request_item.number,short_description,assigned_to";
+        String endpoint = veracodeConfig.getSnowSctaskEndpoint();
+        String fullUrl = buildTableUrlWithFields(endpoint, query.toString(), limit, true, fields);
+
+        logger.info("Querying ServiceNow for duplicates: appProfileName='{}', excludeSctask='{}', url='{}'",
+                appProfileName, excludeSctask, fullUrl);
+
+        try {
+            JsonNode root = callSnowApi(fullUrl);
+            if (root != null && root.has("result") && root.get("result").isArray()) {
+                for (JsonNode item : root.get("result")) {
+                    SnowDuplicateTaskDTO dto = extractDuplicateTaskDto(item);
+                    if (dto != null && dto.getNumber() != null && !dto.getNumber().trim().isEmpty()) {
+                        // Double check exclusion in case ServiceNow query did not filter it
+                        if (excludeSctask == null || !dto.getNumber().equalsIgnoreCase(excludeSctask.trim())) {
+                            list.add(dto);
+                        }
+                    }
+                }
+            }
+            logger.info("Found {} duplicate task(s) in ServiceNow for profile '{}'", list.size(), appProfileName);
+        } catch (Exception e) {
+            logger.error("Failed to query duplicate requests for profile '{}': {}", appProfileName, e.getMessage(), e);
+        }
+
+        return list;
+    }
+
+    /**
+     * Convenience method to find duplicate tasks given an SCTASK number.
+     * Fetches SCTASK -> gets RITM -> extracts Application Profile Name -> queries duplicates.
+     *
+     * @param sctaskNumber The SCTASK number to inspect
+     * @return List of duplicate tasks
+     */
+    public List<SnowDuplicateTaskDTO> findDuplicatesForSctask(String sctaskNumber) {
+        if (sctaskNumber == null || sctaskNumber.trim().isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        SnowScTaskDTO scTask = getScTaskDetails(sctaskNumber.trim());
+        if (scTask == null) {
+            logger.warn("Cannot find duplicates: SCTASK {} not found in ServiceNow", sctaskNumber);
+            return new ArrayList<>();
+        }
+
+        String ritmNumber = scTask.getRequestItemNumber();
+        if (ritmNumber == null || ritmNumber.trim().isEmpty()) {
+            logger.warn("Cannot find duplicates: RITM number not found on SCTASK {}", sctaskNumber);
+            return new ArrayList<>();
+        }
+
+        SnowRitmDTO ritm = getRitmDetails(ritmNumber.trim());
+        if (ritm == null) {
+            logger.warn("Cannot find duplicates: RITM {} details not found in ServiceNow", ritmNumber);
+            return new ArrayList<>();
+        }
+
+        String appName = ritm.getApplicationProfileName();
+        if (appName == null || appName.trim().isEmpty()) {
+            logger.warn("Cannot find duplicates: Application Profile Name not found in RITM {}", ritmNumber);
+            return new ArrayList<>();
+        }
+
+        return findDuplicateTasks(sctaskNumber.trim(), appName.trim());
+    }
+
+    /**
+     * Extracts a strongly-typed SnowDuplicateTaskDTO from a single ServiceNow JSON item node.
+     */
+    public SnowDuplicateTaskDTO extractDuplicateTaskDto(JsonNode itemNode) {
+        if (itemNode == null || itemNode.isMissingNode()) {
+            return null;
+        }
+
+        SnowDuplicateTaskDTO dto = new SnowDuplicateTaskDTO();
+        dto.setNumber(getNodeText(itemNode, "number"));
+        dto.setState(getNodeText(itemNode, "state"));
+        dto.setShortDescription(getNodeText(itemNode, "short_description"));
+        dto.setAssignedTo(getNodeText(itemNode, "assigned_to"));
+        dto.setSysId(getNodeText(itemNode, "sys_id"));
+
+        String ritmNum = getNodeText(itemNode, "request_item.number");
+        if (ritmNum == null) {
+            ritmNum = getNodeText(itemNode, "requestItemNumber");
+        }
+        if (ritmNum == null) {
+            ritmNum = getNodeText(itemNode, "request_item_number");
+        }
+        if (ritmNum == null && itemNode.has("request_item")) {
+            JsonNode reqItemNode = itemNode.get("request_item");
+            if (reqItemNode.isObject()) {
+                ritmNum = getNodeText(reqItemNode, "number");
+                if (ritmNum == null) {
+                    ritmNum = getNodeText(reqItemNode, "display_value");
+                }
+            } else {
+                ritmNum = reqItemNode.asText(null);
+            }
+        }
+        dto.setRequestItemNumber(ritmNum);
 
         return dto;
     }

@@ -138,6 +138,16 @@ export function useSchedulerDashboard() {
     fetchRecentTickets();
     fetchSnapshots();
 
+    // 1. Re-sync whenever the laptop wakes from sleep or tab regains focus
+    const handleWakeOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        fetchRecentTickets();
+        fetchSnapshots();
+      }
+    };
+    document.addEventListener('visibilitychange', handleWakeOrFocus);
+    window.addEventListener('focus', handleWakeOrFocus);
+
     // 3. Open SSE Stream
     let isMounted = true;
     let evtSource: EventSource | null = null;
@@ -146,10 +156,13 @@ export function useSchedulerDashboard() {
       evtSource = new EventSource(`${API_BASE}/stream`);
       eventSourceRef.current = evtSource;
 
+      // 2. In evtSource.onopen, re-fetch immediately on reconnect
       evtSource.onopen = () => {
         if (!isMounted) return;
         setIsConnected(true);
         setError(null);
+        fetchRecentTickets();
+        fetchSnapshots();
       };
 
       // Handler 1: Live Status & Countdown
@@ -190,6 +203,17 @@ export function useSchedulerDashboard() {
         }
       });
 
+      // Handler 4: Listen for the 'recent-tickets' SSE event pushed by the backend
+      evtSource.addEventListener('recent-tickets', (e: MessageEvent) => {
+        if (!isMounted) return;
+        try {
+          const list = JSON.parse(e.data);
+          if (Array.isArray(list)) setTickets(list);
+        } catch (err) {
+          console.error('Failed to parse recent-tickets:', err);
+        }
+      });
+
       evtSource.onerror = (err) => {
         if (!isMounted) return;
         console.warn('SSE stream disconnected, browser will auto-reconnect...', err);
@@ -203,6 +227,8 @@ export function useSchedulerDashboard() {
 
     return () => {
       isMounted = false;
+      document.removeEventListener('visibilitychange', handleWakeOrFocus);
+      window.removeEventListener('focus', handleWakeOrFocus);
       if (evtSource) {
         evtSource.close();
       }

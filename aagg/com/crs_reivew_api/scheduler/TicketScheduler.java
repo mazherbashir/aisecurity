@@ -3,6 +3,7 @@ package com.crs_reivew_api.scheduler;
 import com.crs_reivew_api.component.TaskFileStore;
 import com.crs_reivew_api.component.TaskMemory;
 import com.crs_reivew_api.config.VeracodeConfig;
+import com.crs_reivew_api.dto.SnowDuplicateTaskDTO;
 import com.crs_reivew_api.dto.SnowRitmDTO;
 import com.crs_reivew_api.dto.SnowScTaskDTO;
 import com.crs_reivew_api.dto.VeracodeReportDTO;
@@ -738,6 +739,11 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
             return;
         }
 
+        // Check for open duplicate requests before pulling scan from Veracode
+        if (checkAndHandleDuplicateRequest(sctaskNumber, ritmNumber, rawAppProfileName != null ? rawAppProfileName : cleanProfile, "VERACODE", requestReason, startTime)) {
+            return;
+        }
+
         boolean isMarRequest = isMarRequestReason(requestReason);
         boolean isSignoffRequest = isSignoffRequestReason(requestReason);
         boolean isApplicableRequest = isMarRequest || isSignoffRequest || requestReason == null;
@@ -1000,6 +1006,149 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
     }
 
     /**
+     * Builds the formatted HTML notification template when open duplicate requests are found
+     * for the same application profile.
+     */
+    public String buildDuplicateRequestHtml(String sctaskNumber, String ritmNumber, String appProfileName, List<SnowDuplicateTaskDTO> duplicates) {
+        String safeProfile = (appProfileName != null && !appProfileName.trim().isEmpty()) ? appProfileName.trim() : "Unknown Profile";
+        String safeSctask = (sctaskNumber != null && !sctaskNumber.trim().isEmpty()) ? sctaskNumber.trim() : "";
+        String safeRitm = (ritmNumber != null && !ritmNumber.trim().isEmpty()) ? " / " + ritmNumber.trim() : "";
+        int count = duplicates != null ? duplicates.size() : 0;
+
+        StringBuilder rows = new StringBuilder();
+        if (duplicates != null) {
+            for (SnowDuplicateTaskDTO d : duplicates) {
+                String dTask = (d.getNumber() != null && !d.getNumber().trim().isEmpty()) ? d.getNumber().trim() : "N/A";
+                String dRitm = (d.getRequestItemNumber() != null && !d.getRequestItemNumber().trim().isEmpty()) ? d.getRequestItemNumber().trim() : "N/A";
+                String dState = (d.getState() != null && !d.getState().trim().isEmpty()) ? d.getState().trim() : "Open";
+                String dTitle = (d.getShortDescription() != null && !d.getShortDescription().trim().isEmpty()) ? d.getShortDescription().trim() : "N/A";
+                String dOwner = (d.getAssignedTo() != null && !d.getAssignedTo().trim().isEmpty()) ? d.getAssignedTo().trim() : "Unassigned";
+
+                String stateBadge = switch (dState.toLowerCase()) {
+                    case "work in progress", "wip", "2" -> "<span class=\"rounded bg-dodgerblue highlight\">" + dState + "</span>";
+                    case "pending", "-5" -> "<span class=\"rounded bg-gold highlight\">" + dState + "</span>";
+                    case "open", "1" -> "<span class=\"rounded bg-green highlight\">" + dState + "</span>";
+                    default -> "<span class=\"rounded bg-gray highlight\">" + dState + "</span>";
+                };
+
+                rows.append("""
+                    <tr>
+                        <td style="padding: 8px 10px; border: 1px solid #ddd; font-weight: bold;"><code>%s</code></td>
+                        <td style="padding: 8px 10px; border: 1px solid #ddd;"><code>%s</code></td>
+                        <td style="padding: 8px 10px; border: 1px solid #ddd;">%s</td>
+                        <td style="padding: 8px 10px; border: 1px solid #ddd;">%s</td>
+                        <td style="padding: 8px 10px; border: 1px solid #ddd;">%s</td>
+                    </tr>
+                """.formatted(dTask, dRitm, stateBadge, dTitle, dOwner));
+            }
+        }
+
+        return """
+[code]
+<style>
+\t.bg-gray {background-color: gray; color: white;}
+\t.bg-green {background-color: green; color: white;}
+\t.info, .bg-dodgerblue {background-color: dodgerblue; color: black;}
+\t.verylow, .bg-yellowgreen {background-color: yellowgreen; color: black;}
+\t.low, .bg-gold {background-color: gold; color: black;}
+\t.medium, .bg-darkorange {background-color: darkorange; color: black;}
+\t.high, .bg-red {background-color: red; color: white;}
+\t.veryhigh, .bg-darkred {background-color: darkred; color: white;}
+\t.heading {border-radius: 5px; display: inline-block; font-weight: bold;
+\t\tpadding: 5px 25px; text-transform: uppercase;}
+\t.highlight {padding: 2px 5px 5px;}
+\t.rounded {border-radius: 15px; display: inline-block; font-weight: bold;
+\t\tmargin: 1px; padding: 2px 7.5px; text-align: center;}
+\t.minwidth {min-width: 50px;}
+\t.dup-table {border-collapse: collapse; width: 100%%; margin-top: 10px; margin-bottom: 12px; font-family: Arial, sans-serif; font-size: 13px;}
+\t.dup-table th {background-color: #f2f2f2; color: #333; text-align: left; padding: 8px 10px; border: 1px solid #ddd; font-weight: bold;}
+\t.dup-table td {padding: 8px 10px; border: 1px solid #ddd; text-align: left; vertical-align: top;}
+\t.dup-table tr:nth-child(even) {background-color: #fbfbfb;}
+</style>
+
+<h3 class="heading bg-darkorange">Duplicate Review Request Detected</h3><br/>
+An active or open security review request already exists for the application profile <span class="rounded bg-dodgerblue highlight">%s</span>.<br/><br/>
+Before Code Review Services can proceed with this request (<b>%s</b>%s), please note that <b>%d</b> existing open catalog task(s) are currently in progress or awaiting action for this profile:<br/>
+
+<table class="dup-table">
+  <thead>
+    <tr>
+      <th style="width: 18%%;">SCTASK</th>
+      <th style="width: 18%%;">RITM</th>
+      <th style="width: 16%%;">State</th>
+      <th style="width: 28%%;">Short Description</th>
+      <th style="width: 20%%;">Assigned To</th>
+    </tr>
+  </thead>
+  <tbody>
+%s
+  </tbody>
+</table>
+
+<div style="border: 1px solid #f0ad4e; background-color: #fcf8e3; color: #8a6d3b; padding: 10px 14px; border-radius: 5px; margin-top: 10px; margin-bottom: 10px; font-size: 13px;">
+  <b>Action Required:</b> To avoid duplicate reviews and conflicting scan assessments, this ticket is being placed in <b>Pending</b> status. Please coordinate with the owner(s) of the existing request(s) listed above, or consolidate your submission. If you believe this request is distinct, please provide clarification in a comment.
+</div>
+
+<hr/>
+If more assistance is needed, please schedule a consultation call by selecting the <i><b>Remediation Consultation</b></i> option from the appointment calendar. For more help, refer to the <i><b>Scheduling Consultations</b></i> section, as detailed in the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/:w:/r/sites/GBL-IFS-NIS-Application-Security/AppReadiness/CRS%%20Documents/Client-Facing%%20Documentation/CRS%%20Process%%20Overview.docx?d=w60b17b59a86342efa122e0767f68490f">CRS Process Overview</a> document.<br/>
+For more information about CRS, please see the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/GBL-IFS-NIS-Application-Security/SitePages/Code-Review-Services.aspx">CRS SharePoint</a>.
+[/code]
+""".formatted(safeProfile, safeSctask, safeRitm, count, rows.toString());
+    }
+
+    /**
+     * Checks if there are open duplicate catalog tasks in ServiceNow for the given application profile.
+     * If duplicates are found, formats the duplicate notification comment, saves the auto log,
+     * updates the SCTASK in ServiceNow to Pending state, records metrics, and returns true.
+     *
+     * @param sctaskNumber Current SCTASK number being processed
+     * @param ritmNumber Associated RITM number
+     * @param rawAppProfileName Application profile name
+     * @param tool SCA Tool (e.g. VERACODE or Checkmarx)
+     * @param requestReason Request Reason
+     * @param startTime Start timestamp of ticket processing
+     * @return true if duplicate requests were detected and handled; false otherwise
+     */
+    public boolean checkAndHandleDuplicateRequest(String sctaskNumber, String ritmNumber, String rawAppProfileName,
+                                                  String tool, String requestReason, long startTime) {
+        if (!config.isCheckDuplicateRequests()) {
+            return false;
+        }
+
+        if (rawAppProfileName == null || rawAppProfileName.trim().isEmpty()) {
+            return false;
+        }
+
+        String searchProfile = rawAppProfileName.trim();
+        if (searchProfile.toLowerCase().startsWith("application:")) {
+            searchProfile = searchProfile.substring("application:".length()).trim();
+        }
+
+        try {
+            List<SnowDuplicateTaskDTO> duplicates = snowService.findDuplicateTasks(sctaskNumber, searchProfile);
+            if (duplicates != null && !duplicates.isEmpty()) {
+                logger.warn("Duplicate request detected for SCTASK {} (RITM: {}, Profile: '{}'). Found {} open duplicate task(s). Placing ticket in Pending status and skipping scan pull.",
+                        sctaskNumber, ritmNumber, searchProfile, duplicates.size());
+
+                String duplicateHtml = buildDuplicateRequestHtml(sctaskNumber, ritmNumber, searchProfile, duplicates);
+                saveAutoLogFile(ritmNumber, duplicateHtml);
+                executePendingBlock(sctaskNumber, ensureCodeTags(duplicateHtml), true);
+
+                if (metricsService != null) {
+                    metricsService.recordTicketResult(sctaskNumber, ritmNumber, tool, requestReason,
+                            "DUPLICATE_REQUEST", "PENDING", "DUPLICATE_REQUEST", System.currentTimeMillis() - startTime);
+                }
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error("Error checking duplicate requests for SCTASK {} (Profile: '{}'): {}",
+                    sctaskNumber, searchProfile, e.getMessage(), e);
+        }
+
+        return false;
+    }
+
+    /**
      * Helper method to process non-Veracode tools (e.g., Checkmarx).
      */
     void processNonVeracodeTask(String sctaskNumber, String ritmNumber, String scaTool, String rawAppProfileName, String appVersion) {
@@ -1023,6 +1172,11 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
                 metricsService.recordTicketResult(sctaskNumber, ritmNumber, scaTool != null ? scaTool : "Checkmarx", requestReason,
                         "ERROR", "FAILED", "PROFILE_NOT_FOUND", System.currentTimeMillis() - startTime);
             }
+            return;
+        }
+
+        // Check for open duplicate requests before pulling scan from Checkmarx
+        if (checkAndHandleDuplicateRequest(sctaskNumber, ritmNumber, rawAppProfileName != null ? rawAppProfileName : profileName, scaTool != null ? scaTool : "Checkmarx", requestReason, startTime)) {
             return;
         }
 
