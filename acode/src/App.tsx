@@ -1078,11 +1078,14 @@ ${scaSec}`;
       const action = addCommentsOnly ? "AddComment" : "setReviewComments";
       const endpoint = `/api/snow/sctaskUpdate?action=${action}`;
       const commentsToSend = getSnowCommentsToSend(snowCommentOption);
+      const isCurrentReview = snowCommentOption === "current";
+      const cleanProfile = (profileName || overview?.applicationName || overview?.scanName || "").trim();
 
       const payload = addCommentsOnly
         ? {
             u_number: trimmedTask,
             u_additional_comments: commentsToSend,
+            ...(isCurrentReview && cleanProfile ? { profilename: cleanProfile, profileName: cleanProfile } : {}),
           }
         : {
             u_number: trimmedTask,
@@ -1090,6 +1093,7 @@ ${scaSec}`;
             u_pending_reason: "Awaiting Customer Response",
             u_end_pending: pendingDate,
             u_additional_comments: commentsToSend,
+            ...(isCurrentReview && cleanProfile ? { profilename: cleanProfile, profileName: cleanProfile } : {}),
           };
 
       const response = await fetch(endpoint, {
@@ -1106,6 +1110,12 @@ ${scaSec}`;
         } catch {}
         throw new Error(errDetail);
       }
+
+      let responseData: any = null;
+      try {
+        responseData = await response.json();
+      } catch {}
+      console.log("[ServiceNow] sctaskUpdate Response JSON:", responseData);
 
       // If a standard snippet was posted, update the editor view to match
       if (snowCommentOption !== "current") {
@@ -3079,16 +3089,23 @@ ${scaSec}`;
 
                   {/* Review Comments HTML summary */}
                   <div className="p-3 bg-slate-950/50 rounded-lg border border-slate-800/60 text-[10px] text-slate-400 flex items-center justify-between">
-                    <span>
-                      Attaching{" "}
-                      <strong className="text-slate-300">
-                        {snowCommentOption === "current"
-                          ? "Review Comments"
-                          : "Response Needed Comments"}
-                      </strong>{" "}
-                      HTML ({getSnowCommentsToSend(snowCommentOption).length} characters)
-                    </span>
-                    <span className="text-emerald-400 font-mono text-[9px] font-bold">
+                    <div>
+                      <span>
+                        Attaching{" "}
+                        <strong className="text-slate-300">
+                          {snowCommentOption === "current"
+                            ? "Review Comments"
+                            : "Response Needed Comments"}
+                        </strong>{" "}
+                        HTML ({getSnowCommentsToSend(snowCommentOption).length} characters)
+                      </span>
+                      {snowCommentOption === "current" && (
+                        <div className="text-[9px] text-blue-400 font-mono mt-0.5">
+                          Profile payload: <strong>{(profileName || overview?.applicationName || overview?.scanName || "N/A").trim()}</strong>
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-emerald-400 font-mono text-[9px] font-bold whitespace-nowrap ml-2">
                       READY TO SEND
                     </span>
                   </div>
@@ -5594,11 +5611,51 @@ export default function App() {
     }
   };
 
+  const resetAnalysisState = useCallback(() => {
+    setResultsLoaded(false);
+    setAggregatedData({ sast: [], sca: [] });
+    setBackendSastSummary(null);
+    setBackendScaSummary(null);
+    setScaDetails([]);
+    setSastMitigationProposal(null);
+    setScaMitigationProposal(null);
+    setSelectedGroups(new Set());
+    setSelectedDevDepPkgs(new Set());
+    setDetailedGroup(null);
+    setExpandedGroups(new Set());
+    setBatchModalConfig(null);
+    setOverview(mockOverview);
+    setRemovedMissingSca([]);
+    setSelectedMissingSca(null);
+    setShowCrossCodebases(new Set());
+    setRemovedNoPrecompile([]);
+    setSelectedNoPrecompile(null);
+    setShowCrossPrecompile(new Set());
+    setIsPrecompileOpen(false);
+    setRemovedMinifiedFiles([]);
+    setSelectedMinifiedFile(null);
+    setShowCrossMinified(new Set());
+    setIsMinifiedOpen(false);
+    setLastRawResponse(null);
+    setBackendError(null);
+    setErrorType(null);
+    setSuggestedApps([]);
+    setSuccessMessage(null);
+    setCopiedSast(false);
+    setCopiedSca(false);
+    setCopiedDeepDiveMitigation(false);
+    setCopiedDeepDiveAi(false);
+    setActiveTab("SAST");
+  }, []);
+
   const handleFetchResults = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedTools.length === 0) return;
     setShowSnowScreen(false);
     setShowSchedulerDashboard(false);
+    
+    // Refresh screen and remove all previous analysis showing on the screen
+    resetAnalysisState();
     
     if (selectedTools.includes("Checkmarx")) {
       const isJsonFile = appProfile.toLowerCase().endsWith(".json");
@@ -6631,6 +6688,12 @@ export default function App() {
 
                 <button
                   type="submit"
+                  id="btn-run-analysis"
+                  onClick={() => {
+                    if (!isSubmitting) {
+                      resetAnalysisState();
+                    }
+                  }}
                   disabled={
                     isSubmitting ||
                     selectedTools.length === 0 ||
@@ -6639,7 +6702,8 @@ export default function App() {
                       !appProfile.toLowerCase().endsWith(".json") &&
                       (!branch.trim() || !selectedTier))
                   }
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1.5 px-5 rounded-lg text-xs transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50 flex-shrink-0"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1.5 px-5 rounded-lg text-xs transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50 flex-shrink-0 cursor-pointer"
+                  title="Run Vulnerability Analysis"
                 >
                   {isSubmitting ? (
                     <RefreshCcw size={14} className="animate-spin" />
@@ -6692,8 +6756,11 @@ export default function App() {
               </div>
               {resultsLoaded && (
                 <button
-                  onClick={() => setResultsLoaded(false)}
-                  className="p-2 hover:bg-slate-800 rounded-lg text-slate-500 transition-all"
+                  id="btn-clear-analysis"
+                  onClick={resetAnalysisState}
+                  className="p-2 hover:bg-slate-800 rounded-lg text-slate-500 transition-all cursor-pointer"
+                  title="Refresh Screen & Clear Analysis"
+                  aria-label="Refresh Screen & Clear Analysis"
                 >
                   <RefreshCcw size={16} />
                 </button>
@@ -6712,47 +6779,67 @@ export default function App() {
             }} />
           ) : !resultsLoaded ? (
             <div className="col-span-12 flex items-center justify-center">
-              <div className="text-center space-y-4 max-w-md">
-                <div className="w-20 h-20 bg-slate-900 rounded-3xl border border-slate-700 flex items-center justify-center mx-auto mb-6 shadow-2xl">
-                  <Search className="text-blue-500" size={32} />
+              {isSubmitting ? (
+                <div id="running-analysis-indicator" className="text-center space-y-4 max-w-md py-16 animate-fadeIn">
+                  <div className="w-20 h-20 bg-blue-950/40 rounded-3xl border border-blue-500/40 flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-blue-900/30">
+                    <RefreshCcw className="text-blue-400 animate-spin" size={36} />
+                  </div>
+                  <h2 className="text-2xl font-bold tracking-tight text-slate-100 flex items-center justify-center gap-2">
+                    <span>Running Security Analysis</span>
+                  </h2>
+                  <p className="text-blue-400 font-mono text-sm font-semibold">
+                    {appProfile || "Scanning Target Profile"}
+                  </p>
+                  <p className="text-slate-400 text-xs max-w-sm mx-auto">
+                    Screen refreshed. Fetching latest policy scan findings, mitigation proposals, and third-party dependencies...
+                  </p>
+                  <div className="w-48 h-1.5 bg-slate-800 rounded-full mx-auto overflow-hidden mt-4">
+                    <div className="h-full bg-blue-500 rounded-full animate-pulse w-full" />
+                  </div>
                 </div>
-                <h2 className="text-2xl font-bold tracking-tight">
-                  Access Secure Findings
-                </h2>
-                <p className="text-slate-500 text-sm">
-                  Select your security scanner and target application profile to
-                  initialize the vulnerability audit workflow.
-                </p>
-                <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2.5">
-                  {schedulerEnabled && (
+              ) : (
+                <div className="text-center space-y-4 max-w-md">
+                  <div className="w-20 h-20 bg-slate-900 rounded-3xl border border-slate-700 flex items-center justify-center mx-auto mb-6 shadow-2xl">
+                    <Search className="text-blue-500" size={32} />
+                  </div>
+                  <h2 className="text-2xl font-bold tracking-tight">
+                    Access Secure Findings
+                  </h2>
+                  <p className="text-slate-500 text-sm">
+                    Select your security scanner and target application profile to
+                    initialize the vulnerability audit workflow.
+                  </p>
+                  <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2.5">
+                    {schedulerEnabled && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowSchedulerDashboard(true);
+                          setShowSnowScreen(false);
+                          setSelectedTools([]);
+                          window.location.hash = 'dashboard';
+                        }}
+                        className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-900/40 border border-emerald-400 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
+                      >
+                        <Activity size={15} className="animate-pulse" />
+                        <span>Open Real-Time Scheduler Dashboard</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
-                        setShowSchedulerDashboard(true);
-                        setShowSnowScreen(false);
+                        setShowSnowScreen(true);
+                        setShowSchedulerDashboard(false);
                         setSelectedTools([]);
-                        window.location.hash = 'dashboard';
                       }}
-                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-900/40 border border-emerald-400 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
+                      className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
                     >
-                      <Activity size={15} className="animate-pulse" />
-                      <span>Open Real-Time Scheduler Dashboard</span>
+                      <Database size={14} className="text-blue-400" />
+                      <span>SNOW Intake</span>
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowSnowScreen(true);
-                      setShowSchedulerDashboard(false);
-                      setSelectedTools([]);
-                    }}
-                    className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
-                  >
-                    <Database size={14} className="text-blue-400" />
-                    <span>SNOW Intake</span>
-                  </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           ) : (
             <>

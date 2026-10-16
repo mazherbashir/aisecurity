@@ -1,9 +1,0 @@
-{"sctask":"SCTASK31070568","ritm":"RITM28446507","scaTool":"VERACODE","requestReason":"Sign Off","action":"COMMENTS_ADDED","status":"PENDING","errorType":null,"durationMs":12754,"processedAt":"2026-10-15T16:58:20"}
-{"sctask":"SCTASK31051163","ritm":"RITM28425665","scaTool":"OTHER","requestReason":"Mitigation Approval Review","action":"MITIGATION_REVIEW","status":"PENDING","errorType":null,"durationMs":13448,"processedAt":"2026-10-15T16:03:15"}
-{"sctask":"SCTASK31070135","ritm":"RITM28446024","scaTool":"VERACODE","requestReason":"Sign Off","action":"ERROR","status":"FAILED","errorType":"SCAN_NOT_FOUND","durationMs":1544,"processedAt":"2026-10-15T15:13:00"}
-{"sctask":"SCTASK31050839","ritm":"RITM28425314","scaTool":"VERACODE","requestReason":"Sign Off","action":"COMMENTS_ADDED","status":"PENDING","errorType":null,"durationMs":22801,"processedAt":"2026-10-15T15:02:58"}
-{"sctask":"SCTASK31051299","ritm":"RITM28425873","scaTool":"VERACODE","requestReason":"Sign Off","action":"ERROR","status":"FAILED","errorType":"PROFILE_NOT_FOUND","durationMs":8470,"processedAt":"2026-10-15T14:42:35"}
-{"sctask":"SCTASK31068381","ritm":"RITM28444177","scaTool":"VERACODE","requestReason":"Sign Off","action":"COMMENTS_ADDED","status":"PENDING","errorType":null,"durationMs":51939,"processedAt":"2026-10-15T14:37:26"}
-{"sctask":"SCTASK31065100","ritm":"RITM28441122","scaTool":"VERACODE","requestReason":"Sign Off","action":"CLEAN_SIGNOFF","status":"SUCCESS","errorType":null,"durationMs":18520,"processedAt":"2026-10-15T14:15:10"}
-{"sctask":"SCTASK31062250","ritm":"RITM28438844","scaTool":"VERACODE","requestReason":"Sign Off","action":"CLEAN_SIGNOFF","status":"SUCCESS","errorType":null,"durationMs":19140,"processedAt":"2026-10-15T13:52:45"}
-{"sctask":"SCTASK31058910","ritm":"RITM28432100","scaTool":"VERACODE","requestReason":"Sign Off","action":"ERROR","status":"FAILED","errorType":"RESCAN_REQUIRED","durationMs":14200,"processedAt":"2026-10-15T13:20:18"}

@@ -671,6 +671,71 @@ public class SnowService {
     }
 
     /**
+     * Validates that the provided application profile name matches the profile name
+     * registered in ServiceNow for the given SCTASK's associated RITM.
+     *
+     * @param sctaskNumber The SCTASK number (e.g. SCTASK0123456)
+     * @param providedProfile The profile name provided in the request payload
+     * @return null if valid; error message string if mismatch or not found
+     */
+    public String validateProfileNameForSctask(String sctaskNumber, String providedProfile) {
+        if (sctaskNumber == null || sctaskNumber.trim().isEmpty()) {
+            return "Task number is required to validate profile name";
+        }
+        if (providedProfile == null || providedProfile.trim().isEmpty()) {
+            return null;
+        }
+
+        SnowScTaskDTO scTask = getScTaskDetails(sctaskNumber.trim());
+        if (scTask == null) {
+            return "SCTASK " + sctaskNumber.trim() + " not found in ServiceNow";
+        }
+
+        String ritmNumber = scTask.getRequestItemNumber();
+        if (ritmNumber == null || ritmNumber.trim().isEmpty()) {
+            return "Associated RITM not found on " + sctaskNumber.trim();
+        }
+
+        SnowRitmDTO ritm = getRitmDetails(ritmNumber.trim());
+        if (ritm == null) {
+            return "RITM " + ritmNumber.trim() + " details not found in ServiceNow";
+        }
+
+        String expectedProfile = ritm.getApplicationProfileName();
+        if (expectedProfile == null || expectedProfile.trim().isEmpty()) {
+            return "Application Profile Name not found in ServiceNow for RITM " + ritmNumber.trim();
+        }
+
+        String cleanProvided = cleanProfileForComparison(providedProfile);
+        String cleanExpected = cleanProfileForComparison(expectedProfile);
+
+        if (!isProfileMatch(cleanProvided, cleanExpected)) {
+            return String.format("Profile name mismatch: Provided profile '%s' does not match ServiceNow RITM (%s) profile '%s' for %s",
+                    providedProfile.trim(), ritmNumber.trim(), expectedProfile.trim(), sctaskNumber.trim());
+        }
+
+        return null;
+    }
+
+    public String cleanProfileForComparison(String profile) {
+        if (profile == null) return "";
+        String s = profile.trim();
+        if (s.toLowerCase().startsWith("application:")) {
+            s = s.substring("application:".length()).trim();
+        }
+        return s.replaceAll("\\s+", " ");
+    }
+
+    public boolean isProfileMatch(String cleanProvided, String cleanExpected) {
+        if (cleanProvided.equalsIgnoreCase(cleanExpected)) {
+            return true;
+        }
+        String baseProvided = cleanProvided.contains("/") ? cleanProvided.split("/")[0].trim() : cleanProvided;
+        String baseExpected = cleanExpected.contains("/") ? cleanExpected.split("/")[0].trim() : cleanExpected;
+        return baseProvided.equalsIgnoreCase(baseExpected);
+    }
+
+    /**
      * Extracts a strongly-typed SnowDuplicateTaskDTO from a single ServiceNow JSON item node.
      */
     public SnowDuplicateTaskDTO extractDuplicateTaskDto(JsonNode itemNode) {

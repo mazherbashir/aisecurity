@@ -969,7 +969,7 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
         pendingPayload.put("u_number", sctaskNumber);
         pendingPayload.put("u_additional_comments", reviewCommentsHtml != null ? reviewCommentsHtml : "");
 
-        if (forcePendingState || config.isCommentsStatusUpdate()) {
+        if (config.isCommentsStatusUpdate()) {
             pendingPayload.put("u_action", "setReviewComments");
             String status = config.getCommentsStatus();
             String resolvedCode = com.crs_reivew_api.util.SnowSctaskStatusMap.resolveStatusToStateCode(status != null ? status : "Pending");
@@ -1127,8 +1127,8 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
         try {
             List<SnowDuplicateTaskDTO> duplicates = snowService.findDuplicateTasks(sctaskNumber, searchProfile);
             if (duplicates != null && !duplicates.isEmpty()) {
-                logger.warn("Duplicate request detected for SCTASK {} (RITM: {}, Profile: '{}'). Found {} open duplicate task(s). Placing ticket in Pending status and skipping scan pull.",
-                        sctaskNumber, ritmNumber, searchProfile, duplicates.size());
+                logger.warn("Duplicate request detected for SCTASK {} (RITM: {}, Profile: '{}'). Found {} open duplicate task(s). Posting duplicate notification and skipping scan pull (status-update: {}).",
+                        sctaskNumber, ritmNumber, searchProfile, duplicates.size(), config.isCommentsStatusUpdate());
 
                 String duplicateHtml = buildDuplicateRequestHtml(sctaskNumber, ritmNumber, searchProfile, duplicates);
                 saveAutoLogFile(ritmNumber, duplicateHtml);
@@ -1136,7 +1136,7 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
 
                 if (metricsService != null) {
                     metricsService.recordTicketResult(sctaskNumber, ritmNumber, tool, requestReason,
-                            "DUPLICATE_REQUEST", "PENDING", "DUPLICATE_REQUEST", System.currentTimeMillis() - startTime);
+                            "DUPLICATE_REQUEST", config.isCommentsStatusUpdate() ? "PENDING" : "COMMENT_ADDED", "DUPLICATE_REQUEST", System.currentTimeMillis() - startTime);
                 }
                 return true;
             }

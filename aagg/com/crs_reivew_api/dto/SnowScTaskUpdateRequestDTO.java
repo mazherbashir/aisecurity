@@ -35,7 +35,29 @@ public class SnowScTaskUpdateRequestDTO {
     @JsonProperty("u_pending_reason")
     public String uPendingReason;
 
+    @JsonProperty("profileName")
+    public String profileName;
+
+    @JsonProperty("profilename")
+    public String profilename;
+
     public SnowScTaskUpdateRequestDTO() {}
+
+    public String getProfileName() {
+        return profileName != null ? profileName : profilename;
+    }
+
+    public void setProfileName(String profileName) {
+        this.profileName = profileName;
+    }
+
+    public String getProfilename() {
+        return profilename != null ? profilename : profileName;
+    }
+
+    public void setProfilename(String profilename) {
+        this.profilename = profilename;
+    }
 
     public String getUNumber() {
         return uNumber;

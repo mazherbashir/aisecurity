@@ -21,7 +21,9 @@ function buildSnowPayload(
   sctask: string,
   addCommentsOnly: boolean,
   pendingDate: string,
-  reviewCommentsHtml: string
+  reviewCommentsHtml: string,
+  commentOption: "current" | "response_needed" = "current",
+  profileName?: string
 ) {
   const trimmedTask = sctask.trim().toUpperCase();
 
@@ -40,10 +42,14 @@ function buildSnowPayload(
   const action = addCommentsOnly ? "AddComment" : "setReviewComments";
   const endpoint = `/api/snow/sctaskUpdate?action=${action}`;
 
+  const isCurrentReview = commentOption === "current";
+  const cleanProfile = (profileName || "").trim();
+
   const payload = addCommentsOnly
     ? {
         u_number: trimmedTask,
         u_additional_comments: reviewCommentsHtml,
+        ...(isCurrentReview && cleanProfile ? { profilename: cleanProfile, profileName: cleanProfile } : {}),
       }
     : {
         u_number: trimmedTask,
@@ -51,6 +57,7 @@ function buildSnowPayload(
         u_pending_reason: "Awaiting Customer Response",
         u_end_pending: pendingDate,
         u_additional_comments: reviewCommentsHtml,
+        ...(isCurrentReview && cleanProfile ? { profilename: cleanProfile, profileName: cleanProfile } : {}),
       };
 
   return { endpoint, action, payload };
@@ -125,6 +132,51 @@ describe("ServiceNow SCTASK Update Suite", () => {
     expect((payload as any).u_state).toBeUndefined();
     expect((payload as any).u_pending_reason).toBeUndefined();
     expect((payload as any).u_end_pending).toBeUndefined();
+  });
+
+  it("includes profilename in payload when current Review comment option is selected", () => {
+    const { payload } = buildSnowPayload(
+      "SCTASK0011223",
+      false,
+      "2026-10-15",
+      "<p>Review comments</p>",
+      "current",
+      "USA-TAX-Tax Research Chatbot"
+    );
+
+    expect((payload as any).profilename).toBe("USA-TAX-Tax Research Chatbot");
+    expect((payload as any).profileName).toBe("USA-TAX-Tax Research Chatbot");
+    expect((payload as any).u_number).toBe("SCTASK0011223");
+    expect((payload as any).u_state).toBe("Pending");
+  });
+
+  it("includes profilename in AddComment payload when current Review comment option is selected", () => {
+    const { payload, action } = buildSnowPayload(
+      "SCTASK0011223",
+      true,
+      "",
+      "<p>Review comments</p>",
+      "current",
+      "USA-TAX-Tax Research Chatbot"
+    );
+
+    expect(action).toBe("AddComment");
+    expect((payload as any).profilename).toBe("USA-TAX-Tax Research Chatbot");
+    expect((payload as any).profileName).toBe("USA-TAX-Tax Research Chatbot");
+  });
+
+  it("does NOT include profilename when response_needed comment option is selected", () => {
+    const { payload } = buildSnowPayload(
+      "SCTASK0011223",
+      false,
+      "2026-10-15",
+      "<p>Response needed</p>",
+      "response_needed",
+      "USA-TAX-Tax Research Chatbot"
+    );
+
+    expect((payload as any).profilename).toBeUndefined();
+    expect((payload as any).profileName).toBeUndefined();
   });
 
   it("builds and validates Auto Sign-off payload correctly", () => {

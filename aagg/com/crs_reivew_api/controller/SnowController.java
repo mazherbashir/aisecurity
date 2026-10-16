@@ -217,6 +217,31 @@ public class SnowController {
             @RequestParam(value = "u_action", required = false) String uActionParam) {
 
         String queryAction = (uActionParam != null && !uActionParam.trim().isEmpty()) ? uActionParam : actionParam;
+        String taskNumber = getFirstNonEmptyText(payload, "u_number", "number", "task_number", "taskNumber", "u_task_number");
+        String providedProfile = getFirstNonEmptyText(payload, "profilename", "profileName", "profile_name",
+                "applicationProfileName", "application_profile_name", "appName", "app_name");
+
+        if (providedProfile != null && !providedProfile.trim().isEmpty()) {
+            if (taskNumber == null || taskNumber.trim().isEmpty()) {
+                ObjectNode errNode = objectMapper.createObjectNode();
+                errNode.put("success", false);
+                errNode.put("error", "u_number is required when validating profile name");
+                return ResponseEntity.badRequest().body(errNode);
+            }
+
+            String validationError = snowService.validateProfileNameForSctask(taskNumber, providedProfile);
+            if (validationError != null) {
+                logger.warn("SCTASK update profile validation rejected for {}: {}", taskNumber, validationError);
+                ObjectNode errNode = objectMapper.createObjectNode();
+                errNode.put("success", false);
+                errNode.put("error", validationError);
+                errNode.put("sctask", taskNumber);
+                errNode.put("providedProfile", providedProfile);
+                return ResponseEntity.badRequest().body(errNode);
+            }
+            logger.info("Profile name '{}' successfully validated against ServiceNow RITM for {}", providedProfile, taskNumber);
+        }
+
         JsonNode response = snowService.updateScTask(payload, queryAction);
         return ResponseEntity.ok(response);
     }
@@ -1469,9 +1494,12 @@ public class SnowController {
         ticketScheduler.saveAutoLogFile(ritmNumber, duplicateHtml);
         ticketScheduler.executePendingBlock(cleanTask, ticketScheduler.ensureCodeTags(duplicateHtml), true);
 
+        boolean statusUpdated = veracodeConfig.isCommentsStatusUpdate();
         resp.put("success", true);
-        resp.put("status", "Pending");
-        resp.put("message", "Ticket " + cleanTask + " updated to Pending with duplicate request notification.");
+        resp.put("status", statusUpdated ? "Pending" : "Comment Added");
+        resp.put("message", statusUpdated
+                ? "Ticket " + cleanTask + " updated to Pending with duplicate request notification."
+                : "Duplicate request notification comment posted for ticket " + cleanTask + " (status update disabled).");
         return ResponseEntity.ok(resp);
     }
 }
