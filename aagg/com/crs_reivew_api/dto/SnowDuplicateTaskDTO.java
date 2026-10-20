@@ -23,6 +23,7 @@ public class SnowDuplicateTaskDTO {
     public String state;
     public String title;
     public String owner;
+    public String requestor;
     public String sysId;
 
     public SnowDuplicateTaskDTO() {}
@@ -41,6 +42,16 @@ public class SnowDuplicateTaskDTO {
         this.state = state;
         this.title = shortDescription;
         this.owner = assignedTo;
+        this.sysId = sysId;
+    }
+
+    public SnowDuplicateTaskDTO(String number, String requestItemNumber, String state, String shortDescription, String assignedTo, String requestor, String sysId) {
+        this.sctask = number;
+        this.ritm = requestItemNumber;
+        this.state = state;
+        this.title = shortDescription;
+        this.owner = assignedTo;
+        this.requestor = requestor;
         this.sysId = sysId;
     }
 
@@ -117,6 +128,14 @@ public class SnowDuplicateTaskDTO {
         this.owner = assignedTo;
     }
 
+    public String getRequestor() {
+        return requestor;
+    }
+
+    public void setRequestor(String requestor) {
+        this.requestor = requestor;
+    }
+
     public String getSysId() {
         return sysId;
     }
@@ -133,6 +152,7 @@ public class SnowDuplicateTaskDTO {
                 ", state='" + state + '\'' +
                 ", title='" + title + '\'' +
                 ", owner='" + owner + '\'' +
+                ", requestor='" + requestor + '\'' +
                 '}';
     }
 }

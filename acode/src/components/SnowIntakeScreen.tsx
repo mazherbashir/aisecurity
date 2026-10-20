@@ -79,7 +79,10 @@ const normalizeSnowRecord = (raw: any): SnowRecord => {
 
   const getSubLink = (v: any): string | undefined => {
     if (v && typeof v === "object") {
-      return v.link || undefined;
+      // Do not expose internal ServiceNow REST table API endpoints (e.g. /api/now/table/sys_user or /sc_cat_item)
+      if (typeof v.link === "string" && !v.link.includes("/api/now/table/")) {
+        return v.link;
+      }
     }
     return undefined;
   };
@@ -89,7 +92,7 @@ const normalizeSnowRecord = (raw: any): SnowRecord => {
   const short_description = getStr(raw.short_description);
   const state = getStr(raw.state);
   
-  // Assigned to can be string like "" or object like { display_value: "..." }
+  // Assigned to can be string like "" or object like { display_value: "Rajarshi Roy", link: "..." }
   let assigned_to = "";
   if (raw.assigned_to) {
     assigned_to = getStr(raw.assigned_to);
@@ -110,31 +113,15 @@ const normalizeSnowRecord = (raw: any): SnowRecord => {
     }
   }
 
-  // Request Item & Nested Cat Item parsing
+  // Request Item parsing (omit Code Review Services cat_item from UI)
   let request_item: RequestItem | undefined = undefined;
   const ritmNumber = getStr(raw["request_item.number"] || (raw.request_item && raw.request_item.number));
   const ritmState = getStr(raw["request_item.state"] || (raw.request_item && raw.request_item.state));
-  const rawCatItem = raw["request_item.cat_item"] || (raw.request_item && raw.request_item.cat_item);
 
-  let cat_item: CatItem | undefined = undefined;
-  if (rawCatItem) {
-    if (typeof rawCatItem === "object") {
-      cat_item = {
-        display_value: getStr(rawCatItem) || "Code Review Services",
-        link: getSubLink(rawCatItem)
-      };
-    } else {
-      cat_item = {
-        display_value: String(rawCatItem)
-      };
-    }
-  }
-
-  if (ritmNumber || ritmState || cat_item) {
+  if (ritmNumber || ritmState) {
     request_item = {
       number: ritmNumber || "N/A",
-      state: ritmState || undefined,
-      cat_item
+      state: ritmState || undefined
     };
   }
 
@@ -175,18 +162,103 @@ interface SnowIntakeScreenProps {
 
 const snowData: SnowRecord[] = [
   {
-    short_description: "Static Scan Access Request: Advanced Network Monitoring - Enterprise (ThousandEyes) (AMER) (Production) legacy",
+    short_description: "Sign Off: HVMS_US",
     assignment_group: {
-      display_value: "GLOBAL - NIS - CRS Intake",
-      link: "https://pwcnetworktest.service-now.com/api/now/table/sys_user_group/d7c49a221b8b0c509b6165b9bd4bcb92"
+      display_value: "GLOBAL - NIS - CRS Remediation"
+    },
+    request_item: {
+      number: "RITM28463402",
+      state: "Work in Progress"
+    },
+    number: "SCTASK31086209",
+    state: "Open",
+    assigned_to: "",
+    variables: {
+      type: "Sign Off",
+      application: "High Velocity Managed Sales",
+      billing_model: "Consumption-based"
+    }
+  },
+  {
+    short_description: "Sign Off: AI Tool Runway",
+    assignment_group: {
+      display_value: "GLOBAL - NIS - CRS Remediation"
+    },
+    request_item: {
+      number: "RITM28444995",
+      state: "Pending"
+    },
+    number: "SCTASK31069186",
+    state: "Responded",
+    assigned_to: "Rajarshi Roy",
+    variables: {
+      type: "Sign Off",
+      application: "USA-IFS-AI Tool Runway",
+      billing_model: "Consumption-based"
+    }
+  },
+  {
+    short_description: "Sign Off: Admin Portal 2.0",
+    assignment_group: {
+      display_value: "GLOBAL - NIS - CRS Remediation"
+    },
+    request_item: {
+      number: "RITM28350061",
+      state: "Pending"
+    },
+    number: "SCTASK30981580",
+    state: "Responded",
+    assigned_to: "Mazher Bashir",
+    variables: {
+      type: "Sign Off",
+      application: "USA-ADV-concourse-microservices",
+      billing_model: "Consumption-based"
+    }
+  },
+  {
+    short_description: "Sign Off: Independence_Reference_Library_NGC",
+    assignment_group: {
+      display_value: "GLOBAL - NIS - CRS Remediation"
+    },
+    request_item: {
+      number: "RITM28366877",
+      state: "Pending"
+    },
+    number: "SCTASK30997556",
+    state: "Responded",
+    assigned_to: "Kumari Mridula",
+    variables: {
+      type: "Sign Off",
+      application: "USA-IFS-Independence_Reference_Library_NGC",
+      billing_model: "Consumption-based"
+    }
+  },
+  {
+    short_description: "Sign Off: One Voice",
+    assignment_group: {
+      display_value: "GLOBAL - NIS - CRS Remediation"
+    },
+    request_item: {
+      number: "RITM28425873",
+      state: "Pending"
+    },
+    number: "SCTASK31051299",
+    state: "No Response",
+    assigned_to: "Rajarshi Roy",
+    variables: {
+      type: "Sign Off",
+      application: "One Voice",
+      billing_model: "Consumption-based"
+    }
+  },
+  {
+    short_description: "Static Scan Access Request: Advanced Network Monitoring - Enterprise (ThousandEyes)",
+    assignment_group: {
+      display_value: "GLOBAL - NIS - CRS Intake"
     },
     request_item: {
       number: "RITM26124235",
-      state: "Work in Progress",
-      cat_item: {
-        display_value: "Code Review Services",
-        link: "https://pwcnetworktest.service-now.com/api/now/table/sc_cat_item/6382512ddb59bf40dbf414a05b96194e"
-      }
+      state: "Work in Progress"
     },
     number: "SCTASK29032898",
     state: "Work in Progress",
@@ -200,16 +272,11 @@ const snowData: SnowRecord[] = [
   {
     short_description: "Static Scan Access Request: Aura Checker",
     assignment_group: {
-      display_value: "GLOBAL - NIS - CRS Intake",
-      link: "https://pwcnetworktest.service-now.com/api/now/table/sys_user_group/d7c49a221b8b0c509b6165b9bd4bcb92"
+      display_value: "GLOBAL - NIS - CRS Intake"
     },
     request_item: {
       number: "RITM26187889",
-      state: "Work in Progress",
-      cat_item: {
-        display_value: "Code Review Services",
-        link: "https://pwcnetworktest.service-now.com/api/now/table/sc_cat_item/6382512ddb59bf40dbf414a05b96194e"
-      }
+      state: "Work in Progress"
     },
     number: "SCTASK29097185",
     state: "Work in Progress",
@@ -511,6 +578,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
       const shortDescStr = record.short_description;
       const assignedToStr = record.assigned_to;
       const ritmStr = record.request_item ? record.request_item.number : "";
+      const ritmStateStr = record.request_item?.state || "";
 
       const matchSearch = 
         numberStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -519,7 +587,11 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
         assignedToStr.toLowerCase().includes(searchTerm.toLowerCase());
       
       const stateStr = record.state;
-      const matchState = stateFilter === "ALL" || stateStr === stateFilter;
+      const matchState = 
+        stateFilter === "ALL" || 
+        stateStr === stateFilter ||
+        (stateFilter === "Pending" && (stateStr === "Pending" || ritmStateStr === "Pending")) ||
+        (stateFilter === "Work in Progress" && (stateStr === "Work in Progress" || ritmStateStr === "Work in Progress"));
       
       const varTypeStr = record.variables.type;
       const matchType = typeFilter === "ALL" || varTypeStr === typeFilter;
@@ -539,6 +611,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
       const shortDescStr = r.short_description;
       const assignedToStr = r.assigned_to;
       const ritmStr = r.request_item ? r.request_item.number : "";
+      const ritmStateStr = r.request_item?.state || "";
 
       const matchSearch = 
         numberStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -547,7 +620,11 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
         assignedToStr.toLowerCase().includes(searchTerm.toLowerCase());
       
       const stateStr = r.state;
-      const matchState = stateFilter === "ALL" || stateStr === stateFilter;
+      const matchState = 
+        stateFilter === "ALL" || 
+        stateStr === stateFilter ||
+        (stateFilter === "Pending" && (stateStr === "Pending" || ritmStateStr === "Pending")) ||
+        (stateFilter === "Work in Progress" && (stateStr === "Work in Progress" || ritmStateStr === "Work in Progress"));
       
       const varTypeStr = r.variables.type;
       const matchType = typeFilter === "ALL" || varTypeStr === typeFilter;
@@ -559,8 +636,9 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
     });
 
     const total = targetRecords.length;
-    const workInProgress = targetRecords.filter(r => r.state === "Work in Progress").length;
+    const workInProgress = targetRecords.filter(r => r.state === "Work in Progress" || (r.request_item && r.request_item.state === "Work in Progress")).length;
     const open = targetRecords.filter(r => r.state === "Open").length;
+    const pending = targetRecords.filter(r => r.state === "Pending" || (r.request_item && r.request_item.state === "Pending")).length;
     const noResponse = targetRecords.filter(r => r.state === "No Response").length;
     const responded = targetRecords.filter(r => r.state === "Responded").length;
 
@@ -581,6 +659,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
       const shortDescStr = r.short_description;
       const assignedToStr = r.assigned_to;
       const ritmStr = r.request_item ? r.request_item.number : "";
+      const ritmStateStr = r.request_item?.state || "";
 
       const matchSearch = 
         numberStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -589,7 +668,11 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
         assignedToStr.toLowerCase().includes(searchTerm.toLowerCase());
       
       const stateStr = r.state;
-      const matchState = stateFilter === "ALL" || stateStr === stateFilter;
+      const matchState = 
+        stateFilter === "ALL" || 
+        stateStr === stateFilter ||
+        (stateFilter === "Pending" && (stateStr === "Pending" || ritmStateStr === "Pending")) ||
+        (stateFilter === "Work in Progress" && (stateStr === "Work in Progress" || ritmStateStr === "Work in Progress"));
 
       const assignedToVal = r.assigned_to || "Unassigned";
       const matchAssigned = assignedFilter === "ALL" || assignedToVal === assignedFilter;
@@ -606,6 +689,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
       const shortDescStr = r.short_description;
       const assignedToStr = r.assigned_to;
       const ritmStr = r.request_item ? r.request_item.number : "";
+      const ritmStateStr = r.request_item?.state || "";
 
       const matchSearch = 
         numberStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -614,7 +698,11 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
         assignedToStr.toLowerCase().includes(searchTerm.toLowerCase());
       
       const stateStr = r.state;
-      const matchState = stateFilter === "ALL" || stateStr === stateFilter;
+      const matchState = 
+        stateFilter === "ALL" || 
+        stateStr === stateFilter ||
+        (stateFilter === "Pending" && (stateStr === "Pending" || ritmStateStr === "Pending")) ||
+        (stateFilter === "Work in Progress" && (stateStr === "Work in Progress" || ritmStateStr === "Work in Progress"));
       
       const varTypeStr = r.variables.type;
       const matchType = typeFilter === "ALL" || varTypeStr === typeFilter;
@@ -648,6 +736,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
       total,
       workInProgress,
       open,
+      pending,
       noResponse,
       responded,
       types,
@@ -657,10 +746,40 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
     };
   }, [records, searchTerm, stateFilter, typeFilter, assignedFilter]);
 
+  // Format Assignment Group to wrap after GLOBAL-NIS to save horizontal column space
+  const formatAssignmentGroup = (rawGroup?: string) => {
+    if (!rawGroup) return "N/A";
+    const trimmed = rawGroup.trim();
+    // Match "GLOBAL - NIS - <Rest>" or "GLOBAL-NIS - <Rest>" or "GLOBAL - NIS <Rest>"
+    const match = trimmed.match(/^(GLOBAL\s*[-–]\s*NIS|GLOBAL[-–]NIS)\s*[-–:]?\s*(.+)$/i);
+    if (match) {
+      return (
+        <span className="flex flex-col leading-tight">
+          <span className="text-slate-300 font-bold tracking-tight">{match[1].replace(/\s*[-–]\s*/, " - ")}</span>
+          <span className="text-slate-400 font-semibold tracking-tight">{match[2]}</span>
+        </span>
+      );
+    }
+    // If it has multiple hyphens, split on first hyphen after the primary prefix
+    if (trimmed.includes(" - ")) {
+      const parts = trimmed.split(" - ");
+      if (parts.length >= 2) {
+        return (
+          <span className="flex flex-col leading-tight">
+            <span className="text-slate-300 font-bold tracking-tight">{parts[0]}</span>
+            <span className="text-slate-400 font-semibold tracking-tight">{parts.slice(1).join(" - ")}</span>
+          </span>
+        );
+      }
+    }
+    return <span className="leading-tight break-words">{trimmed}</span>;
+  };
+
   // Helper to render values that have links, else falling back to normal text
-  const renderCellWithLink = (value?: string, link?: string, customClassName?: string) => {
-    if (!value) return <span className="text-slate-500">---</span>;
-    if (link) {
+  const renderCellWithLink = (value?: React.ReactNode, link?: string, customClassName?: string) => {
+    if (value === undefined || value === null || value === "") return <span className="text-slate-500">---</span>;
+    // Disallow raw ServiceNow table REST API links (e.g. /api/now/table/sys_user or /sc_cat_item)
+    if (link && !link.includes('/api/now/table/')) {
       return (
         <a 
           href={link}
@@ -736,10 +855,14 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
               <span className="truncate">OPEN: {stats.open}</span>
             </div>
             <div className="flex items-center gap-1.5 text-slate-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 shrink-0" />
+              <span className="truncate">PENDING: {stats.pending}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-slate-400">
               <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
               <span className="truncate">NO RESP: {stats.noResponse}</span>
             </div>
-            <div className="flex items-center gap-1.5 text-slate-400">
+            <div className="flex items-center gap-1.5 text-slate-400 col-span-2">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
               <span className="truncate">RESP: {stats.responded}</span>
             </div>
@@ -944,6 +1067,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                 <option value="ALL" className="bg-slate-950 text-slate-400">[ ALL STATES ]</option>
                 <option value="Work in Progress" className="bg-slate-950 text-slate-400">[ WIP ]</option>
                 <option value="Open" className="bg-slate-950 text-slate-400">[ OPEN ]</option>
+                <option value="Pending" className="bg-slate-950 text-slate-400">[ PENDING ]</option>
                 <option value="No Response" className="bg-slate-950 text-slate-400">[ NO RESPONSE ]</option>
                 <option value="Responded" className="bg-slate-950 text-slate-400">[ RESPONDED ]</option>
               </select>
@@ -986,8 +1110,8 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
             <thead className="bg-slate-950/40 text-[10px] text-slate-500 font-black uppercase tracking-wider sticky top-0 z-20 backdrop-blur-sm">
               <tr className="border-b border-slate-800/50">
                 <th className="p-4 w-32 font-black">TASK / RITM</th>
-                <th className="p-4 w-44 font-black">Assignment Group</th>
-                <th className="p-4 font-black">Short Description</th>
+                <th className="p-4 w-32 max-w-[130px] font-black">Assignment Group</th>
+                <th className="p-4 w-64 max-w-xs font-black">Short Description</th>
                 <th className="p-4 w-60 font-black">Variables Info</th>
                 <th className="p-4 w-32 font-black">Assigned / State</th>
                 <th className="p-4 w-24 font-black text-right">Actions</th>
@@ -1005,12 +1129,15 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                       </div>
                     </td>
                     {/* Assignment Group skeleton */}
-                    <td className="p-4 align-top">
-                      <div className="h-5 bg-slate-800 rounded-md w-36"></div>
+                    <td className="p-4 align-top w-32 max-w-[130px]">
+                      <div className="flex flex-col gap-1 w-24">
+                        <div className="h-3.5 bg-slate-800 rounded-md w-full"></div>
+                        <div className="h-3 bg-slate-800/60 rounded-md w-3/4"></div>
+                      </div>
                     </td>
                     {/* Short Description skeleton */}
-                    <td className="p-4 align-top">
-                      <div className="space-y-1.5 max-w-md">
+                    <td className="p-4 align-top w-64 max-w-xs">
+                      <div className="space-y-1.5 max-w-xs">
                         <div className="h-4 bg-slate-800 rounded-md w-full"></div>
                         <div className="h-3.5 bg-slate-850 rounded-md w-3/4"></div>
                       </div>
@@ -1059,48 +1186,68 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                       key={recNum || Math.random().toString()} 
                       className="hover:bg-slate-800/20 transition-all border-b border-slate-800/10"
                     >
-                      {/* TASK / RITM numbers & values */}
+                      {/* TASK / RITM numbers with direct ServiceNow links */}
                       <td className="p-4 align-top">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[11px] font-black font-mono text-slate-300 bg-slate-950/80 border border-slate-850 px-2 py-0.5 rounded shadow-sm w-fit">
-                            {recNum}
-                          </span>
-                          {hasReqItem && (
-                            <div className="flex flex-col gap-0.5 pl-0.5">
-                              <span className="text-[9px] font-extrabold font-mono text-slate-500">
-                                {reqItemNum}
-                              </span>
-                              {reqItemCatDis && (
-                                <div className="text-[8px] mt-0.5 whitespace-nowrap">
-                                  {renderCellWithLink(
-                                    reqItemCatDis,
-                                    reqItemCatLink,
-                                    "text-[9px] uppercase tracking-wider whitespace-nowrap"
-                                  )}
-                                </div>
-                              )}
+                        <div className="flex flex-col gap-1.5">
+                          {recNum ? (
+                            <a
+                              href={`https://pwcnetwork.service-now.com/nav_to.do?uri=sc_task.do?sysparm_query=number=${encodeURIComponent(recNum)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sky-400 hover:text-sky-300 hover:underline inline-flex items-center gap-1.5 text-[11px] font-black font-mono bg-slate-950/80 border border-slate-850 hover:border-sky-500/40 px-2 py-0.5 rounded shadow-sm w-fit group transition-all"
+                              title="Open SCTASK in ServiceNow"
+                            >
+                              <span>{recNum}</span>
+                              <ExternalLink size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </a>
+                          ) : (
+                            <span className="text-slate-500 font-mono text-xs">---</span>
+                          )}
+
+                          {hasReqItem && reqItemNum && reqItemNum !== "N/A" && (
+                            <div className="flex items-center gap-1 pl-0.5">
+                              <a
+                                href={`https://pwcnetwork.service-now.com/sc_req_item.do?sysparm_query=number=${encodeURIComponent(reqItemNum)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-indigo-400 hover:text-indigo-300 hover:underline inline-flex items-center gap-1 text-[10px] font-extrabold font-mono group transition-all"
+                                title="Open RITM in ServiceNow"
+                              >
+                                <span>{reqItemNum}</span>
+                                <ExternalLink size={9} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </a>
                             </div>
                           )}
                         </div>
                       </td>
 
                       {/* Assignment Group */}
-                      <td className="p-4 align-top">
-                        <div className="flex flex-col gap-1 max-w-[160px]">
+                      <td className="p-4 align-top w-32 max-w-[130px]">
+                        <div className="flex flex-col gap-1 max-w-[125px]">
                           {renderCellWithLink(
-                            record.assignment_group.display_value,
-                            record.assignment_group.link
+                            formatAssignmentGroup(record.assignment_group.display_value),
+                            record.assignment_group.link,
+                            "text-[8.5px] font-bold leading-snug text-slate-300 tracking-tight"
                           )}
-                          <span className="text-[9px] text-slate-600 font-bold uppercase tracking-widest block font-mono">
+                          <span className="text-[9px] text-slate-500 font-extrabold uppercase tracking-widest block font-mono">
                             Intake Node
                           </span>
                         </div>
                       </td>
 
                       {/* Short Description */}
-                      <td className="p-4 align-top">
-                        <div className="text-xs text-slate-300 font-medium leading-relaxed max-w-md break-words whitespace-pre-wrap">
-                          {recShortDesc}
+                      <td className="p-4 align-top w-64 max-w-xs">
+                        <div className="text-xs text-slate-300 font-medium leading-relaxed break-words [overflow-wrap:anywhere] [word-break:break-word] whitespace-normal">
+                          {recShortDesc.toLowerCase().startsWith("sign off:") ? (
+                            <>
+                              <span className="font-semibold text-slate-200 block">Sign Off:</span>
+                              <span className="text-slate-300 font-medium break-words [overflow-wrap:anywhere]">
+                                {recShortDesc.replace(/^sign\s*off:\s*/i, "")}
+                              </span>
+                            </>
+                          ) : (
+                            recShortDesc
+                          )}
                         </div>
                       </td>
 
@@ -1147,25 +1294,37 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                               ? "bg-amber-500/10 text-amber-400 border-amber-500/20" 
                               : recState === "Open"
                                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                : recState === "No Response"
-                                  ? "bg-rose-500/10 text-rose-450 border-rose-500/20"
-                                  : recState === "Responded"
-                                    ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                                    : "bg-slate-500/10 text-slate-400 border-slate-500/20"
+                                : recState === "Pending"
+                                  ? "bg-yellow-500/10 text-yellow-300 border-yellow-500/30"
+                                  : recState === "No Response"
+                                    ? "bg-rose-500/10 text-rose-450 border-rose-500/20"
+                                    : recState === "Responded"
+                                      ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                      : "bg-slate-500/10 text-slate-400 border-slate-500/20"
                           }`}>
                             <span className={`w-1 h-1 rounded-full ${
                               recState === "Work in Progress" 
                                 ? "bg-amber-500 animate-pulse" 
                                 : recState === "Open"
                                   ? "bg-emerald-500"
-                                  : recState === "No Response"
-                                    ? "bg-rose-500"
-                                    : recState === "Responded"
-                                      ? "bg-blue-500"
-                                      : "bg-slate-500"
+                                  : recState === "Pending"
+                                    ? "bg-yellow-400 animate-pulse"
+                                    : recState === "No Response"
+                                      ? "bg-rose-500"
+                                      : recState === "Responded"
+                                        ? "bg-blue-500"
+                                        : "bg-slate-500"
                             }`} />
-                            {recState}
+                            {recState || "Open"}
                           </span>
+
+                          {/* Show RITM Pending badge if request_item state is Pending and task is different */}
+                          {record.request_item?.state === "Pending" && recState !== "Pending" && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-wider border leading-none bg-yellow-500/10 text-yellow-300 border-yellow-500/25 w-fit">
+                              <span className="w-1 h-1 rounded-full bg-yellow-400" />
+                              RITM: Pending
+                            </span>
+                          )}
 
                           {/* Assigned to */}
                           <div className="flex items-center gap-1 text-[10px]">
@@ -1352,6 +1511,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                     >
                       <option value="Open">Open</option>
                       <option value="Work in Progress">Work in Progress</option>
+                      <option value="Pending">Pending</option>
                       <option value="No Response">No Response</option>
                       <option value="Responded">Responded</option>
                     </select>
@@ -1367,6 +1527,7 @@ export const SnowIntakeScreen: React.FC<SnowIntakeScreenProps> = ({ onClose }) =
                       onChange={(e) => setFormType(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs outline-none text-slate-400 focus:border-blue-500/50 transition-all font-black uppercase"
                     >
+                      <option value="Sign Off">Sign Off</option>
                       <option value="Static Scan Access Request">Static Scan Access Request</option>
                       <option value="CI/CD Integration Support">CI/CD Integration Support</option>
                       <option value="Create Scanning Tool Profile">Create Scanning Tool Profile</option>

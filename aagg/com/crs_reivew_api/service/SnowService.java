@@ -603,7 +603,7 @@ public class SnowService {
         query.append("stateNOT IN3,4,7^");
         query.append("variables.").append(profileVarSysId).append("=").append(appProfileName.trim());
 
-        String fields = "number,state,request_item.number,short_description,assigned_to";
+        String fields = "number,state,request_item.number,short_description,assigned_to,request_item.opened_by,request_item.requested_for,opened_by";
         String endpoint = veracodeConfig.getSnowSctaskEndpoint();
         String fullUrl = buildTableUrlWithFields(endpoint, query.toString(), limit, true, fields);
 
@@ -769,6 +769,27 @@ public class SnowService {
             }
         }
         dto.setRequestItemNumber(ritmNum);
+
+        String requestor = getNodeText(itemNode, "request_item.opened_by");
+        if (requestor == null) {
+            requestor = getNodeText(itemNode, "request_item.requested_for");
+        }
+        if (requestor == null) {
+            requestor = getNodeText(itemNode, "opened_by");
+        }
+        if (requestor == null) {
+            requestor = getNodeText(itemNode, "requestor");
+        }
+        if (requestor == null && itemNode.has("request_item")) {
+            JsonNode reqItemNode = itemNode.get("request_item");
+            if (reqItemNode.isObject()) {
+                requestor = getNodeText(reqItemNode, "opened_by");
+                if (requestor == null) {
+                    requestor = getNodeText(reqItemNode, "requested_for");
+                }
+            }
+        }
+        dto.setRequestor(requestor);
 
         return dto;
     }

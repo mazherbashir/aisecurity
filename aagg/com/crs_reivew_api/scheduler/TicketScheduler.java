@@ -1011,15 +1011,16 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
      */
     public String buildDuplicateRequestHtml(String sctaskNumber, String ritmNumber, String appProfileName, List<SnowDuplicateTaskDTO> duplicates) {
         String safeProfile = (appProfileName != null && !appProfileName.trim().isEmpty()) ? appProfileName.trim() : "Unknown Profile";
-        String safeSctask = (sctaskNumber != null && !sctaskNumber.trim().isEmpty()) ? sctaskNumber.trim() : "";
-        String safeRitm = (ritmNumber != null && !ritmNumber.trim().isEmpty()) ? " / " + ritmNumber.trim() : "";
+        String requestIdentifier = (ritmNumber != null && !ritmNumber.trim().isEmpty())
+                ? ritmNumber.trim()
+                : ((sctaskNumber != null && !sctaskNumber.trim().isEmpty()) ? sctaskNumber.trim() : "this request");
         int count = duplicates != null ? duplicates.size() : 0;
 
         StringBuilder rows = new StringBuilder();
         if (duplicates != null) {
             for (SnowDuplicateTaskDTO d : duplicates) {
-                String dTask = (d.getNumber() != null && !d.getNumber().trim().isEmpty()) ? d.getNumber().trim() : "N/A";
                 String dRitm = (d.getRequestItemNumber() != null && !d.getRequestItemNumber().trim().isEmpty()) ? d.getRequestItemNumber().trim() : "N/A";
+                String dRequestor = (d.getRequestor() != null && !d.getRequestor().trim().isEmpty()) ? d.getRequestor().trim() : "N/A";
                 String dState = (d.getState() != null && !d.getState().trim().isEmpty()) ? d.getState().trim() : "Open";
                 String dTitle = (d.getShortDescription() != null && !d.getShortDescription().trim().isEmpty()) ? d.getShortDescription().trim() : "N/A";
                 String dOwner = (d.getAssignedTo() != null && !d.getAssignedTo().trim().isEmpty()) ? d.getAssignedTo().trim() : "Unassigned";
@@ -1034,12 +1035,12 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
                 rows.append("""
                     <tr>
                         <td style="padding: 8px 10px; border: 1px solid #ddd; font-weight: bold;"><code>%s</code></td>
-                        <td style="padding: 8px 10px; border: 1px solid #ddd;"><code>%s</code></td>
+                        <td style="padding: 8px 10px; border: 1px solid #ddd;">%s</td>
                         <td style="padding: 8px 10px; border: 1px solid #ddd;">%s</td>
                         <td style="padding: 8px 10px; border: 1px solid #ddd;">%s</td>
                         <td style="padding: 8px 10px; border: 1px solid #ddd;">%s</td>
                     </tr>
-                """.formatted(dTask, dRitm, stateBadge, dTitle, dOwner));
+                """.formatted(dRitm, dRequestor, stateBadge, dTitle, dOwner));
             }
         }
 
@@ -1048,6 +1049,7 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
 <style>
 \t.bg-gray {background-color: gray; color: white;}
 \t.bg-green {background-color: green; color: white;}
+\t.bg-purple {background-color: purple; color: white;}
 \t.info, .bg-dodgerblue {background-color: dodgerblue; color: black;}
 \t.verylow, .bg-yellowgreen {background-color: yellowgreen; color: black;}
 \t.low, .bg-gold {background-color: gold; color: black;}
@@ -1066,15 +1068,15 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
 \t.dup-table tr:nth-child(even) {background-color: #fbfbfb;}
 </style>
 
-<h3 class="heading bg-darkorange">Duplicate Review Request Detected</h3><br/>
-An active or open security review request already exists for the application profile <span class="rounded bg-dodgerblue highlight">%s</span>.<br/><br/>
-Before Code Review Services can proceed with this request (<b>%s</b>%s), please note that <b>%d</b> existing open catalog task(s) are currently in progress or awaiting action for this profile:<br/>
+<h3 class="heading bg-darkorange">Potential Duplicate Review Request</h3><br/>
+An active or open security review request already exists for the application profile <span class="rounded bg-purple highlight">%s</span>.<br/><br/>
+Before Code Review Services can proceed with this request (<b>%s</b>), please note that <b>%d</b> existing open review request(s) are currently in progress or awaiting action for this profile:<br/>
 
 <table class="dup-table">
   <thead>
     <tr>
-      <th style="width: 18%%;">SCTASK</th>
-      <th style="width: 18%%;">RITM</th>
+      <th style="width: 16%%;">RITM</th>
+      <th style="width: 20%%;">Requestor</th>
       <th style="width: 16%%;">State</th>
       <th style="width: 28%%;">Short Description</th>
       <th style="width: 20%%;">Assigned To</th>
@@ -1086,14 +1088,14 @@ Before Code Review Services can proceed with this request (<b>%s</b>%s), please 
 </table>
 
 <div style="border: 1px solid #f0ad4e; background-color: #fcf8e3; color: #8a6d3b; padding: 10px 14px; border-radius: 5px; margin-top: 10px; margin-bottom: 10px; font-size: 13px;">
-  <b>Action Required:</b> To avoid duplicate reviews and conflicting scan assessments, this ticket is being placed in <b>Pending</b> status. Please coordinate with the owner(s) of the existing request(s) listed above, or consolidate your submission. If you believe this request is distinct, please provide clarification in a comment.
+  <b>Action Required:</b> To avoid duplicate reviews and conflicting scan assessments, this ticket is being placed in <span class="rounded bg-gold highlight">Pending</span> status. Please coordinate with the requestor or the assigned CRS staff for the existing request(s) listed above, or consolidate your submission. If you believe this request is distinct, please provide clarification in a comment.
 </div>
 
 <hr/>
 If more assistance is needed, please schedule a consultation call by selecting the <i><b>Remediation Consultation</b></i> option from the appointment calendar. For more help, refer to the <i><b>Scheduling Consultations</b></i> section, as detailed in the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/:w:/r/sites/GBL-IFS-NIS-Application-Security/AppReadiness/CRS%%20Documents/Client-Facing%%20Documentation/CRS%%20Process%%20Overview.docx?d=w60b17b59a86342efa122e0767f68490f">CRS Process Overview</a> document.<br/>
 For more information about CRS, please see the <a class="rounded bg-gray" target="_blank" href="https://pwceur.sharepoint.com/sites/GBL-IFS-NIS-Application-Security/SitePages/Code-Review-Services.aspx">CRS SharePoint</a>.
 [/code]
-""".formatted(safeProfile, safeSctask, safeRitm, count, rows.toString());
+""".formatted(safeProfile, requestIdentifier, count, rows.toString());
     }
 
     /**
