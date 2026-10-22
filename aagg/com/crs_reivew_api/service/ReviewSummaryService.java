@@ -557,27 +557,51 @@ A review of the third-party components in the Software Composition Analysis was 
         return scaHtml.toString();
     }
 
-    private boolean isScanTooOld(String dateStr) {
-        if (dateStr == null || dateStr.isEmpty()) return false;
+    public boolean isScanTooOld(String dateStr) {
+        if (dateStr == null || dateStr.trim().isEmpty()) return false;
         try {
             LocalDate date;
-            if (dateStr.length() > 10) {
-                date = LocalDate.parse(dateStr.substring(0, 10), DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-            } else {
-                date = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            String clean = dateStr.trim();
+            if (clean.length() > 10) {
+                clean = clean.substring(0, 10);
             }
+            date = LocalDate.parse(clean, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             long daysOld = ChronoUnit.DAYS.between(date, LocalDate.now());
-            return daysOld > veracodeConfig.getScanValidityDays();
+            int validityDays = (veracodeConfig != null) ? veracodeConfig.getScanValidityDays() : 90;
+            if (validityDays <= 0) validityDays = 90;
+            return daysOld > validityDays;
         } catch (Exception e) {
             return false;
         }
     }
 
-    private String buildScanTooOldMsg(VeracodeReportDTO.ScanOverviewDTO overview) {
-        String scanLink = "checkmarx".equalsIgnoreCase(overview.scanType)
-            ? (!safe(overview.sandboxId).isEmpty() ? overview.sandboxId : "https://us.ast.checkmarx.net/")
-            : String.format("https://analysiscenter.veracode.com/auth/index.jsp#StaticOverview:%s:%s:%s:%s:%s::::%s",
-                safe(overview.accountId), safe(overview.appId), safe(overview.buildId), safe(overview.analysisId), safe(overview.staticAnalysisUnitId), safe(overview.sandboxId));
+    public String buildScanTooOldMsg(VeracodeReportDTO.ScanOverviewDTO overview) {
+        String safeDate = safe(overview != null && overview.submittedDate != null ? overview.submittedDate : (overview != null ? overview.generationDate : null));
+        if (safeDate.isEmpty()) safeDate = "[Date]";
+
+        if (overview != null && "checkmarx".equalsIgnoreCase(overview.scanType)) {
+            String encodedBranch = encodeCheckmarxBranch(overview.scanName);
+            String profileUrl = (overview.appId != null && !overview.appId.trim().isEmpty())
+                    ? String.format("https://us.ast.checkmarx.net/projects/%s/overview?branch=%s", overview.appId.trim(), encodedBranch)
+                    : "https://us.ast.checkmarx.net/";
+            String viewerLink = (!safe(overview.sandboxId).isEmpty()) ? safe(overview.sandboxId) : profileUrl;
+            return String.format("""
+<h3 class="heading bg-red">Scan Too Old</h3></br>
+The latest scan <code><a target="_blank" href="%s">%s</a></code> from %s cannot be considered valid for sign-off as it is too old and may contain vulnerabilities that have been identified since the scan has been performed.<br/>
+<br/>
+Code Review Services will only take action on full application scans in Checkmarx.<br/>
+<br/>
+Additionally, CRS does not require periodic sign-off unless material production changes (see page 9 of the <a target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%%20Documents/PwC%%20ISP%%20Terms%%20and%%20Definitions.pdf">PwC Information Security Policy Terms and Definitions</a>) are made. However, during the development process it is required that scans are run during all development activities to identify current risks that require remediation.
+""", viewerLink, safe(overview.scanName), safeDate);
+        }
+
+        String scanLink = String.format("https://analysiscenter.veracode.com/auth/index.jsp#StaticOverview:%s:%s:%s:%s:%s::::%s",
+                safe(overview != null ? overview.accountId : ""),
+                safe(overview != null ? overview.appId : ""),
+                safe(overview != null ? overview.buildId : ""),
+                safe(overview != null ? overview.analysisId : ""),
+                safe(overview != null ? overview.staticAnalysisUnitId : ""),
+                safe(overview != null ? overview.sandboxId : ""));
         return String.format("""
 <h3 class="heading bg-red">Scan Too Old</h3></br>
 The latest policy scan <code><a target="_blank" href="%s">%s</a></code> from %s cannot be considered valid for sign-off as it is too old and may contain vulnerabilities that have been identified since the scan has been performed.<br/>
@@ -585,7 +609,25 @@ The latest policy scan <code><a target="_blank" href="%s">%s</a></code> from %s 
 Code Review Services will only take action on full application policy scans in Veracode. If a new full scan of all of the modules in the application has been completed in the sandbox, the <a target="_blank" href="https://docs.veracode.com/r/t_promote_sandbox">sandbox scan can be promoted to a policy scan</a> without the need to run a new scan.<br/>
 <br/>
 Additionally, CRS does not require periodic sign-off unless material production changes (see page 9 of the <a target="_blank" href="https://pwceur.sharepoint.com/sites/NetworkInformationSecurityPolicyIsp/Shared%%20Documents/PwC%%20ISP%%20Terms%%20and%%20Definitions.pdf">PwC Information Security Policy Terms and Definitions</a>) are made. However, during the development process it is required that scans are run during all development activities to identify current risks that require remediation.
-""", scanLink, safe(overview.scanName), safe(overview.submittedDate != null ? overview.submittedDate : overview.generationDate));
+""", scanLink, safe(overview != null ? overview.scanName : ""), safeDate);
+    }
+
+    /**
+     * Builds the formatted HTML notification template when a scan is older than the configured validity period.
+     */
+    public String buildScanTooOldHtml(VeracodeReportDTO.ScanOverviewDTO overview) {
+        StringBuilder html = new StringBuilder();
+        html.append(HEADER_STYLE);
+        if (overview != null) {
+            String header = buildMainHeader(overview);
+            html.append(header);
+            if (!header.endsWith("<hr/>\n") && !header.endsWith("<hr/>")) {
+                html.append("<hr/>\n");
+            }
+        }
+        html.append(buildScanTooOldMsg(overview));
+        html.append(FOOTER_MSG);
+        return html.toString();
     }
 
     private String buildModuleSelectionMsg(VeracodeReportDTO.ScanOverviewDTO overview, List<String> selected, List<String> unselected) {

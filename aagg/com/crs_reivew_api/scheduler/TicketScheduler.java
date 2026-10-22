@@ -821,7 +821,23 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
             return;
         }
 
-        boolean canAutoSignoff = isSignOffStatus(reportStatus) && isSignoffRequest && config.isAutoSignoffEnabled();
+        // Validate scan date validity: even if scan is clean / Sign-Off, validate scan date is not older than config.getScanValidityDays()
+        String rawScanDate = (report.overview != null && report.overview.submittedDate != null)
+                ? report.overview.submittedDate : ((report.overview != null) ? report.overview.generationDate : null);
+        if (isScanTooOld(rawScanDate)) {
+            logger.warn("Scan date '{}' is older than {} days (veracode.api.scan-validity-days) for SCTASK {}. Scan is too old for sign-off. Generating Scan Too Old notification.",
+                    rawScanDate, config != null ? config.getScanValidityDays() : 90, sctaskNumber);
+            String scanTooOldHtml = buildScanTooOldHtml(report.overview);
+            saveAutoLogFile(ritmNumber, scanTooOldHtml);
+            executePendingBlock(sctaskNumber, ensureCodeTags(scanTooOldHtml), true);
+            if (metricsService != null) {
+                metricsService.recordTicketResult(sctaskNumber, ritmNumber, "VERACODE", requestReason,
+                        "SCAN_TOO_OLD", "PENDING", "SCAN_TOO_OLD", System.currentTimeMillis() - startTime);
+            }
+            return;
+        }
+
+        boolean canAutoSignoff = isSignOffStatus(reportStatus) && !isScanTooOld(rawScanDate) && isSignoffRequest && config.isAutoSignoffEnabled();
 
         if (canAutoSignoff) {
             assignSctaskForSignOff(sctaskNumber);
@@ -1248,7 +1264,23 @@ For more information about CRS, please see the <a class="rounded bg-gray" target
                         requestReason, sctaskNumber);
             }
 
-            boolean canAutoSignoff = "Sign-Off".equalsIgnoreCase(reportStatus) && !hasOpenVulns && isSignoffRequest && config.isAutoSignoffCheckmarxEnabled();
+            // Validate scan date validity: even if scan is clean / Sign-Off, validate scan date is not older than config.getScanValidityDays()
+            String rawScanDate = (report.overview != null && report.overview.submittedDate != null)
+                    ? report.overview.submittedDate : ((report.overview != null) ? report.overview.generationDate : null);
+            if (isScanTooOld(rawScanDate)) {
+                logger.warn("Scan date '{}' is older than {} days (veracode.api.scan-validity-days) for Checkmarx SCTASK {}. Scan is too old for sign-off. Generating Scan Too Old notification.",
+                        rawScanDate, config != null ? config.getScanValidityDays() : 90, sctaskNumber);
+                String scanTooOldHtml = buildScanTooOldHtml(report.overview);
+                saveAutoLogFile(ritmNumber, scanTooOldHtml);
+                executePendingBlock(sctaskNumber, ensureCodeTags(scanTooOldHtml), true);
+                if (metricsService != null) {
+                    metricsService.recordTicketResult(sctaskNumber, ritmNumber, scaTool != null ? scaTool : "Checkmarx", requestReason,
+                            "SCAN_TOO_OLD", "PENDING", "SCAN_TOO_OLD", System.currentTimeMillis() - startTime);
+                }
+                return;
+            }
+
+            boolean canAutoSignoff = "Sign-Off".equalsIgnoreCase(reportStatus) && !hasOpenVulns && !isScanTooOld(rawScanDate) && isSignoffRequest && config.isAutoSignoffCheckmarxEnabled();
 
             if (canAutoSignoff) {
                 assignSctaskForSignOff(sctaskNumber);
@@ -1783,6 +1815,26 @@ Once a completed scan is available, please update the ticket and we will continu
             return reviewSummaryService.buildNewPolicyScanRequiredHtml(overview);
         }
         return new ReviewSummaryService(config).buildNewPolicyScanRequiredHtml(overview);
+    }
+
+    /**
+     * Builds the formatted HTML notification template when a scan is older than the configured validity period.
+     */
+    public String buildScanTooOldHtml(VeracodeReportDTO.ScanOverviewDTO overview) {
+        if (reviewSummaryService != null) {
+            return reviewSummaryService.buildScanTooOldHtml(overview);
+        }
+        return new ReviewSummaryService(config).buildScanTooOldHtml(overview);
+    }
+
+    /**
+     * Checks if a scan date is older than the configured scan validity days (veracode.api.scan-validity-days).
+     */
+    public boolean isScanTooOld(String dateStr) {
+        if (reviewSummaryService != null) {
+            return reviewSummaryService.isScanTooOld(dateStr);
+        }
+        return new ReviewSummaryService(config).isScanTooOld(dateStr);
     }
 
     /**
