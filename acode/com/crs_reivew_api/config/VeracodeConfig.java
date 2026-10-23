@@ -1,0 +1,1477 @@
+package com.crs_reivew_api.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Properties;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.core.env.PropertiesPropertySource;
+import org.springframework.core.env.StandardEnvironment;
+import org.springframework.beans.factory.annotation.Value;
+
+@Configuration
+@ConfigurationProperties(prefix = "veracode.api")
+public class VeracodeConfig {
+    private static final Logger logger = LoggerFactory.getLogger(VeracodeConfig.class);
+
+
+    private String url;
+    private boolean debug;
+    private List<String> ignoreModules = new ArrayList<>();
+    private List<String> includeModules = new ArrayList<>();
+    private List<String> ignoreEcosystems = new ArrayList<>();
+    private Map<String, String> architectureMappings = new HashMap<>();
+    private Map<String, Map<String, String>> tierMappings = new HashMap<>();
+    private Map<String, Map<String, Integer>> gracePeriods = new HashMap<>();
+    private boolean saveXmlLogs;
+    private boolean saveJsonHistory;
+    private String geminiKey;
+    private String geminiModel = "gemini-2.5-flash";
+    private String azureKey;
+    private String azureEndpoint;
+    private String azureDeployment;
+    private int historyLimit;
+    private List<String> aiEngines = new ArrayList<>();
+    private String sastPrompt;
+    private String scaPrompt;
+    private int scanValidityDays = 90;
+    private List<String> noSca = new ArrayList<>();
+    private String sharedServiceEndpoint;
+    private String sharedServiceKey;
+    private String sharedServiceRole = "user";
+    private int sharedServiceMaxTokens = 1000;
+    private List<String> engineModels = new ArrayList<>();
+    private String mitigationApiType = "XML";
+    private String mitigationProposalEnabled = "true";
+    private String githubToken;
+    private boolean scaSafeVersionEnabled = true;
+    private String scaNoFixMessage = "No safe version published in GHSA. Check manually.";
+    private String scaStaleFixMessage = "No safe version found. Fix applies to a different major version. Check manually.";
+    private boolean saveScaLog = false;
+    private boolean secondaryAuditEnabled = false;
+    private String auditorModelName = "gpt-4o-mini";
+    private String sharedAuditorEndpoint;
+    private int sharedAuditorMaxTokens = 1000;
+    private String sharedAuditorRole = "user";
+    private String auditorDisagreeFallbackText = "Proposal Rejected please perform a Manual Review as The Evaluator and Auditor model has contradiction!";
+    private String auditorPrompt;
+    private String gcaasSecretKey;
+    private String gcaasRestBaseURL;
+    private String gcaasRestEndpointIntake;
+    private String gcaasRestEndpointRemediation;
+    private boolean intakeRequest = false;
+    private Key key = new Key();
+
+    private String checkmarxApiKey;
+
+    @Value("${crs.snow.base-url:https://pwcnetwork.service-now.com/api}")
+    private String snowBaseUrl = "https://pwcnetwork.service-now.com/api";
+
+    @Value("${crs.snow.username:Code Review Services Service Account}")
+    private String snowUsername = "Code Review Services Service Account";
+
+    @Value("${crs.snow.ritm-endpoint:/now/table/sc_req_item}")
+    private String snowRitmEndpoint = "/now/table/sc_req_item";
+
+    @Value("${crs.snow.sctask-endpoint:/now/table/sc_task}")
+    private String snowSctaskEndpoint = "/now/table/sc_task";
+
+    @Value("${crs.snow.sctask-default-query:request_item.cat_item=6382512ddb59bf40dbf414a05b96194e^assignment_group=0af08aab1b8704d09b6165b9bd4bcbdf^stateIN1^ORDERBYDESCsys_updated_on}")
+    private String snowSctaskDefaultQuery = "request_item.cat_item=6382512ddb59bf40dbf414a05b96194e^assignment_group=0af08aab1b8704d09b6165b9bd4bcbdf^stateIN1^ORDERBYDESCsys_updated_on";
+
+    @Value("${crs.snow.sctask-default-fields:number,state,request_item.number,short_description,assigned_to,sys_created_on,sys_updated_on,opened_at}")
+    private String snowSctaskDefaultFields = "number,state,request_item.number,short_description,assigned_to,sys_created_on,sys_updated_on,opened_at";
+
+    @Value("${crs.snow.sctask-update-endpoint:/now/import/u_generic_catalog_task_update}")
+    private String snowSctaskUpdateEndpoint = "/now/import/u_generic_catalog_task_update";
+
+    @Value("${crs.snow.check-duplicate-requests:true}")
+    private boolean checkDuplicateRequests = true;
+
+    @Value("${crs.snow.sctask-cat-item:6382512ddb59bf40dbf414a05b96194e}")
+    private String snowSctaskCatItem = "6382512ddb59bf40dbf414a05b96194e";
+
+    @Value("${crs.snow.sctask-assignment-group:0af08aab1b8704d09b6165b9bd4bcbdf}")
+    private String snowSctaskAssignmentGroup = "0af08aab1b8704d09b6165b9bd4bcbdf";
+
+    @Value("${crs.snow.sctask-app-profile-variable-sysid:e1147a86dbdb8854dbf414a05b96198f}")
+    private String snowSctaskAppProfileVariableSysId = "e1147a86dbdb8854dbf414a05b96198f";
+
+    @Value("${crs.snow.duplicate-request-limit:10}")
+    private int snowDuplicateRequestLimit = 10;
+
+    @Value("${crs.snow.scheduler.enabled:true}")
+    private boolean snowSchedulerEnabled = true;
+
+    @Value("${crs.snow.scheduler.display.config:${crs.snow.scheduler.display-config:false}}")
+    private boolean snowSchedulerDisplayConfig = false;
+
+    @Value("${crs.snow.scheduler.delay-ms:300000}")
+    private long snowSchedulerDelayMs = 300000L;
+
+    @Value("${crs.snow.scheduler.inter-ticket-delay-ms:${crs.snow.scheduler.ticket-delay-ms:3000}}")
+    private long snowSchedulerInterTicketDelayMs = 3000L;
+
+    @Value("${crs.snow.scheduler.max-memory-entries:100}")
+    private int snowSchedulerMaxMemoryEntries = 100;
+
+    @Value("${crs.snow.post-scheduler-comments-to-snow:${crs.snow.post-scheduler-to-snow:true}}")
+    private boolean postSchedulerCommentsToSnow = true;
+
+    @Value("${crs.snow.comments.status-update:false}")
+    private boolean commentsStatusUpdate = false;
+
+    @Value("${crs.snow.comments.status:Pending}")
+    private String commentsStatus = "Pending";
+
+    @Value("${crs.snow.comments.userid:${crs.snow.comments.user-id:Us_svc_codereviewsr_01}}")
+    private String commentsUserId = "Us_svc_codereviewsr_01";
+
+    @Value("${crs.snow.review-proposal:${crs.snow.review-proposal-enabled:${crs.snow.review-proposal.enabled:false}}}")
+    private boolean reviewProposal = false;
+
+    @Value("${crs.snow.review-proposal.ai-model:${crs.snow.review-proposal-model:${crs.snow.review-proposal.model:azure.gpt-4o}}}")
+    private String reviewProposalAiModel = "azure.gpt-4o";
+
+    @Value("${crs.snow.scheduler.read-from-local-file:false}")
+    private boolean snowSchedulerReadFromLocalFile = false;
+
+    @Value("${crs.snow.scheduler.local-file-path:logs/snow/open_tickets.json}")
+    private String snowSchedulerLocalFilePath = "logs/snow/open_tickets.json";
+
+    @Value("${crs.snow.scheduler.history-file-path:logs/cache/sctask-history.txt}")
+    private String snowSchedulerHistoryFilePath = "logs/cache/sctask-history.txt";
+
+    @Value("${crs.snow.auto-signoff-enabled:true}")
+    private boolean autoSignoffEnabled = true;
+
+    @Value("${crs.snow.auto.signoff-checkmars-enable:${crs.snow.auto-signoff-checkmarx-enabled:${crs.snow.auto.signoff-checkmarx-enable:false}}}")
+    private boolean autoSignoffCheckmarxEnabled = false;
+
+    @Value("${crs.snow.signoff-autouserid:${crs.snow.signoff-auto-user-id:${signoff-autouserid:Us_svc_codereviewsr_01}}}")
+    private String snowSignoffAutoUserId = "Us_svc_codereviewsr_01";
+
+    @Value("${crs.snow.signoff-autousername:${crs.snow.signoff-auto-user-name:${Signoff-autoUserName:${signoff-autousername:Code Review Services Service Account}}}}")
+    private String snowSignoffAutoUserName = "Code Review Services Service Account";
+
+    private String snowApiKey;
+
+    public boolean isAutoSignoffEnabled() {
+        return autoSignoffEnabled;
+    }
+
+    public void setAutoSignoffEnabled(boolean autoSignoffEnabled) {
+        this.autoSignoffEnabled = autoSignoffEnabled;
+    }
+
+    public boolean isAutoSignoffCheckmarxEnabled() {
+        return autoSignoffCheckmarxEnabled;
+    }
+
+    public void setAutoSignoffCheckmarxEnabled(boolean autoSignoffCheckmarxEnabled) {
+        this.autoSignoffCheckmarxEnabled = autoSignoffCheckmarxEnabled;
+    }
+
+    public boolean isAutoSignoffCheckmarsEnable() {
+        return autoSignoffCheckmarxEnabled;
+    }
+
+    public void setAutoSignoffCheckmarsEnable(boolean autoSignoffCheckmarsEnable) {
+        this.autoSignoffCheckmarxEnabled = autoSignoffCheckmarsEnable;
+    }
+
+    public String getSnowSignoffAutoUserId() {
+        return snowSignoffAutoUserId;
+    }
+
+    public void setSnowSignoffAutoUserId(String snowSignoffAutoUserId) {
+        this.snowSignoffAutoUserId = snowSignoffAutoUserId;
+    }
+
+    public String getSnowSignoffAutoUserName() {
+        return snowSignoffAutoUserName;
+    }
+
+    public void setSnowSignoffAutoUserName(String snowSignoffAutoUserName) {
+        this.snowSignoffAutoUserName = snowSignoffAutoUserName;
+    }
+
+    public String getCheckmarxApiKey() {
+        return checkmarxApiKey;
+    }
+
+    public void setCheckmarxApiKey(String checkmarxApiKey) {
+        this.checkmarxApiKey = checkmarxApiKey;
+    }
+
+    public String getSnowBaseUrl() {
+        return snowBaseUrl;
+    }
+
+    public void setSnowBaseUrl(String snowBaseUrl) {
+        this.snowBaseUrl = snowBaseUrl;
+    }
+
+    public String getSnowUsername() {
+        return snowUsername;
+    }
+
+    public void setSnowUsername(String snowUsername) {
+        this.snowUsername = snowUsername;
+    }
+
+    public String getSnowRitmEndpoint() {
+        return snowRitmEndpoint;
+    }
+
+    public void setSnowRitmEndpoint(String snowRitmEndpoint) {
+        this.snowRitmEndpoint = snowRitmEndpoint;
+    }
+
+    public String getSnowSctaskEndpoint() {
+        return snowSctaskEndpoint;
+    }
+
+    public void setSnowSctaskEndpoint(String snowSctaskEndpoint) {
+        this.snowSctaskEndpoint = snowSctaskEndpoint;
+    }
+
+    public String getSnowSctaskDefaultQuery() {
+        return snowSctaskDefaultQuery;
+    }
+
+    public void setSnowSctaskDefaultQuery(String snowSctaskDefaultQuery) {
+        this.snowSctaskDefaultQuery = snowSctaskDefaultQuery;
+    }
+
+    public String getSnowSctaskDefaultFields() {
+        return snowSctaskDefaultFields;
+    }
+
+    public void setSnowSctaskDefaultFields(String snowSctaskDefaultFields) {
+        this.snowSctaskDefaultFields = snowSctaskDefaultFields;
+    }
+
+    public String getSnowSctaskUpdateEndpoint() {
+        return snowSctaskUpdateEndpoint;
+    }
+
+    public void setSnowSctaskUpdateEndpoint(String snowSctaskUpdateEndpoint) {
+        this.snowSctaskUpdateEndpoint = snowSctaskUpdateEndpoint;
+    }
+
+    public boolean isCheckDuplicateRequests() {
+        return checkDuplicateRequests;
+    }
+
+    public void setCheckDuplicateRequests(boolean checkDuplicateRequests) {
+        this.checkDuplicateRequests = checkDuplicateRequests;
+    }
+
+    public String getSnowSctaskCatItem() {
+        return snowSctaskCatItem;
+    }
+
+    public void setSnowSctaskCatItem(String snowSctaskCatItem) {
+        this.snowSctaskCatItem = snowSctaskCatItem;
+    }
+
+    public String getSnowSctaskAssignmentGroup() {
+        return snowSctaskAssignmentGroup;
+    }
+
+    public void setSnowSctaskAssignmentGroup(String snowSctaskAssignmentGroup) {
+        this.snowSctaskAssignmentGroup = snowSctaskAssignmentGroup;
+    }
+
+    public String getSnowSctaskAppProfileVariableSysId() {
+        return snowSctaskAppProfileVariableSysId;
+    }
+
+    public void setSnowSctaskAppProfileVariableSysId(String snowSctaskAppProfileVariableSysId) {
+        this.snowSctaskAppProfileVariableSysId = snowSctaskAppProfileVariableSysId;
+    }
+
+    public int getSnowDuplicateRequestLimit() {
+        return snowDuplicateRequestLimit;
+    }
+
+    public void setSnowDuplicateRequestLimit(int snowDuplicateRequestLimit) {
+        this.snowDuplicateRequestLimit = snowDuplicateRequestLimit;
+    }
+
+    public boolean isSnowSchedulerEnabled() {
+        return snowSchedulerEnabled;
+    }
+
+    public void setSnowSchedulerEnabled(boolean snowSchedulerEnabled) {
+        this.snowSchedulerEnabled = snowSchedulerEnabled;
+    }
+
+    public boolean isSnowSchedulerDisplayConfig() {
+        return snowSchedulerDisplayConfig;
+    }
+
+    public void setSnowSchedulerDisplayConfig(boolean snowSchedulerDisplayConfig) {
+        this.snowSchedulerDisplayConfig = snowSchedulerDisplayConfig;
+    }
+
+    public long getSnowSchedulerDelayMs() {
+        return snowSchedulerDelayMs;
+    }
+
+    public void setSnowSchedulerDelayMs(long snowSchedulerDelayMs) {
+        this.snowSchedulerDelayMs = snowSchedulerDelayMs;
+    }
+
+    public long getSnowSchedulerInterTicketDelayMs() {
+        return snowSchedulerInterTicketDelayMs;
+    }
+
+    public void setSnowSchedulerInterTicketDelayMs(long snowSchedulerInterTicketDelayMs) {
+        this.snowSchedulerInterTicketDelayMs = snowSchedulerInterTicketDelayMs;
+    }
+
+    public int getSnowSchedulerMaxMemoryEntries() {
+        return snowSchedulerMaxMemoryEntries;
+    }
+
+    public void setSnowSchedulerMaxMemoryEntries(int snowSchedulerMaxMemoryEntries) {
+        this.snowSchedulerMaxMemoryEntries = snowSchedulerMaxMemoryEntries;
+    }
+
+    public boolean isPostSchedulerCommentsToSnow() {
+        return postSchedulerCommentsToSnow;
+    }
+
+    public void setPostSchedulerCommentsToSnow(boolean postSchedulerCommentsToSnow) {
+        this.postSchedulerCommentsToSnow = postSchedulerCommentsToSnow;
+    }
+
+    public boolean isPostSchedulerToSnow() {
+        return postSchedulerCommentsToSnow;
+    }
+
+    public void setPostSchedulerToSnow(boolean postSchedulerToSnow) {
+        this.postSchedulerCommentsToSnow = postSchedulerToSnow;
+    }
+
+    public boolean isCommentsStatusUpdate() {
+        return commentsStatusUpdate;
+    }
+
+    public void setCommentsStatusUpdate(boolean commentsStatusUpdate) {
+        this.commentsStatusUpdate = commentsStatusUpdate;
+    }
+
+    public String getCommentsStatus() {
+        return commentsStatus;
+    }
+
+    public void setCommentsStatus(String commentsStatus) {
+        this.commentsStatus = commentsStatus;
+    }
+
+    public String getCommentsUserId() {
+        return commentsUserId;
+    }
+
+    public void setCommentsUserId(String commentsUserId) {
+        this.commentsUserId = commentsUserId;
+    }
+
+    public boolean isReviewProposal() {
+        return reviewProposal;
+    }
+
+    public void setReviewProposal(boolean reviewProposal) {
+        this.reviewProposal = reviewProposal;
+    }
+
+    public String getReviewProposalAiModel() {
+        return reviewProposalAiModel;
+    }
+
+    public void setReviewProposalAiModel(String reviewProposalAiModel) {
+        this.reviewProposalAiModel = reviewProposalAiModel;
+    }
+
+    public boolean isSnowSchedulerReadFromLocalFile() {
+        return snowSchedulerReadFromLocalFile;
+    }
+
+    public void setSnowSchedulerReadFromLocalFile(boolean snowSchedulerReadFromLocalFile) {
+        this.snowSchedulerReadFromLocalFile = snowSchedulerReadFromLocalFile;
+    }
+
+    public String getSnowSchedulerLocalFilePath() {
+        return snowSchedulerLocalFilePath;
+    }
+
+    public void setSnowSchedulerLocalFilePath(String snowSchedulerLocalFilePath) {
+        this.snowSchedulerLocalFilePath = snowSchedulerLocalFilePath;
+    }
+
+    public String getSnowSchedulerHistoryFilePath() {
+        return snowSchedulerHistoryFilePath != null && !snowSchedulerHistoryFilePath.trim().isEmpty()
+                ? snowSchedulerHistoryFilePath.trim()
+                : "logs/cache/sctask-history.txt";
+    }
+
+    public void setSnowSchedulerHistoryFilePath(String snowSchedulerHistoryFilePath) {
+        this.snowSchedulerHistoryFilePath = snowSchedulerHistoryFilePath;
+    }
+
+    public String getSnowApiKey() {
+        return snowApiKey;
+    }
+
+    public void setSnowApiKey(String snowApiKey) {
+        this.snowApiKey = snowApiKey;
+    }
+
+    @PostConstruct
+    public void loadExternalConfig() {
+        String userHome = System.getProperty("user.home");
+        File veracodeCredFile = new File(userHome, ".veracode/credentials");
+        File credentialsFile = new File(userHome, ".crs-tool/credentials");
+        Properties credProps = new Properties();
+
+        // 1. Load official Veracode credentials file (~/.veracode/credentials)
+        if (veracodeCredFile.exists()) {
+            logger.info("Loading Veracode credentials from {}", veracodeCredFile.getAbsolutePath());
+            try (FileInputStream fis = new FileInputStream(veracodeCredFile)) {
+                Properties veracodeProps = new Properties();
+                veracodeProps.load(fis);
+
+                String vId = veracodeProps.getProperty("veracode_api_key_id");
+                if (vId == null || vId.isEmpty()) vId = veracodeProps.getProperty("veracode.api.key.id");
+                if (vId == null || vId.isEmpty()) vId = veracodeProps.getProperty("id");
+                if (vId == null || vId.isEmpty()) vId = veracodeProps.getProperty("veracode.api.id");
+                if (vId != null && !vId.trim().isEmpty()) {
+                    this.key.setId(vId.trim());
+                }
+
+                String vSec = veracodeProps.getProperty("veracode_api_key_secret");
+                if (vSec == null || vSec.isEmpty()) vSec = veracodeProps.getProperty("veracode.api.key.secret");
+                if (vSec == null || vSec.isEmpty()) vSec = veracodeProps.getProperty("secret");
+                if (vSec == null || vSec.isEmpty()) vSec = veracodeProps.getProperty("veracode.api.secret");
+                if (vSec != null && !vSec.trim().isEmpty()) {
+                    this.key.setSecret(vSec.trim());
+                }
+            } catch (IOException e) {
+                logger.error("Failed to load Veracode credentials file: {}", e.getMessage());
+            }
+
+            // Line-by-line fallback for INI file format with sections or spaces
+            if (this.key.getId() == null || this.key.getId().isEmpty() || this.key.getSecret() == null || this.key.getSecret().isEmpty()) {
+                try {
+                    List<String> lines = java.nio.file.Files.readAllLines(veracodeCredFile.toPath());
+                    for (String line : lines) {
+                        String trimmed = line.trim();
+                        if (trimmed.startsWith("veracode_api_key_id")) {
+                            String[] parts = trimmed.split("=", 2);
+                            if (parts.length > 1 && (this.key.getId() == null || this.key.getId().isEmpty())) {
+                                this.key.setId(parts[1].trim());
+                            }
+                        } else if (trimmed.startsWith("veracode_api_key_secret")) {
+                            String[] parts = trimmed.split("=", 2);
+                            if (parts.length > 1 && (this.key.getSecret() == null || this.key.getSecret().isEmpty())) {
+                                this.key.setSecret(parts[1].trim());
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.warn("Failed to read lines from Veracode credentials file: {}", e.getMessage());
+                }
+            }
+        }
+
+        // 2. Load CRS-Tool credentials file (~/.crs-tool/credentials)
+        if (credentialsFile.exists()) {
+            logger.info("Loading external credentials from {}", credentialsFile.getAbsolutePath());
+            try (FileInputStream fis = new FileInputStream(credentialsFile)) {
+                credProps.load(fis);
+                this.geminiKey = getProp(credProps, "geminiKey", this.geminiKey);
+                this.geminiModel = getProp(credProps, "geminiModel", this.geminiModel);
+                this.azureKey = getProp(credProps, "azureKey", this.azureKey);
+                this.azureEndpoint = getProp(credProps, "azureEndpoint", this.azureEndpoint);
+                this.azureDeployment = getProp(credProps, "azureDeployment", this.azureDeployment);
+                this.sharedServiceKey = getProp(credProps, "sharedServiceKey", this.sharedServiceKey);
+                this.githubToken = getProp(credProps, "githubToken", this.githubToken);
+                
+                // Load Veracode API Keys if not yet set
+                if (this.key.getId() == null || this.key.getId().isEmpty()) {
+                    this.key.setId(getProp(credProps, "id", this.key.getId()));
+                }
+                if (this.key.getSecret() == null || this.key.getSecret().isEmpty()) {
+                    this.key.setSecret(getProp(credProps, "secret", this.key.getSecret()));
+                }
+                
+                // GCaaS API Keys
+                if (this.gcaasSecretKey == null || this.gcaasSecretKey.isEmpty()) {
+                    this.gcaasSecretKey = credProps.getProperty("gcaas-secret-key");
+                }
+                if (this.gcaasSecretKey == null || this.gcaasSecretKey.isEmpty()) {
+                    this.gcaasSecretKey = credProps.getProperty("gcaasSecretKey");
+                }
+                if (this.gcaasSecretKey == null || this.gcaasSecretKey.isEmpty()) {
+                    this.gcaasSecretKey = credProps.getProperty("gcaas.secret.key");
+                }
+                
+                // Checkmarx API Key
+                if (this.checkmarxApiKey == null || this.checkmarxApiKey.isEmpty()) {
+                    this.checkmarxApiKey = credProps.getProperty("crs.checkmarx.api.key");
+                }
+                if (this.checkmarxApiKey == null || this.checkmarxApiKey.isEmpty()) {
+                    this.checkmarxApiKey = credProps.getProperty("crs.checkmarx.api");
+                }
+                
+                // ServiceNow (SNOW) API Key
+                if (this.snowApiKey == null || this.snowApiKey.isEmpty()) {
+                    this.snowApiKey = credProps.getProperty("crs.api.snowkey");
+                }
+                if (this.snowApiKey == null || this.snowApiKey.isEmpty()) {
+                    this.snowApiKey = credProps.getProperty("snowKey");
+                }
+                if (this.snowApiKey == null || this.snowApiKey.isEmpty()) {
+                    this.snowApiKey = credProps.getProperty("crs.snow.api.key");
+                }
+                
+                logger.info("Successfully loaded credentials from {}", credentialsFile.getAbsolutePath());
+            } catch (IOException e) {
+                logger.error("Failed to load credentials file: {}", e.getMessage());
+            }
+        } else {
+            logger.warn("Credentials file not found at {}. AI keys will be read from environment or application.properties if available.", credentialsFile.getAbsolutePath());
+        }
+        
+        // 3. Manually parse application.properties
+        File appPropsFile = null;
+        String[] candidatePaths = {
+            "src/main/resources/application.properties",
+            "../src/main/resources/application.properties",
+            "application.properties",
+            "config/application.properties",
+            "target/classes/application.properties"
+        };
+        for (String path : candidatePaths) {
+            File f = new File(path);
+            if (f.exists()) {
+                appPropsFile = f;
+                break;
+            }
+        }
+
+        Properties appProps = new Properties();
+        if (appPropsFile != null) {
+            logger.info("Found external properties file at: {}", appPropsFile.getAbsolutePath());
+            try (FileInputStream fis = new FileInputStream(appPropsFile)) {
+                appProps.load(fis);
+                
+                // Bind all veracode.api.* properties from external file
+                PropertiesPropertySource propertySource = new PropertiesPropertySource("externalAppProps", appProps);
+                StandardEnvironment env = new StandardEnvironment();
+                env.getPropertySources().addFirst(propertySource);
+                Binder.get(env).bind("veracode.api", Bindable.ofInstance(this));
+                
+                // Fallback Veracode ID & Secret from application.properties if not set
+                if (this.key.getId() == null || this.key.getId().isEmpty()) {
+                    this.key.setId(appProps.getProperty("veracode.api.key.id"));
+                }
+                if (this.key.getId() == null || this.key.getId().isEmpty()) {
+                    this.key.setId(appProps.getProperty("veracode_api_key_id"));
+                }
+                if (this.key.getSecret() == null || this.key.getSecret().isEmpty()) {
+                    this.key.setSecret(appProps.getProperty("veracode.api.key.secret"));
+                }
+                if (this.key.getSecret() == null || this.key.getSecret().isEmpty()) {
+                    this.key.setSecret(appProps.getProperty("veracode_api_key_secret"));
+                }
+
+                // Fallback Azure Deployment & Endpoint from application.properties
+                if (this.azureDeployment == null || this.azureDeployment.isEmpty()) {
+                    this.azureDeployment = appProps.getProperty("crs.api.azureDeployment");
+                    if (this.azureDeployment == null) this.azureDeployment = appProps.getProperty("crs.api.azure-deployment");
+                    if (this.azureDeployment == null) this.azureDeployment = appProps.getProperty("veracode.api.azureDeployment");
+                    if (this.azureDeployment == null) this.azureDeployment = appProps.getProperty("azureDeployment");
+                }
+                if (this.azureEndpoint == null || this.azureEndpoint.isEmpty()) {
+                    this.azureEndpoint = appProps.getProperty("crs.api.azureEndpoint");
+                    if (this.azureEndpoint == null) this.azureEndpoint = appProps.getProperty("crs.api.azure-endpoint");
+                    if (this.azureEndpoint == null) this.azureEndpoint = appProps.getProperty("veracode.api.azureEndpoint");
+                    if (this.azureEndpoint == null) this.azureEndpoint = appProps.getProperty("azureEndpoint");
+                }
+                if (this.azureKey == null || this.azureKey.isEmpty()) {
+                    this.azureKey = appProps.getProperty("crs.api.azureKey");
+                    if (this.azureKey == null) this.azureKey = appProps.getProperty("crs.api.azure-key");
+                    if (this.azureKey == null) this.azureKey = appProps.getProperty("veracode.api.azureKey");
+                }
+                if (this.geminiKey == null || this.geminiKey.isEmpty()) {
+                    this.geminiKey = appProps.getProperty("crs.api.geminiKey");
+                    if (this.geminiKey == null) this.geminiKey = appProps.getProperty("crs.api.gemini-key");
+                    if (this.geminiKey == null) this.geminiKey = appProps.getProperty("veracode.api.geminiKey");
+                }
+                if (this.sharedServiceKey == null || this.sharedServiceKey.isEmpty()) {
+                    this.sharedServiceKey = appProps.getProperty("veracode.api.sharedServiceKey");
+                    if (this.sharedServiceKey == null) this.sharedServiceKey = appProps.getProperty("veracode.api.shared-service-key");
+                    if (this.sharedServiceKey == null) this.sharedServiceKey = appProps.getProperty("sharedServiceKey");
+                    if (this.sharedServiceKey == null) this.sharedServiceKey = appProps.getProperty("crs.api.sharedServiceKey");
+                }
+                if (this.githubToken == null || this.githubToken.isEmpty()) {
+                    this.githubToken = appProps.getProperty("veracode.api.githubToken");
+                    if (this.githubToken == null) this.githubToken = appProps.getProperty("veracode.api.github-token");
+                    if (this.githubToken == null) this.githubToken = appProps.getProperty("githubToken");
+                }
+
+                // GCaaS rest baseURL
+                if (this.gcaasRestBaseURL == null || this.gcaasRestBaseURL.isEmpty()) {
+                    this.gcaasRestBaseURL = appProps.getProperty("veracode.api.gcaas-rest-baseURL");
+                }
+                if (this.gcaasRestBaseURL == null || this.gcaasRestBaseURL.isEmpty()) {
+                    this.gcaasRestBaseURL = appProps.getProperty("gcaas-rest-baseURL");
+                }
+
+                // GCaaS rest endpoint intake
+                if (this.gcaasRestEndpointIntake == null || this.gcaasRestEndpointIntake.isEmpty()) {
+                    this.gcaasRestEndpointIntake = appProps.getProperty("gcaas-rest-endpoint-intake");
+                }
+                if (this.gcaasRestEndpointIntake == null || this.gcaasRestEndpointIntake.isEmpty()) {
+                    this.gcaasRestEndpointIntake = appProps.getProperty("veracode.api.gcaas-rest-endpoint-intake");
+                }
+
+                // GCaaS rest endpoint remediation
+                if (this.gcaasRestEndpointRemediation == null || this.gcaasRestEndpointRemediation.isEmpty()) {
+                    this.gcaasRestEndpointRemediation = appProps.getProperty("veracode.api.gcaas-rest-endpoint-remediation");
+                }
+                if (this.gcaasRestEndpointRemediation == null || this.gcaasRestEndpointRemediation.isEmpty()) {
+                    this.gcaasRestEndpointRemediation = appProps.getProperty("gcaas-rest-endpoint-remediation");
+                }
+                if (this.gcaasRestEndpointRemediation == null || this.gcaasRestEndpointRemediation.isEmpty()) {
+                    this.gcaasRestEndpointRemediation = appProps.getProperty("veracode.api.gcaas.rest-endpoint-remediation");
+                }
+                if (this.gcaasRestEndpointRemediation == null || this.gcaasRestEndpointRemediation.isEmpty()) {
+                    this.gcaasRestEndpointRemediation = appProps.getProperty("gcaas.rest-endpoint-remediation");
+                }
+
+                // GCaaS Secret Key fallback
+                if (this.gcaasSecretKey == null || this.gcaasSecretKey.isEmpty()) {
+                    this.gcaasSecretKey = appProps.getProperty("gcaas-secret-key");
+                }
+                if (this.gcaasSecretKey == null || this.gcaasSecretKey.isEmpty()) {
+                    this.gcaasSecretKey = appProps.getProperty("gcaasSecretKey");
+                }
+                if (this.gcaasSecretKey == null || this.gcaasSecretKey.isEmpty()) {
+                    this.gcaasSecretKey = appProps.getProperty("veracode.api.gcaasSecretKey");
+                }
+
+                // ServiceNow (SNOW) Properties Fallback
+                if (this.snowApiKey == null || this.snowApiKey.isEmpty()) {
+                    this.snowApiKey = appProps.getProperty("crs.api.snowkey");
+                }
+                if (this.snowApiKey == null || this.snowApiKey.isEmpty()) {
+                    this.snowApiKey = appProps.getProperty("crs.snow.api.key");
+                }
+                if (appProps.containsKey("crs.snow.base-url")) {
+                    this.snowBaseUrl = appProps.getProperty("crs.snow.base-url");
+                } else if (appProps.containsKey("crs.snow.snow-base-url")) {
+                    this.snowBaseUrl = appProps.getProperty("crs.snow.snow-base-url");
+                }
+                if (appProps.containsKey("crs.snow.username")) {
+                    this.snowUsername = appProps.getProperty("crs.snow.username");
+                }
+                if (appProps.containsKey("crs.snow.ritm-endpoint")) {
+                    this.snowRitmEndpoint = appProps.getProperty("crs.snow.ritm-endpoint");
+                }
+                if (appProps.containsKey("crs.snow.sctask-endpoint")) {
+                    this.snowSctaskEndpoint = appProps.getProperty("crs.snow.sctask-endpoint");
+                }
+                if (appProps.containsKey("crs.snow.sctask-default-query")) {
+                    this.snowSctaskDefaultQuery = appProps.getProperty("crs.snow.sctask-default-query");
+                }
+                if (appProps.containsKey("crs.snow.sctask-default-fields")) {
+                    this.snowSctaskDefaultFields = appProps.getProperty("crs.snow.sctask-default-fields");
+                }
+                if (appProps.containsKey("crs.snow.sctask-update-endpoint")) {
+                    this.snowSctaskUpdateEndpoint = appProps.getProperty("crs.snow.sctask-update-endpoint");
+                }
+                if (appProps.containsKey("crs.snow.scheduler.enabled")) {
+                    this.snowSchedulerEnabled = Boolean.parseBoolean(appProps.getProperty("crs.snow.scheduler.enabled"));
+                }
+                if (appProps.containsKey("crs.snow.scheduler.display.config")) {
+                    this.snowSchedulerDisplayConfig = Boolean.parseBoolean(appProps.getProperty("crs.snow.scheduler.display.config"));
+                } else if (appProps.containsKey("crs.snow.scheduler.display-config")) {
+                    this.snowSchedulerDisplayConfig = Boolean.parseBoolean(appProps.getProperty("crs.snow.scheduler.display-config"));
+                }
+                if (appProps.containsKey("crs.snow.scheduler.delay-ms")) {
+                    try {
+                        this.snowSchedulerDelayMs = Long.parseLong(appProps.getProperty("crs.snow.scheduler.delay-ms"));
+                    } catch (NumberFormatException ignored) {}
+                }
+                if (appProps.containsKey("crs.snow.scheduler.inter-ticket-delay-ms")) {
+                    try {
+                        this.snowSchedulerInterTicketDelayMs = Long.parseLong(appProps.getProperty("crs.snow.scheduler.inter-ticket-delay-ms"));
+                    } catch (NumberFormatException ignored) {}
+                } else if (appProps.containsKey("crs.snow.scheduler.ticket-delay-ms")) {
+                    try {
+                        this.snowSchedulerInterTicketDelayMs = Long.parseLong(appProps.getProperty("crs.snow.scheduler.ticket-delay-ms"));
+                    } catch (NumberFormatException ignored) {}
+                }
+                if (appProps.containsKey("crs.snow.scheduler.max-memory-entries")) {
+                    try {
+                        this.snowSchedulerMaxMemoryEntries = Integer.parseInt(appProps.getProperty("crs.snow.scheduler.max-memory-entries"));
+                    } catch (NumberFormatException ignored) {}
+                }
+                if (appProps.containsKey("crs.snow.post-scheduler-comments-to-snow")) {
+                    this.postSchedulerCommentsToSnow = Boolean.parseBoolean(appProps.getProperty("crs.snow.post-scheduler-comments-to-snow"));
+                } else if (appProps.containsKey("crs.snow.post-scheduler-to-snow")) {
+                    this.postSchedulerCommentsToSnow = Boolean.parseBoolean(appProps.getProperty("crs.snow.post-scheduler-to-snow"));
+                }
+                if (appProps.containsKey("crs.snow.comments.status-update")) {
+                    this.commentsStatusUpdate = Boolean.parseBoolean(appProps.getProperty("crs.snow.comments.status-update"));
+                }
+                if (appProps.containsKey("crs.snow.comments.status")) {
+                    this.commentsStatus = appProps.getProperty("crs.snow.comments.status");
+                }
+                if (appProps.containsKey("crs.snow.comments.userid")) {
+                    this.commentsUserId = appProps.getProperty("crs.snow.comments.userid");
+                } else if (appProps.containsKey("crs.snow.comments.user-id")) {
+                    this.commentsUserId = appProps.getProperty("crs.snow.comments.user-id");
+                }
+                if (appProps.containsKey("crs.snow.review-proposal")) {
+                    this.reviewProposal = Boolean.parseBoolean(appProps.getProperty("crs.snow.review-proposal"));
+                } else if (appProps.containsKey("crs.snow.review-proposal-enabled")) {
+                    this.reviewProposal = Boolean.parseBoolean(appProps.getProperty("crs.snow.review-proposal-enabled"));
+                } else if (appProps.containsKey("crs.snow.review-proposal.enabled")) {
+                    this.reviewProposal = Boolean.parseBoolean(appProps.getProperty("crs.snow.review-proposal.enabled"));
+                }
+                if (appProps.containsKey("crs.snow.review-proposal.ai-model")) {
+                    this.reviewProposalAiModel = appProps.getProperty("crs.snow.review-proposal.ai-model");
+                } else if (appProps.containsKey("crs.snow.review-proposal-model")) {
+                    this.reviewProposalAiModel = appProps.getProperty("crs.snow.review-proposal-model");
+                } else if (appProps.containsKey("crs.snow.review-proposal.model")) {
+                    this.reviewProposalAiModel = appProps.getProperty("crs.snow.review-proposal.model");
+                }
+
+                // Populate tierMappings
+                if (this.tierMappings == null || this.tierMappings.isEmpty()) {
+                    this.tierMappings = new HashMap<>();
+                    for (String keyName : appProps.stringPropertyNames()) {
+                        if (keyName.startsWith("veracode.api.tier-mappings.")) {
+                            String suffix = keyName.substring("veracode.api.tier-mappings.".length());
+                            int lastDot = suffix.lastIndexOf('.');
+                            if (lastDot > 0) {
+                                String group = suffix.substring(0, lastDot);
+                                String subGroup = suffix.substring(lastDot + 1);
+                                String value = appProps.getProperty(keyName);
+                                this.tierMappings.computeIfAbsent(group, k -> new HashMap<>()).put(subGroup, value);
+                            }
+                        }
+                    }
+                }
+                
+                // Populate gracePeriods
+                if (this.gracePeriods == null || this.gracePeriods.isEmpty()) {
+                    this.gracePeriods = new HashMap<>();
+                    for (String keyName : appProps.stringPropertyNames()) {
+                        if (keyName.startsWith("veracode.api.grace-periods.")) {
+                            String suffix = keyName.substring("veracode.api.grace-periods.".length());
+                            int lastDot = suffix.lastIndexOf('.');
+                            if (lastDot > 0) {
+                                String tier = suffix.substring(0, lastDot);
+                                String severity = suffix.substring(lastDot + 1);
+                                try {
+                                    Integer value = Integer.parseInt(appProps.getProperty(keyName));
+                                    this.gracePeriods.computeIfAbsent(tier, k -> new HashMap<>()).put(severity, value);
+                                } catch (NumberFormatException e) {
+                                    // ignore
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                logger.error("Failed to manually load application.properties: {}", e.getMessage());
+            }
+        } else {
+            // Load checkmarx key from environment variable if set
+            if (this.checkmarxApiKey == null || this.checkmarxApiKey.isEmpty()) {
+                this.checkmarxApiKey = System.getenv("CRS_CHECKMARX_API_KEY");
+            }
+            if (this.checkmarxApiKey == null || this.checkmarxApiKey.isEmpty()) {
+                this.checkmarxApiKey = System.getenv("crs.checkmarx.api.key");
+            }
+        }
+
+        // 4. Load secrets from mounted secrets (/var/secrets) or uppercase environment variables (matching Helm values.yaml)
+        this.key.setId(readVarSecretOrEnv(this.key.getId(),
+            "VERACODE_API_KEY_ID", "VERACODE_KEY_ID", "VERACODE_ID"));
+        this.key.setSecret(readVarSecretOrEnv(this.key.getSecret(),
+            "VERACODE_API_KEY_SECRET", "VERACODE_KEY_SECRET", "VERACODE_SECRET"));
+
+        // crs.api.azureDeployment
+        this.azureDeployment = readVarSecretOrEnv(this.azureDeployment,
+            "CRS_API_AZUREDEPLOYMENT", "CRS_API_AZURE_DEPLOYMENT", "AZURE_DEPLOYMENT", "AZUREDEPLOYMENT", "VERACODE_API_AZUREDEPLOYMENT", "crs.api.azureDeployment", "azureDeployment");
+
+        // crs.api.azureEndpoint
+        this.azureEndpoint = readVarSecretOrEnv(this.azureEndpoint,
+            "CRS_API_AZUREENDPOINT", "CRS_API_AZURE_ENDPOINT", "AZURE_ENDPOINT", "AZUREENDPOINT", "VERACODE_API_AZUREENDPOINT", "crs.api.azureEndpoint", "azureEndpoint");
+
+        // veracode.api.sharedServiceKey
+        this.sharedServiceKey = readVarSecretOrEnv(this.sharedServiceKey,
+            "VERACODE_API_SHAREDSERVICEKEY", "VERACODE_API_SHARED_SERVICE_KEY", "SHARED_SERVICE_API_KEY", "SHARED_SERVICE_KEY", "CRS_API_SHAREDSERVICEKEY", "CRS_API_SHARED_SERVICE_KEY", "sharedServiceKey");
+
+        // veracode.api.githubToken
+        this.githubToken = readVarSecretOrEnv(this.githubToken,
+            "VERACODE_API_GITHUBTOKEN", "VERACODE_API_GITHUB_TOKEN", "GITHUB_TOKEN", "CRS_API_GITHUBTOKEN", "CRS_API_GITHUB_TOKEN", "githubToken");
+
+        // gcaas-secret-key
+        this.gcaasSecretKey = readVarSecretOrEnv(this.gcaasSecretKey,
+            "GCAAS_SECRET_KEY", "GCAAS-SECRET-KEY", "GCAAS_SECRETKEY", "VERACODE_API_GCAAS_SECRET_KEY", "CRS_API_GCAAS_SECRET_KEY", "gcaas-secret-key", "gcaasSecretKey");
+
+        // crs.checkmarx.api.key
+        this.checkmarxApiKey = readVarSecretOrEnv(this.checkmarxApiKey,
+            "CRS_CHECKMARX_API_KEY", "CHECKMARX_API_KEY", "CRS_CHECKMARX_API", "CHECKMARX_KEY", "crs.checkmarx.api.key", "checkmarxApiKey");
+
+        // crs.api.snowkey
+        this.snowApiKey = readVarSecretOrEnv(this.snowApiKey,
+            "CRS_API_SNOWKEY", "CRS_API_SNOW_KEY", "SNOW_API_KEY", "CRS_SNOW_API_KEY", "SNOWKEY", "crs.api.snowkey", "crs.snow.api.key", "snowKey");
+
+        // Additional AI credentials
+        this.azureKey = readVarSecretOrEnv(this.azureKey,
+            "CRS_API_AZUREKEY", "CRS_API_AZURE_KEY", "AZURE_OPENAI_API_KEY", "AZURE_API_KEY", "AZURE_KEY", "VERACODE_API_AZUREKEY");
+        this.geminiKey = readVarSecretOrEnv(this.geminiKey,
+            "CRS_API_GEMINIKEY", "CRS_API_GEMINI_KEY", "GEMINI_API_KEY", "VERACODE_API_GEMINIKEY");
+        this.sharedServiceEndpoint = readVarSecretOrEnv(this.sharedServiceEndpoint,
+            "SHARED_SERVICE_ENDPOINT", "VERACODE_API_SHAREDSERVICEENDPOINT", "CRS_API_SHAREDSERVICEENDPOINT");
+
+        validateKeysAndPrintReport(credentialsFile, appPropsFile, credProps, appProps);
+    }
+
+    private String readVarSecretOrEnv(String defaultValue, String... candidateNames) {
+        if (candidateNames == null) return defaultValue;
+        for (String name : candidateNames) {
+            if (name == null || name.trim().isEmpty()) continue;
+            // 1. Check mounted secret file /var/secrets/<name>
+            File file = new File("/var/secrets/" + name);
+            if (file.exists() && file.canRead()) {
+                try {
+                    String val = new String(java.nio.file.Files.readAllBytes(file.toPath())).trim();
+                    if (!val.isEmpty()) {
+                        logger.info("Successfully read secret [{}] from /var/secrets/{}", name, name);
+                        return val;
+                    }
+                } catch (Exception e) {
+                    logger.warn("Failed to read secret file /var/secrets/{}: {}", name, e.getMessage());
+                }
+            }
+            // 2. Check System.getenv(name)
+            String envVal = System.getenv(name);
+            if (envVal != null && !envVal.trim().isEmpty()) {
+                return envVal.trim();
+            }
+        }
+        return defaultValue;
+    }
+
+    private String readVarSecret(String secretName, String defaultValue) {
+        return readVarSecretOrEnv(defaultValue, secretName);
+    }
+
+    private boolean hasVeracodeKeyInOfficialFile(File file, String keyPrefix) {
+        try {
+            List<String> lines = java.nio.file.Files.readAllLines(file.toPath());
+            for (String line : lines) {
+                String trimmed = line.trim();
+                if (trimmed.startsWith(keyPrefix) || trimmed.startsWith("veracode.api.key.") || trimmed.startsWith("id") || trimmed.startsWith("secret")) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {}
+        return false;
+    }
+
+    private String resolveSource(String value, File credentialsFile, Properties credProps, String[] credKeys,
+                                 File appPropsFile, Properties appProps, String[] propKeys,
+                                 String[] envOrSecretKeys) {
+        if (value == null || value.isEmpty()) {
+            return "MISSING";
+        }
+        if (envOrSecretKeys != null) {
+            for (String key : envOrSecretKeys) {
+                File f = new File("/var/secrets/" + key);
+                if (f.exists() && f.canRead()) {
+                    return "/var/secrets/" + key;
+                }
+            }
+            for (String key : envOrSecretKeys) {
+                String env = System.getenv(key);
+                if (env != null && !env.trim().isEmpty()) {
+                    return "Environment Variable (" + key + ")";
+                }
+            }
+        }
+        if (credentialsFile != null && credentialsFile.exists() && credProps != null && credKeys != null) {
+            for (String k : credKeys) {
+                if (credProps.containsKey(k) && credProps.getProperty(k) != null && !credProps.getProperty(k).trim().isEmpty()) {
+                    return credentialsFile.getAbsolutePath();
+                }
+            }
+        }
+        if (appPropsFile != null && appPropsFile.exists() && appProps != null && propKeys != null) {
+            for (String k : propKeys) {
+                if (appProps.containsKey(k) && appProps.getProperty(k) != null && !appProps.getProperty(k).trim().isEmpty()) {
+                    return appPropsFile.getAbsolutePath();
+                }
+            }
+        }
+        return "Spring Properties Configuration";
+    }
+
+    private void validateKeysAndPrintReport(File credentialsFile, File appPropsFile, Properties credProps, Properties appProps) {
+        File veracodeCredFile = new File(System.getProperty("user.home"), ".veracode/credentials");
+        
+        // 1. Veracode ID
+        String vId = this.key.getId();
+        String vIdSrc = "MISSING";
+        if (vId != null && !vId.isEmpty()) {
+            if (veracodeCredFile.exists() && hasVeracodeKeyInOfficialFile(veracodeCredFile, "veracode_api_key_id")) {
+                vIdSrc = veracodeCredFile.getAbsolutePath();
+            } else {
+                vIdSrc = resolveSource(vId, credentialsFile, credProps, new String[]{"id", "veracode_api_key_id", "veracode.api.key.id", "veracode.api.id"},
+                        appPropsFile, appProps, new String[]{"veracode.api.key.id", "veracode_api_key_id"},
+                        new String[]{"VERACODE_API_KEY_ID", "VERACODE_KEY_ID", "VERACODE_ID"});
+            }
+        }
+
+        // 2. Veracode Secret
+        String vSec = this.key.getSecret();
+        String vSecSrc = "MISSING";
+        if (vSec != null && !vSec.isEmpty()) {
+            if (veracodeCredFile.exists() && hasVeracodeKeyInOfficialFile(veracodeCredFile, "veracode_api_key_secret")) {
+                vSecSrc = veracodeCredFile.getAbsolutePath();
+            } else {
+                vSecSrc = resolveSource(vSec, credentialsFile, credProps, new String[]{"secret", "veracode_api_key_secret", "veracode.api.key.secret", "veracode.api.secret"},
+                        appPropsFile, appProps, new String[]{"veracode.api.key.secret", "veracode_api_key_secret"},
+                        new String[]{"VERACODE_API_KEY_SECRET", "VERACODE_KEY_SECRET", "VERACODE_SECRET"});
+            }
+        }
+
+        // 3. Checkmarx API Key (crs.checkmarx.api.key)
+        String cxKey = this.checkmarxApiKey;
+        String cxSrc = resolveSource(cxKey, credentialsFile, credProps, new String[]{"crs.checkmarx.api.key", "crs.checkmarx.api"},
+                appPropsFile, appProps, new String[]{"crs.checkmarx.api.key", "crs.checkmarx.api"},
+                new String[]{"CRS_CHECKMARX_API_KEY", "CHECKMARX_API_KEY", "CRS_CHECKMARX_API", "CHECKMARX_KEY"});
+
+        // 4. ServiceNow API Key (crs.api.snowkey)
+        String snKey = this.snowApiKey;
+        String snSrc = resolveSource(snKey, credentialsFile, credProps, new String[]{"crs.api.snowkey", "snowKey", "crs.snow.api.key"},
+                appPropsFile, appProps, new String[]{"crs.api.snowkey", "crs.snow.api.key"},
+                new String[]{"CRS_API_SNOWKEY", "CRS_API_SNOW_KEY", "SNOW_API_KEY", "CRS_SNOW_API_KEY", "SNOWKEY"});
+
+        // 5. Gemini Key
+        String gemKey = this.geminiKey;
+        String gemSrc = resolveSource(gemKey, credentialsFile, credProps, new String[]{"crs.api.geminiKey", "veracode.api.geminiKey", "geminiKey"},
+                appPropsFile, appProps, new String[]{"veracode.api.geminiKey", "crs.api.geminiKey"},
+                new String[]{"CRS_API_GEMINIKEY", "CRS_API_GEMINI_KEY", "GEMINI_API_KEY", "VERACODE_API_GEMINIKEY"});
+
+        // 6. Azure OpenAI Key
+        String azKey = this.azureKey;
+        String azSrc = resolveSource(azKey, credentialsFile, credProps, new String[]{"crs.api.azureKey", "veracode.api.azureKey", "azureKey"},
+                appPropsFile, appProps, new String[]{"veracode.api.azureKey", "crs.api.azureKey"},
+                new String[]{"CRS_API_AZUREKEY", "CRS_API_AZURE_KEY", "AZURE_OPENAI_API_KEY", "AZURE_API_KEY", "AZURE_KEY", "VERACODE_API_AZUREKEY"});
+
+        // 7. Azure OpenAI Deployment (crs.api.azureDeployment)
+        String azDeploy = this.azureDeployment;
+        String azDeploySrc = resolveSource(azDeploy, credentialsFile, credProps, new String[]{"crs.api.azureDeployment", "azureDeployment"},
+                appPropsFile, appProps, new String[]{"crs.api.azureDeployment", "crs.api.azure-deployment", "veracode.api.azureDeployment"},
+                new String[]{"CRS_API_AZUREDEPLOYMENT", "CRS_API_AZURE_DEPLOYMENT", "AZURE_DEPLOYMENT", "AZUREDEPLOYMENT", "VERACODE_API_AZUREDEPLOYMENT"});
+
+        // 8. Azure OpenAI Endpoint (crs.api.azureEndpoint)
+        String azEndpoint = this.azureEndpoint;
+        String azEndpointSrc = resolveSource(azEndpoint, credentialsFile, credProps, new String[]{"crs.api.azureEndpoint", "azureEndpoint"},
+                appPropsFile, appProps, new String[]{"crs.api.azureEndpoint", "crs.api.azure-endpoint", "veracode.api.azureEndpoint"},
+                new String[]{"CRS_API_AZUREENDPOINT", "CRS_API_AZURE_ENDPOINT", "AZURE_ENDPOINT", "AZUREENDPOINT", "VERACODE_API_AZUREENDPOINT"});
+
+        // 9. Shared Service Key (veracode.api.sharedServiceKey)
+        String sharedKey = this.sharedServiceKey;
+        String sharedKeySrc = resolveSource(sharedKey, credentialsFile, credProps, new String[]{"sharedServiceKey", "veracode.api.sharedServiceKey", "crs.api.sharedServiceKey"},
+                appPropsFile, appProps, new String[]{"veracode.api.sharedServiceKey", "veracode.api.shared-service-key", "sharedServiceKey"},
+                new String[]{"VERACODE_API_SHAREDSERVICEKEY", "VERACODE_API_SHARED_SERVICE_KEY", "SHARED_SERVICE_API_KEY", "SHARED_SERVICE_KEY", "CRS_API_SHAREDSERVICEKEY"});
+
+        // 10. GitHub Token (veracode.api.githubToken)
+        String ghToken = this.githubToken;
+        String ghSrc = resolveSource(ghToken, credentialsFile, credProps, new String[]{"githubToken", "veracode.api.githubToken"},
+                appPropsFile, appProps, new String[]{"veracode.api.githubToken", "githubToken"},
+                new String[]{"VERACODE_API_GITHUBTOKEN", "VERACODE_API_GITHUB_TOKEN", "GITHUB_TOKEN", "CRS_API_GITHUBTOKEN"});
+
+        // 11. GCaaS Secret Key (gcaas-secret-key)
+        String gcKey = this.gcaasSecretKey;
+        String gcSrc = resolveSource(gcKey, credentialsFile, credProps, new String[]{"gcaas-secret-key", "gcaasSecretKey", "gcaas.secret.key"},
+                appPropsFile, appProps, new String[]{"gcaas-secret-key", "gcaasSecretKey", "veracode.api.gcaasSecretKey", "veracode.api.gcaas-secret-key"},
+                new String[]{"GCAAS_SECRET_KEY", "GCAAS-SECRET-KEY", "GCAAS_SECRETKEY", "VERACODE_API_GCAAS_SECRET_KEY", "CRS_API_GCAAS_SECRET_KEY"});
+
+        System.out.println("==========================================================================================");
+        System.out.println("                         STARTUP API KEY DIAGNOSTICS REPORT");
+        System.out.println("==========================================================================================");
+        System.out.printf(" %-28s | %-12s | %-50s\n", "KEY NAME", "STATUS", "SOURCE / RESOLVED PATH");
+        System.out.println("------------------------------------------------------------------------------------------");
+        printRow("Veracode API Key ID", vId, vIdSrc, veracodeCredFile.getAbsolutePath() + " OR application.properties", false);
+        printRow("Veracode API Key Secret", vSec, vSecSrc, veracodeCredFile.getAbsolutePath() + " OR application.properties", false);
+        printRow("Checkmarx API Key", cxKey, cxSrc, credentialsFile.getAbsolutePath() + " (as crs.checkmarx.api.key) OR values.yaml/env", false);
+        printRow("ServiceNow API Key", snKey, snSrc, credentialsFile.getAbsolutePath() + " (as crs.api.snowkey) OR values.yaml/env", true);
+        printRow("Gemini API Key", gemKey, gemSrc, credentialsFile.getAbsolutePath() + " (as crs.api.geminiKey) OR values.yaml/env", false);
+        printRow("Azure OpenAI API Key", azKey, azSrc, credentialsFile.getAbsolutePath() + " (as crs.api.azureKey) OR values.yaml/env", true);
+        printRow("Azure OpenAI Deployment", azDeploy, azDeploySrc, credentialsFile.getAbsolutePath() + " (as crs.api.azureDeployment) OR values.yaml/env", true);
+        printRow("Azure OpenAI Endpoint", azEndpoint, azEndpointSrc, credentialsFile.getAbsolutePath() + " (as crs.api.azureEndpoint) OR values.yaml/env", true);
+        printRow("Shared Service Key", sharedKey, sharedKeySrc, credentialsFile.getAbsolutePath() + " (as veracode.api.sharedServiceKey) OR values.yaml/env", true);
+        printRow("GitHub Token", ghToken, ghSrc, credentialsFile.getAbsolutePath() + " (as veracode.api.githubToken) OR values.yaml/env", false);
+        printRow("GCaaS Secret Key", gcKey, gcSrc, credentialsFile.getAbsolutePath() + " (as gcaas-secret-key) OR values.yaml/env", true);
+        System.out.println("==========================================================================================");
+
+        boolean hasMissingRequired = (vId == null || vId.isEmpty()) || (vSec == null || vSec.isEmpty()) 
+            || (cxKey == null || cxKey.isEmpty()) || ((gemKey == null || gemKey.isEmpty()) && (azKey == null || azKey.isEmpty()))
+            || (ghToken == null || ghToken.isEmpty());
+
+        if (hasMissingRequired) {
+            System.err.println(" WARNING: Some required API keys are missing! Check the MISSING lines in the report above.");
+            System.err.println("          Please verify your application.properties or credentials file configuration.");
+        } else {
+            System.out.println(" SUCCESS: All required API keys successfully loaded!");
+        }
+        System.out.println("==========================================================================================");
+    }
+
+    private void printRow(String name, String value, String source, String expectedPath, boolean isOptional) {
+        String status;
+        if (value != null && !value.isEmpty()) {
+            status = "[LOADED]";
+        } else if (isOptional) {
+            status = "[NOT USED]";
+        } else {
+            status = "[MISSING]";
+        }
+        String resolvedSource = "[MISSING]".equals(status) ? "Expected in: " + expectedPath : source;
+        System.out.printf(" %-28s | %-12s | %-50s\n", name, status, resolvedSource);
+    }
+
+    private String getProp(Properties props, String key, String defaultValue) {
+        if (props == null) return defaultValue;
+        String val = props.getProperty("crs.api." + key);
+        if (val == null) {
+            val = props.getProperty("veracode.api." + key);
+        }
+        if (val == null) {
+            val = props.getProperty("veracode.api.key." + key);
+        }
+        if (val == null) {
+            val = props.getProperty("veracode_api_key_" + key);
+        }
+        if (val == null) {
+            val = props.getProperty(key);
+        }
+        return val != null ? val : defaultValue;
+    }
+
+    public List<String> getNoSca() {
+        return noSca;
+    }
+
+    public void setNoSca(List<String> noSca) {
+        this.noSca = noSca;
+    }
+
+    public int getHistoryLimit() {
+        return historyLimit;
+    }
+
+    public void setHistoryLimit(int historyLimit) {
+        this.historyLimit = historyLimit;
+    }
+
+    public List<String> getAiEngines() {
+        return aiEngines;
+    }
+
+    public void setAiEngines(List<String> aiEngines) {
+        this.aiEngines = aiEngines;
+    }
+
+    public String getGeminiKey() {
+        return geminiKey;
+    }
+
+    public void setGeminiKey(String geminiKey) {
+        this.geminiKey = geminiKey;
+    }
+
+    public String getGeminiModel() {
+        return geminiModel;
+    }
+
+    public void setGeminiModel(String geminiModel) {
+        this.geminiModel = geminiModel;
+    }
+
+    public String getAzureKey() {
+        return azureKey;
+    }
+
+    public void setAzureKey(String azureKey) {
+        this.azureKey = azureKey;
+    }
+
+    public String getAzureEndpoint() {
+        return azureEndpoint;
+    }
+
+    public void setAzureEndpoint(String azureEndpoint) {
+        this.azureEndpoint = azureEndpoint;
+    }
+
+    public String getAzureDeployment() {
+        return azureDeployment;
+    }
+
+    public void setAzureDeployment(String azureDeployment) {
+        this.azureDeployment = azureDeployment;
+    }
+
+    public String getSastPrompt() {
+        return sastPrompt;
+    }
+
+    public void setSastPrompt(String sastPrompt) {
+        this.sastPrompt = sastPrompt;
+    }
+
+    public String getScaPrompt() {
+        return scaPrompt;
+    }
+
+    public void setScaPrompt(String scaPrompt) {
+        this.scaPrompt = scaPrompt;
+    }
+
+    public int getScanValidityDays() {
+        return scanValidityDays;
+    }
+
+    public void setScanValidityDays(int scanValidityDays) {
+        this.scanValidityDays = scanValidityDays;
+    }
+
+    public boolean isSaveXmlLogs() {
+        return saveXmlLogs;
+    }
+
+    public void setSaveXmlLogs(boolean saveXmlLogs) {
+        this.saveXmlLogs = saveXmlLogs;
+    }
+
+    public boolean isSaveJsonHistory() {
+        return saveJsonHistory;
+    }
+
+    public void setSaveJsonHistory(boolean saveJsonHistory) {
+        this.saveJsonHistory = saveJsonHistory;
+    }
+
+    public Map<String, Map<String, String>> getTierMappings() {
+        return tierMappings;
+    }
+
+    public void setTierMappings(Map<String, Map<String, String>> tierMappings) {
+        this.tierMappings = tierMappings;
+    }
+
+    public Map<String, Map<String, Integer>> getGracePeriods() {
+        return gracePeriods;
+    }
+
+    public void setGracePeriods(Map<String, Map<String, Integer>> gracePeriods) {
+        this.gracePeriods = gracePeriods;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public void setUrl(String url) {
+        this.url = url;
+    }
+
+    public boolean isDebug() {
+        return debug;
+    }
+
+    public void setDebug(boolean debug) {
+        this.debug = debug;
+    }
+
+    public Key getKey() {
+        return key;
+    }
+
+    public void setKey(Key key) {
+        this.key = key;
+    }
+
+    public String getMitigationProposalEnabled() {
+        return mitigationProposalEnabled;
+    }
+
+    public void setMitigationProposalEnabled(String mitigationProposalEnabled) {
+        this.mitigationProposalEnabled = mitigationProposalEnabled;
+    }
+
+    public String getSharedServiceRole() {
+        return sharedServiceRole;
+    }
+
+    public void setSharedServiceRole(String sharedServiceRole) {
+        this.sharedServiceRole = sharedServiceRole;
+    }
+
+    public int getSharedServiceMaxTokens() {
+        return sharedServiceMaxTokens;
+    }
+
+    public void setSharedServiceMaxTokens(int sharedServiceMaxTokens) {
+        this.sharedServiceMaxTokens = sharedServiceMaxTokens;
+    }
+
+    public String getMitigationApiType() {
+        return mitigationApiType;
+    }
+
+    public void setMitigationApiType(String mitigationApiType) {
+        this.mitigationApiType = mitigationApiType;
+    }
+
+    public String getSharedServiceEndpoint() {
+        return sharedServiceEndpoint;
+    }
+
+    public void setSharedServiceEndpoint(String sharedServiceEndpoint) {
+        this.sharedServiceEndpoint = sharedServiceEndpoint;
+    }
+
+    public String getSharedServiceKey() {
+        return sharedServiceKey;
+    }
+
+    public void setSharedServiceKey(String sharedServiceKey) {
+        this.sharedServiceKey = sharedServiceKey;
+    }
+
+    public List<String> getEngineModels() {
+        return engineModels;
+    }
+
+    public void setEngineModels(List<String> engineModels) {
+        this.engineModels = engineModels;
+    }
+
+    public List<String> getIgnoreModules() {
+        return ignoreModules;
+    }
+
+    public void setIgnoreModules(List<String> ignoreModules) {
+        this.ignoreModules = ignoreModules;
+    }
+
+    public List<String> getIncludeModules() {
+        return includeModules;
+    }
+
+    public void setIncludeModules(List<String> includeModules) {
+        this.includeModules = includeModules;
+    }
+    
+    public List<String> getIgnoreEcosystems() {
+        return ignoreEcosystems;
+    }
+
+    public void setIgnoreEcosystems(List<String> ignoreEcosystems) {
+        this.ignoreEcosystems = ignoreEcosystems;
+    }
+
+    public Map<String, String> getArchitectureMappings() {
+        return architectureMappings;
+    }
+
+    public void setArchitectureMappings(Map<String, String> architectureMappings) {
+        this.architectureMappings = architectureMappings;
+    }
+
+    public String getGithubToken() {
+        return githubToken;
+    }
+    
+    public void setGithubToken(String githubToken) {
+        this.githubToken = githubToken;
+    }
+
+    public boolean isScaSafeVersionEnabled() {
+        return scaSafeVersionEnabled;
+    }
+
+    public void setScaSafeVersionEnabled(boolean scaSafeVersionEnabled) {
+        this.scaSafeVersionEnabled = scaSafeVersionEnabled;
+    }
+
+    public String getScaNoFixMessage() {
+        return scaNoFixMessage;
+    }
+
+    public void setScaNoFixMessage(String scaNoFixMessage) {
+        this.scaNoFixMessage = scaNoFixMessage;
+    }
+
+    public String getScaStaleFixMessage() {
+        return scaStaleFixMessage;
+    }
+
+    public void setScaStaleFixMessage(String scaStaleFixMessage) {
+        this.scaStaleFixMessage = scaStaleFixMessage;
+    }
+
+    public boolean isSaveScaLog() {
+        return saveScaLog;
+    }
+
+    public void setSaveScaLog(boolean saveScaLog) {
+        this.saveScaLog = saveScaLog;
+    }
+
+    public boolean isSecondaryAuditEnabled() {
+        return secondaryAuditEnabled;
+    }
+
+    public void setSecondaryAuditEnabled(boolean secondaryAuditEnabled) {
+        this.secondaryAuditEnabled = secondaryAuditEnabled;
+    }
+
+    public String getAuditorModelName() {
+        return auditorModelName;
+    }
+
+    public void setAuditorModelName(String auditorModelName) {
+        this.auditorModelName = auditorModelName;
+    }
+
+    public String getSharedAuditorEndpoint() {
+        return sharedAuditorEndpoint;
+    }
+
+    public void setSharedAuditorEndpoint(String sharedAuditorEndpoint) {
+        this.sharedAuditorEndpoint = sharedAuditorEndpoint;
+    }
+
+    public int getSharedAuditorMaxTokens() {
+        return sharedAuditorMaxTokens;
+    }
+
+    public void setSharedAuditorMaxTokens(int sharedAuditorMaxTokens) {
+        this.sharedAuditorMaxTokens = sharedAuditorMaxTokens;
+    }
+
+    public String getSharedAuditorRole() {
+        return sharedAuditorRole;
+    }
+
+    public void setSharedAuditorRole(String sharedAuditorRole) {
+        this.sharedAuditorRole = sharedAuditorRole;
+    }
+
+    public String getAuditorDisagreeFallbackText() {
+        return auditorDisagreeFallbackText;
+    }
+
+    public void setAuditorDisagreeFallbackText(String auditorDisagreeFallbackText) {
+        this.auditorDisagreeFallbackText = auditorDisagreeFallbackText;
+    }
+
+    public String getAuditorPrompt() {
+        if (auditorPrompt == null || auditorPrompt.isEmpty()) {
+            return "You are a Senior Security QA Auditor acting as a secondary verification layer. Your job is to strictly review the output generated by a primary evaluation model against the original input data.\n\nYou will be provided with two sets of data:\n1. [Original Request Data]: The raw vulnerability JSON payload.\n2. [Phase 1 Output]: The text response generated by the primary model.\n\nYour task is to independently verify the quality, accuracy, and constraint compliance of the Phase 1 Output.\n\n### CRITERIA FOR EVALUATION\n1. Accuracy Check: Did Phase 1 correctly interpret the vulnerability description and user comments? (e.g., If the user comments proved the value is a non-secret UI lookup GUID, did Phase 1 correctly identify it as a false positive?)\n2. Constraint Compliance Check: Did Phase 1 strictly adhere to its formatting boundaries?\n   - Does it start exactly with \"Proposal Approved\" or \"Proposal Rejected\"?\n   - Is it written as exactly ONE paragraph?\n   - Is it under 120 words and free of bullet points or headings?\n\n### OUTPUT FORMAT\nYou must output your audit evaluation strictly using the following Markdown template. Do not add conversational intro text or metadata.\n\n### Second Look Assessment\n- **Validation Verdict:** [Agree / Disagree with Phase 1 Verdict]\n- **Rule Compliance:** [Pass / Fail - state if formatting limits were met]\n- **Critique:** [2-3 sentences explaining your reasoning regarding the technical accuracy and compliance of Phase 1]";
+        }
+        return auditorPrompt;
+    }
+
+    public void setAuditorPrompt(String auditorPrompt) {
+        this.auditorPrompt = auditorPrompt;
+    }
+
+    public String getGcaasSecretKey() {
+        return gcaasSecretKey;
+    }
+
+    public void setGcaasSecretKey(String gcaasSecretKey) {
+        this.gcaasSecretKey = gcaasSecretKey;
+    }
+
+    public String getGcaasRestBaseURL() {
+        return gcaasRestBaseURL;
+    }
+
+    public void setGcaasRestBaseURL(String gcaasRestBaseURL) {
+        this.gcaasRestBaseURL = gcaasRestBaseURL;
+    }
+
+    public String getGcaasRestEndpointIntake() {
+        return gcaasRestEndpointIntake;
+    }
+
+    public void setGcaasRestEndpointIntake(String gcaasRestEndpointIntake) {
+        this.gcaasRestEndpointIntake = gcaasRestEndpointIntake;
+    }
+
+    public String getGcaasRestEndpointRemediation() {
+        return gcaasRestEndpointRemediation;
+    }
+
+    public void setGcaasRestEndpointRemediation(String gcaasRestEndpointRemediation) {
+        this.gcaasRestEndpointRemediation = gcaasRestEndpointRemediation;
+    }
+
+    public boolean isIntakeRequest() {
+        return intakeRequest;
+    }
+
+    public void setIntakeRequest(boolean intakeRequest) {
+        this.intakeRequest = intakeRequest;
+    }
+
+    public static class Key {
+        private String id;
+        private String secret;
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        public String getSecret() {
+            return secret;
+        }
+
+        public void setSecret(String secret) {
+            this.secret = secret;
+        }
+    }
+}
